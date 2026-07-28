@@ -80,6 +80,11 @@
             <div class="topic-filter-list" id="topic-filter-list"></div>
           </nav>
           <div class="selected-task-list" id="selected-task-list"></div>
+          <nav class="selected-pagination" id="selected-pagination" aria-label="선택한 날짜 일정 페이지" hidden>
+            <button class="pagination-button" id="previous-selected-page" type="button" aria-label="이전 일정 페이지">‹</button>
+            <span id="selected-page-status" aria-live="polite">1 / 1</span>
+            <button class="pagination-button" id="next-selected-page" type="button" aria-label="다음 일정 페이지">›</button>
+          </nav>
           <button class="button button-secondary add-date-task" id="add-date-task" type="button">
             ＋ 이 날짜에 일정 추가
           </button>

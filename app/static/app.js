@@ -6,6 +6,7 @@ import {
   formatTaskTime,
   isTaskOverdue,
   localDateTimeToKst,
+  paginateItems,
   sortTopics,
   taskToCalendarEvent,
   tasksForDate,
@@ -44,12 +45,18 @@ const topicNameInput = document.querySelector("#topic-name");
 const topicColorInput = document.querySelector("#topic-color");
 const topicColorValue = document.querySelector("#topic-color-value");
 const deleteTopicButton = document.querySelector("#delete-topic-button");
+const selectedPagination = document.querySelector("#selected-pagination");
+const previousSelectedPage = document.querySelector("#previous-selected-page");
+const nextSelectedPage = document.querySelector("#next-selected-page");
+const selectedPageStatus = document.querySelector("#selected-page-status");
 
+const SELECTED_PAGE_SIZE = 10;
 let tasks = [];
 let topics = [];
 let calendar;
 let selectedKstDate = currentKstDate();
 let selectedTopicId = "all";
+let selectedPage = 1;
 let notificationTimer;
 let overdueRefreshTimer;
 
@@ -224,6 +231,7 @@ function topicFilterItem({ id, name, color, count, topic = null }) {
   button.append(dot, label, countElement);
   button.addEventListener("click", () => {
     selectedTopicId = String(id);
+    selectedPage = 1;
     renderSelectedDate();
   });
   wrapper.append(button);
@@ -272,11 +280,21 @@ function renderSelectedDate() {
   const selectedDateTasks = tasksForDate(visibleTasks(), selectedKstDate);
   renderTopicFilters(selectedDateTasks);
   const selectedTasks = filterTasksByTopic(selectedDateTasks, selectedTopicId);
+  const pageResult = paginateItems(
+    selectedTasks,
+    selectedPage,
+    SELECTED_PAGE_SIZE,
+  );
+  selectedPage = pageResult.page;
   document.querySelector("#selected-date-title").textContent = formatSelectedDate(selectedKstDate);
-  document.querySelector("#selected-count").textContent = selectedTasks.length;
+  document.querySelector("#selected-count").textContent = pageResult.totalItems;
+  selectedPagination.hidden = pageResult.totalPages <= 1;
+  previousSelectedPage.disabled = pageResult.page <= 1;
+  nextSelectedPage.disabled = pageResult.page >= pageResult.totalPages;
+  selectedPageStatus.textContent = `${pageResult.page} / ${Math.max(pageResult.totalPages, 1)}`;
   selectedList.replaceChildren();
 
-  if (!selectedTasks.length) {
+  if (!pageResult.totalItems) {
     const empty = document.createElement("div");
     empty.className = "selected-empty";
     empty.innerHTML = "<span aria-hidden=\"true\">○</span><p>이 날짜에는 표시할 일정이 없습니다.</p>";
@@ -284,7 +302,7 @@ function renderSelectedDate() {
     return;
   }
 
-  selectedTasks.forEach((task) => {
+  pageResult.items.forEach((task) => {
     const card = selectedTemplate.content.cloneNode(true);
     const article = card.querySelector(".selected-task-card");
     article.classList.add(`status-${task.status}`);
@@ -327,6 +345,7 @@ async function loadData() {
     && !topics.some((topic) => String(topic.id) === String(selectedTopicId))
   ) {
     selectedTopicId = "unclassified";
+    selectedPage = 1;
   }
   refreshViews();
 }
@@ -429,6 +448,7 @@ async function deleteTopic() {
   try {
     await request(`/api/topics/${topic.id}`, { method: "DELETE" });
     selectedTopicId = "unclassified";
+    selectedPage = 1;
     closeTopicDialog();
     await loadData();
   } catch (error) {
@@ -449,6 +469,7 @@ async function deleteTask(task) {
 
 function selectDate(date) {
   selectedKstDate = date;
+  selectedPage = 1;
   calendar.render();
   renderSelectedDate();
 }
@@ -531,6 +552,14 @@ document.addEventListener("keydown", (event) => {
   }
 });
 document.querySelector("#add-date-task").addEventListener("click", () => openTaskDialog(null, selectedKstDate));
+previousSelectedPage.addEventListener("click", () => {
+  selectedPage -= 1;
+  renderSelectedDate();
+});
+nextSelectedPage.addEventListener("click", () => {
+  selectedPage += 1;
+  renderSelectedDate();
+});
 document.querySelector("#previous-month").addEventListener("click", () => calendar.prev());
 document.querySelector("#next-month").addEventListener("click", () => calendar.next());
 document.querySelector("#today-button").addEventListener("click", () => {
@@ -558,6 +587,9 @@ dialog.addEventListener("click", (event) => {
 topicDialog.addEventListener("click", (event) => {
   if (event.target === topicDialog) closeTopicDialog();
 });
-[...statusFilters, overdueFilter].forEach((input) => input.addEventListener("change", refreshViews));
+[...statusFilters, overdueFilter].forEach((input) => input.addEventListener("change", () => {
+  selectedPage = 1;
+  refreshViews();
+}));
 
 loadData().catch((error) => showError(error.message));

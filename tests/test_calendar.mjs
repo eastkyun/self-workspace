@@ -24,6 +24,7 @@ const {
   filterTasksByTopic,
   isTaskOverdue,
   localDateTimeToKst,
+  paginateItems,
   sortTopics,
   taskOccursOnDate,
   taskToCalendarEvent,
@@ -61,6 +62,12 @@ test("keeps the calendar inside the viewport without page scrolling", () => {
   assert.match(stylesSource, /body\s*\{[^}]*overflow:\s*hidden/s);
   assert.match(stylesSource, /\.app-content\s*\{[^}]*min-height:\s*0[^}]*overflow:\s*hidden/s);
   assert.match(stylesSource, /\.fc-daygrid-day-frame\s*\{\s*min-height:\s*0;/);
+});
+
+test("configures selected-date pagination in 10-item pages", () => {
+  assert.match(appSource, /SELECTED_PAGE_SIZE\s*=\s*10/);
+  assert.match(appSource, /paginateItems\(/);
+  assert.match(appSource, /selectedPage\s*=\s*1/);
 });
 
 test("adds the KST offset and seconds to a datetime-local value", () => {
@@ -317,6 +324,35 @@ test("counts a multi-topic task once in all and once in each related topic", () 
     unclassified: 1,
     byTopic: { 1: 2, 2: 1 },
   });
+});
+
+test("paginates selected-date items at 10-item boundaries", () => {
+  const items = Array.from({ length: 21 }, (_, index) => index + 1);
+
+  assert.deepEqual(paginateItems([], 1), {
+    items: [],
+    page: 1,
+    pageSize: 10,
+    totalItems: 0,
+    totalPages: 0,
+  });
+  assert.deepEqual(paginateItems(items.slice(0, 10), 1).items, items.slice(0, 10));
+  assert.deepEqual(paginateItems(items.slice(0, 11), 2).items, [11]);
+  assert.equal(paginateItems(items.slice(0, 20), 1).totalPages, 2);
+  assert.equal(paginateItems(items, 1).totalPages, 3);
+  assert.deepEqual(paginateItems(items, 3).items, [21]);
+});
+
+test("clamps invalid selected-date pages without mutating the source", () => {
+  const items = Array.from({ length: 11 }, (_, index) => ({ id: index + 1 }));
+  const snapshot = structuredClone(items);
+
+  assert.equal(paginateItems(items, 0).page, 1);
+  assert.equal(paginateItems(items, -4).page, 1);
+  assert.equal(paginateItems(items, 99).page, 2);
+  assert.equal(paginateItems(items, "invalid").page, 1);
+  assert.deepEqual(items, snapshot);
+  assert.throws(() => paginateItems(items, 1, 0), RangeError);
 });
 
 test("marks an unfinished task overdue only when its due instant is earlier than now", () => {

@@ -124,6 +124,28 @@ export function topicCountsForTasks(tasks, topics) {
   return { all: tasks.length, unclassified, byTopic };
 }
 
+export function paginateItems(items, requestedPage, pageSize = 10) {
+  if (!Number.isInteger(pageSize) || pageSize <= 0) {
+    throw new RangeError("pageSize must be a positive integer");
+  }
+  const totalItems = items.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  const numericPage = Number.isFinite(Number(requestedPage))
+    ? Math.trunc(Number(requestedPage))
+    : 1;
+  const page = totalPages
+    ? Math.min(Math.max(numericPage, 1), totalPages)
+    : 1;
+  const start = (page - 1) * pageSize;
+  return {
+    items: items.slice(start, start + pageSize),
+    page,
+    pageSize,
+    totalItems,
+    totalPages,
+  };
+}
+
 export function taskToCalendarEvent(task, now = new Date()) {
   const overdue = isTaskOverdue(task, now);
   const classNames = [`status-${task.status}`];
