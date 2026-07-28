@@ -7,6 +7,8 @@
       "url": "/apps/calendar/",
       "icon": "/static/icons/calendar.svg",
       "description": "월간 캘린더에서 일정과 주제를 관리합니다.",
+      "enabled": true,
+      "navigationVisible": true,
       "defaultPinned": true,
       "order": 10
     }
