@@ -83,6 +83,13 @@ test("uses readable two-line cards and summarizes excess topic tags", () => {
   assert.match(stylesSource, /-webkit-line-clamp:\s*2/);
 });
 
+test("centers the header create button in a fixed square", () => {
+  assert.match(
+    stylesSource,
+    /\.create-menu-trigger\s*\{[^}]*display:\s*grid[^}]*place-items:\s*center[^}]*width:\s*44px[^}]*height:\s*44px/s,
+  );
+});
+
 test("configures an accessible active-topic overflow popover", () => {
   assert.match(indexSource, /id="topic-overflow-button"/);
   assert.match(indexSource, /aria-expanded="false"/);
