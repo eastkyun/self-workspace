@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 from urllib.parse import urlsplit
 
 from pydantic import (
@@ -418,6 +419,252 @@ class JsonRegistrySource:
             payload,
             source=self.source_name,
             asset_root=self.asset_root,
+        )
+
+
+class RegistrySource(Protocol):
+    source_name: str
+
+    def load(self) -> RegistryDocument: ...
+
+
+class AppRegistry:
+    """Immutable, validated snapshot of all registered workspace apps."""
+
+    __slots__ = ("_apps", "_categories", "_app_by_id", "_category_by_id")
+
+    def __init__(self, document: RegistryDocument) -> None:
+        category_by_id = {category.id: category for category in document.categories}
+        self._category_by_id = category_by_id
+        self._categories = tuple(
+            sorted(
+                document.categories,
+                key=lambda category: (
+                    category.order,
+                    category.display_name.casefold(),
+                    category.id,
+                ),
+            )
+        )
+        self._apps = tuple(
+            sorted(
+                document.apps,
+                key=lambda app: (
+                    category_by_id[app.category].order,
+                    app.order,
+                    app.display_name.casefold(),
+                    app.id,
+                ),
+            )
+        )
+        self._app_by_id = {app.id: app for app in self._apps}
+
+    @classmethod
+    def load_default(cls) -> "AppRegistry":
+        return cls.from_source(JsonRegistrySource())
+
+    @classmethod
+    def from_source(cls, source: RegistrySource) -> "AppRegistry":
+        return cls(source.load())
+
+    @classmethod
+    def from_sources(cls, sources: Iterable[RegistrySource]) -> "AppRegistry":
+        loaded_sources = tuple(sources)
+        if not loaded_sources:
+            raise RegistryValidationError(
+                [
+                    RegistryIssue(
+                        code="missing_source",
+                        source="registry",
+                        message="at least one registry source is required",
+                    )
+                ]
+            )
+
+        documents = tuple(source.load() for source in loaded_sources)
+        categories = tuple(
+            category
+            for document in documents
+            for category in document.categories
+        )
+        apps = tuple(app for document in documents for app in document.apps)
+        issues: list[RegistryIssue] = []
+
+        category_ids: dict[str, AppCategory] = {}
+        category_orders: dict[int, AppCategory] = {}
+        for category in categories:
+            if category.id in category_ids:
+                issues.append(
+                    RegistryIssue(
+                        code="duplicate_category_id",
+                        source="merged registry",
+                        field="categories",
+                        message=f"category ID is duplicated: {category.id}",
+                    )
+                )
+            else:
+                category_ids[category.id] = category
+            if category.order in category_orders:
+                issues.append(
+                    RegistryIssue(
+                        code="duplicate_category_order",
+                        source="merged registry",
+                        field="categories",
+                        message=f"category order is duplicated: {category.order}",
+                    )
+                )
+            else:
+                category_orders[category.order] = category
+
+        app_ids: dict[str, AppManifest] = {}
+        routes: dict[str, AppManifest] = {}
+        orders: dict[tuple[str, int], AppManifest] = {}
+        for app in apps:
+            if app.id in app_ids:
+                issues.append(
+                    RegistryIssue(
+                        code="duplicate_app_id",
+                        source="merged registry",
+                        app_id=app.id,
+                        field="id",
+                        message=f"app ID is duplicated: {app.id}",
+                    )
+                )
+            else:
+                app_ids[app.id] = app
+
+            route_key = (
+                normalize_internal_route(app.route)
+                if app.kind == "internal"
+                else app.route
+            )
+            if route_key in routes:
+                issues.append(
+                    RegistryIssue(
+                        code="duplicate_route",
+                        source="merged registry",
+                        app_id=app.id,
+                        field="route",
+                        message=f"route is duplicated: {route_key}",
+                    )
+                )
+            else:
+                routes[route_key] = app
+
+            order_key = (app.category, app.order)
+            if order_key in orders:
+                issues.append(
+                    RegistryIssue(
+                        code="duplicate_app_order",
+                        source="merged registry",
+                        app_id=app.id,
+                        field="order",
+                        message=(
+                            f"order {app.order} is duplicated in {app.category}"
+                        ),
+                    )
+                )
+            else:
+                orders[order_key] = app
+
+            if app.category not in category_ids:
+                issues.append(
+                    RegistryIssue(
+                        code="unknown_category",
+                        source="merged registry",
+                        app_id=app.id,
+                        field="category",
+                        message=f"category is not declared: {app.category}",
+                    )
+                )
+
+        if issues:
+            raise RegistryValidationError(issues)
+
+        return cls(
+            RegistryDocument(
+                schema_version=1,
+                categories=categories,
+                apps=apps,
+            )
+        )
+
+    def get_all(self) -> tuple[AppManifest, ...]:
+        return self._apps
+
+    def get_enabled(self) -> tuple[AppManifest, ...]:
+        return tuple(app for app in self._apps if app.enabled)
+
+    def get_navigation(self) -> tuple[AppManifest, ...]:
+        return tuple(
+            app
+            for app in self._apps
+            if app.enabled and app.navigation_visible
+        )
+
+    def get_launcher(self) -> tuple[AppManifest, ...]:
+        return tuple(
+            app
+            for app in self._apps
+            if app.enabled and app.launcher_visible
+        )
+
+    def get_app(self, app_id: str) -> AppManifest | None:
+        return self._app_by_id.get(app_id)
+
+    def exists(self, app_id: str) -> bool:
+        return app_id in self._app_by_id
+
+    def categories(self) -> tuple[AppCategory, ...]:
+        return self._categories
+
+    def search(
+        self,
+        query: str,
+        *,
+        include_disabled: bool = False,
+    ) -> tuple[AppManifest, ...]:
+        normalized_query = " ".join(query.split()).casefold()
+        candidates = self._apps if include_disabled else self.get_enabled()
+        if not normalized_query:
+            return tuple(candidates)
+
+        def matches(app: AppManifest) -> bool:
+            fields = (
+                app.id,
+                app.name,
+                app.display_name,
+                app.description,
+                *app.search_keywords,
+            )
+            return any(
+                normalized_query in " ".join(field.split()).casefold()
+                for field in fields
+            )
+
+        return tuple(app for app in candidates if matches(app))
+
+    def resolve_route(self, path: str) -> AppManifest | None:
+        parsed = urlsplit(path)
+        if parsed.scheme or parsed.netloc or not parsed.path.startswith("/"):
+            return None
+        request_path = parsed.path.rstrip("/") or "/"
+        matches = []
+        for app in self.get_enabled():
+            if app.kind != "internal":
+                continue
+            app_path = app.route.rstrip("/")
+            if request_path == app_path or request_path.startswith(f"{app_path}/"):
+                matches.append(app)
+        if not matches:
+            return None
+        return max(matches, key=lambda app: len(app.route))
+
+    def get_default_pinned_ids(self) -> tuple[str, ...]:
+        return tuple(
+            app.id
+            for app in self._apps
+            if app.enabled and app.default_pinned
         )
 
 

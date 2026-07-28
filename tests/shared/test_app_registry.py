@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from shared.app_registry import (
+    AppRegistry,
     JsonRegistrySource,
     RegistryValidationError,
     normalize_internal_route,
@@ -221,3 +222,148 @@ def test_registry_json_serialization_is_deterministic(tmp_path: Path) -> None:
     registry_path.write_text(first, encoding="utf-8")
 
     assert registry_path.read_text(encoding="utf-8") == second
+
+
+def registry(data: dict, tmp_path: Path) -> AppRegistry:
+    document = parse(data, tmp_path)
+    return AppRegistry(document)
+
+
+def test_query_results_are_immutable_and_deterministically_sorted(
+    tmp_path: Path,
+) -> None:
+    data = payload(
+        app("zeta", route="/apps/zeta/", order=20),
+        app("alpha", route="/apps/alpha/", order=10),
+    )
+    result = registry(data, tmp_path)
+
+    assert isinstance(result.get_all(), tuple)
+    assert isinstance(result.get_enabled(), tuple)
+    assert isinstance(result.get_navigation(), tuple)
+    assert isinstance(result.get_launcher(), tuple)
+    assert [item.id for item in result.get_all()] == ["alpha", "zeta"]
+
+
+def test_filters_disabled_apps_from_all_portal_surfaces_and_defaults(
+    tmp_path: Path,
+) -> None:
+    disabled = app("disabled", route="/apps/disabled/", order=20)
+    disabled["enabled"] = False
+    disabled["navigation_visible"] = True
+    disabled["launcher_visible"] = True
+    visible = app()
+    visible["default_pinned"] = True
+    result = registry(payload(visible, disabled), tmp_path)
+
+    assert [item.id for item in result.get_all()] == ["calendar", "disabled"]
+    assert [item.id for item in result.get_enabled()] == ["calendar"]
+    assert [item.id for item in result.get_navigation()] == ["calendar"]
+    assert [item.id for item in result.get_launcher()] == ["calendar"]
+    assert result.get_default_pinned_ids() == ("calendar",)
+
+
+def test_lookup_exists_and_categories(tmp_path: Path) -> None:
+    result = registry(payload(app()), tmp_path)
+
+    assert result.get_app("calendar").display_name == "Calendar"
+    assert result.get_app("missing") is None
+    assert result.exists("calendar") is True
+    assert result.exists("missing") is False
+    assert [item.id for item in result.categories()] == ["productivity"]
+
+
+def test_category_then_app_order_is_deterministic(tmp_path: Path) -> None:
+    data = payload(
+        app("notes", route="/apps/notes/", category_id="knowledge", order=5),
+        app("calendar", order=20),
+        categories=[category("knowledge", order=20), category(order=10)],
+    )
+
+    assert [item.id for item in registry(data, tmp_path).get_all()] == [
+        "calendar",
+        "notes",
+    ]
+
+
+def test_search_is_case_insensitive_and_normalizes_whitespace(
+    tmp_path: Path,
+) -> None:
+    calendar = app()
+    calendar["description"] = "Monthly   Planning"
+    calendar["search_keywords"] = ["Team Schedule"]
+    disabled = app("notes", route="/apps/notes/", order=20)
+    disabled["enabled"] = False
+    result = registry(payload(calendar, disabled), tmp_path)
+
+    assert [item.id for item in result.search("  MONTHLY planning ")] == ["calendar"]
+    assert [item.id for item in result.search("team schedule")] == ["calendar"]
+    assert [item.id for item in result.search("   ")] == ["calendar"]
+    assert [item.id for item in result.search("", include_disabled=True)] == [
+        "calendar",
+        "notes",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("/apps/calendar", "calendar"),
+        ("/apps/calendar/", "calendar"),
+        ("/apps/calendar/api/tasks", "calendar"),
+        ("/apps/cal", None),
+        ("/apps/calendarish", None),
+        ("/apps", None),
+    ],
+)
+def test_resolve_route_respects_path_segment_boundaries(
+    tmp_path: Path,
+    path: str,
+    expected: str | None,
+) -> None:
+    result = registry(payload(app()), tmp_path)
+    matched = result.resolve_route(path)
+
+    assert (matched.id if matched else None) == expected
+
+
+def test_resolve_route_excludes_disabled_apps(tmp_path: Path) -> None:
+    disabled = app()
+    disabled["enabled"] = False
+
+    assert registry(payload(disabled), tmp_path).resolve_route(
+        "/apps/calendar/"
+    ) is None
+
+
+def test_source_merge_reports_cross_source_collisions(tmp_path: Path) -> None:
+    first_document = parse(payload(app()), tmp_path)
+    second_document = parse(
+        payload(
+            app(
+                "calendar",
+                route="/apps/calendar-copy/",
+                category_id="knowledge",
+            ),
+            categories=[category("knowledge", order=20)],
+        ),
+        tmp_path,
+    )
+
+    class StaticSource:
+        def __init__(self, name, document):
+            self.source_name = name
+            self.document = document
+
+        def load(self):
+            return self.document
+
+    with pytest.raises(RegistryValidationError) as caught:
+        AppRegistry.from_sources(
+            [
+                StaticSource("first", first_document),
+                StaticSource("second", second_document),
+            ]
+        )
+
+    assert "duplicate_app_id" in issue_codes(caught.value)
