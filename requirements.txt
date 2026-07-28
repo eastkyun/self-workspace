@@ -1,0 +1,1 @@
+-r apps/calendar/requirements.txt
