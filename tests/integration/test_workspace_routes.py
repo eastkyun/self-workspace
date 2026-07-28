@@ -81,6 +81,21 @@ def test_portal_verifies_existing_v2_database_without_mutation(tmp_path: Path) -
     assert sha256(database_path) == before
 
 
+def test_portal_uses_calendar_database_environment(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "environment-calendar.db"
+    monkeypatch.setenv("CALENDAR_DB_PATH", str(database_path))
+
+    application = create_app()
+
+    assert application.state.calendar_database_path == database_path
+    with TestClient(application) as client:
+        assert client.get("/apps/calendar/api/tasks").json() == []
+    assert database_path.is_file()
+
+
 def test_portal_rejects_legacy_database_without_mutation(tmp_path: Path) -> None:
     database_path = tmp_path / "legacy.db"
     with sqlite3.connect(database_path) as connection:

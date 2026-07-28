@@ -545,6 +545,18 @@ calendar = new FullCalendar.Calendar(document.querySelector("#calendar"), {
     const task = tasks.find((item) => String(item.id) === info.event.id);
     if (task) openTaskDialog(task);
   },
+  eventDidMount: (info) => {
+    const task = tasks.find((item) => String(item.id) === info.event.id);
+    info.el.tabIndex = 0;
+    info.el.setAttribute("role", "button");
+    info.el.setAttribute("aria-label", task ? `일정 열기: ${task.title}` : `일정 열기: ${info.event.title}`);
+    info.el.addEventListener("keydown", (event) => {
+      if ((event.key === "Enter" || event.key === " ") && task) {
+        event.preventDefault();
+        openTaskDialog(task);
+      }
+    });
+  },
   datesSet: (info) => {
     document.querySelector("#month-title").textContent = info.view.title;
   },
@@ -581,6 +593,12 @@ calendar = new FullCalendar.Calendar(document.querySelector("#calendar"), {
   },
 });
 calendar.render();
+window.addEventListener("workspace:layout-change", () => {
+  window.requestAnimationFrame(() => {
+    calendar.updateSize();
+    updateTopicOverflowButton();
+  });
+});
 
 createMenuButton.addEventListener("click", (event) => {
   event.stopPropagation();

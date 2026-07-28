@@ -14,6 +14,14 @@ import httpx
 import pytest
 from playwright.sync_api import Page, expect
 
+VIEWPORTS = [
+    (320, 800),
+    (375, 667),
+    (768, 1024),
+    (1024, 768),
+    (1440, 900),
+]
+
 
 def available_port() -> int:
     with socket.socket() as listener:
@@ -58,6 +66,12 @@ def live_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
                 time.sleep(0.05)
         else:
             raise RuntimeError("Playwright test server did not become ready")
+        tasks = httpx.get(
+            f"{base_url}/apps/calendar/api/tasks",
+            timeout=1,
+        ).json()
+        if tasks != []:
+            raise RuntimeError("Playwright test server did not use its empty temporary DB")
         yield base_url
     finally:
         process.terminate()
@@ -123,7 +137,120 @@ def test_calendar_nested_route_uses_only_local_assets(page: Page, live_server: s
     page.on("requestfailed", lambda request: failed_requests.append(request.url))
 
     page.goto(f"{live_server}/apps/calendar/")
+    expect(page.locator("#sidebar")).to_be_attached()
+    expect(page.locator(".workspace-header")).to_be_visible()
+    expect(page.locator('[data-app-id="calendar"][aria-current="page"]')).to_be_attached()
     expect(page.locator("#calendar")).to_be_visible()
     expect(page.locator("#create-menu-button")).to_be_visible()
     assert failed_requests == []
     assert external_requests == []
+
+
+def test_calendar_resizes_after_desktop_sidebar_collapse(
+    page: Page, live_server: str
+) -> None:
+    page.set_viewport_size({"width": 1440, "height": 900})
+    page.goto(f"{live_server}/apps/calendar/")
+    calendar = page.locator(".calendar-shell")
+    before = calendar.bounding_box()
+    assert before is not None
+
+    collapse = page.locator("#sidebar-collapse")
+    collapse.click()
+    expect(page.locator("body")).to_have_class(re.compile(r"\bsidebar-collapsed\b"))
+    expect(collapse).to_have_attribute("aria-expanded", "false")
+    expect(page.get_by_role("button", name="사이드바 펼치기")).to_be_visible()
+    page.wait_for_timeout(300)
+
+    after = calendar.bounding_box()
+    assert after is not None
+    assert after["width"] > before["width"] + 100
+
+
+def test_calendar_mobile_drawer_focus_backdrop_and_escape(
+    page: Page, live_server: str
+) -> None:
+    page.set_viewport_size({"width": 320, "height": 800})
+    page.goto(f"{live_server}/apps/calendar/")
+    opener = page.get_by_role("button", name="사이드바 열기")
+
+    opener.click()
+    expect(opener).to_have_attribute("aria-expanded", "true")
+    expect(page.locator("#sidebar")).to_have_attribute("aria-hidden", "false")
+    expect(page.locator("#sidebar-close")).to_be_focused()
+    assert page.evaluate("getComputedStyle(document.body).overflow") == "hidden"
+
+    page.locator("#sidebar-scrim").click(position={"x": 315, "y": 400})
+    expect(opener).to_have_attribute("aria-expanded", "false")
+    expect(opener).to_be_focused()
+
+    opener.click()
+    page.keyboard.press("Escape")
+    expect(opener).to_have_attribute("aria-expanded", "false")
+    expect(opener).to_be_focused()
+
+
+@pytest.mark.parametrize(("width", "height"), VIEWPORTS)
+def test_calendar_viewport_layout_and_request_health(
+    page: Page,
+    live_server: str,
+    width: int,
+    height: int,
+) -> None:
+    external_requests = assert_same_origin_requests(page, live_server)
+    failed_requests: list[str] = []
+    console_errors: list[str] = []
+    page.on("requestfailed", lambda request: failed_requests.append(request.url))
+    page.on(
+        "console",
+        lambda message: (
+            console_errors.append(message.text) if message.type == "error" else None
+        ),
+    )
+    page.set_viewport_size({"width": width, "height": height})
+    page.goto(f"{live_server}/apps/calendar/")
+    page.wait_for_timeout(250)
+
+    metrics = page.evaluate(
+        """() => ({
+          innerWidth: window.innerWidth,
+          documentWidth: document.documentElement.scrollWidth,
+          bodyHeight: document.body.scrollHeight,
+          viewportHeight: document.body.clientHeight,
+          calendarWidth: document.querySelector('.calendar-shell').getBoundingClientRect().width,
+          mainWidth: document.querySelector('#workspace-main').getBoundingClientRect().width,
+          datePanelWidth: document.querySelector('#date-panel').getBoundingClientRect().width,
+        })"""
+    )
+    assert metrics["documentWidth"] == metrics["innerWidth"]
+    assert metrics["bodyHeight"] == metrics["viewportHeight"]
+    assert 0 < metrics["calendarWidth"] <= metrics["mainWidth"]
+    assert 0 < metrics["datePanelWidth"] <= metrics["mainWidth"]
+    assert external_requests == []
+    assert failed_requests == []
+    assert console_errors == []
+
+
+def test_calendar_event_opens_from_keyboard(page: Page, live_server: str) -> None:
+    response = page.request.post(
+        f"{live_server}/apps/calendar/api/tasks",
+        data={
+            "title": "키보드 일정",
+            "description": "",
+            "status": "todo",
+            "all_day": False,
+            "start_at": "2026-07-28T09:00:00+09:00",
+            "due_at": "2026-07-28T10:00:00+09:00",
+            "topic_ids": [],
+        },
+    )
+    assert response.ok
+    page.set_viewport_size({"width": 1440, "height": 900})
+    page.goto(f"{live_server}/apps/calendar/")
+
+    event = page.get_by_role("button", name="일정 열기: 키보드 일정")
+    expect(event).to_have_attribute("tabindex", "0")
+    expect(event).to_have_attribute("aria-label", "일정 열기: 키보드 일정")
+    event.focus()
+    page.keyboard.press("Enter")
+    expect(page.locator("#task-dialog")).to_be_visible()

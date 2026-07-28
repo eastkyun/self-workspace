@@ -65,8 +65,18 @@ test("declares KST as the fixed +09:00 offset", () => {
 
 test("uses FullCalendar v7 render and singular class APIs", () => {
   assert.match(appSource, /calendar\.render\(\)/);
+  assert.match(appSource, /calendar\.updateSize\(\)/);
+  assert.match(appSource, /workspace:layout-change/);
   assert.match(appSource, /dayCellClass:/);
   assert.doesNotMatch(appSource, /rerenderDates|dayCellClassNames|themeSystem/);
+});
+
+test("makes rendered calendar events keyboard accessible", () => {
+  assert.match(appSource, /eventDidMount:/);
+  assert.match(appSource, /info\.el\.tabIndex\s*=\s*0/);
+  assert.match(appSource, /setAttribute\("role", "button"\)/);
+  assert.match(appSource, /event\.key === "Enter"/);
+  assert.match(appSource, /event\.key === " "/);
 });
 
 test("keeps the calendar inside the viewport without page scrolling", () => {

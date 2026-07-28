@@ -13,7 +13,6 @@ from apps.calendar.app.main import (
     verify_database,
 )
 from portal.registry import STATIC_DIR, HubApp, load_apps
-from shared.paths import CALENDAR_DB_PATH
 from shared.templating import (
     SHARED_STATIC_DIR,
     create_templates,
@@ -26,7 +25,7 @@ templates = create_templates(PORTAL_TEMPLATES_DIR)
 
 
 def create_app(database_path: str | Path | None = None) -> FastAPI:
-    resolved_database_path = resolve_database_path(database_path or CALENDAR_DB_PATH)
+    resolved_database_path = resolve_database_path(database_path)
     registered_apps = load_apps()
 
     @asynccontextmanager
