@@ -124,7 +124,7 @@ export function topicCountsForTasks(tasks, topics) {
   return { all: tasks.length, unclassified, byTopic };
 }
 
-export function paginateItems(items, requestedPage, pageSize = 10) {
+export function paginateItems(items, requestedPage, pageSize = 5) {
   if (!Number.isInteger(pageSize) || pageSize <= 0) {
     throw new RangeError("pageSize must be a positive integer");
   }

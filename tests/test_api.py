@@ -474,6 +474,12 @@ def test_serves_page_and_static_assets(client: TestClient):
         "/static/vendor/fullcalendar/7.0.2/themes/classic/palette.css"
     )
     license_file = client.get("/static/vendor/fullcalendar/7.0.2/LICENSE.md")
+    pretendard = client.get(
+        "/static/vendor/pretendard/1.3.9/PretendardVariable.woff2"
+    )
+    pretendard_license = client.get(
+        "/static/vendor/pretendard/1.3.9/LICENSE.txt"
+    )
 
     assert page.status_code == 200
     assert 'id="calendar"' in page.text
@@ -499,3 +505,7 @@ def test_serves_page_and_static_assets(client: TestClient):
     assert classic_palette.status_code == 200
     assert license_file.status_code == 200
     assert "MIT License" in license_file.text
+    assert pretendard.status_code == 200
+    assert pretendard.headers["content-type"] == "font/woff2"
+    assert pretendard_license.status_code == 200
+    assert "SIL OPEN FONT LICENSE" in pretendard_license.text

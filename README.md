@@ -11,7 +11,8 @@ FullCalendar로 여러 날짜에 걸친 일정을 표시하고, `할 일`, `진�
 - 상태별 필터와 마감 초과 미완료 필터
 - 이름과 색상을 가진 주제 관리 및 일정별 다중 주제 지정
 - 선택 날짜의 전체, 미분류, 주제별 색상 칩 필터
-- 선택한 주제의 일정이 10개를 초과할 때 이전/다음 페이지 이동
+- 선택한 주제의 일정을 5개 단위로 이전/다음 페이지 이동
+- 두 줄 일정 제목, 주제 2개와 `+N` 요약, 로컬 Pretendard 글꼴
 - 데스크톱 우측 일정 패널과 모바일 하단 일정 패널
 - SQLite 영구 저장 및 기존 칸반 데이터베이스 자동 마이그레이션
 - 외부 CDN 없이 동작하는 FullCalendar 로컬 정적 자산
@@ -188,6 +189,17 @@ DB를 자동으로 마이그레이션합니다.
 버전 디렉터리에 복사한 뒤 HTML 경로와 전체 테스트를 함께 갱신하십시오.
 vendor 파일 자체는 수정하지 않습니다.
 
+## Pretendard 로컬 글꼴
+
+전체 UI는 공식 **Pretendard 1.3.9** 가변 WOFF2를
+`app/static/vendor/pretendard/1.3.9/`에서 로컬로 제공합니다. 브라우저는
+폰트 CDN이나 런타임 외부 요청을 사용하지 않습니다.
+
+원본 release ZIP과 글꼴 파일의 SHA-256, 포함 파일, 라이선스 정보는 같은
+디렉터리의 `VENDOR.md`와 `LICENSE.txt`에 보존합니다. 제목과 본문은
+Pretendard로 통일하고, 글꼴을 불러오지 못할 때는 Apple SD Gothic Neo,
+맑은 고딕, 시스템 sans-serif 순으로 대체합니다.
+
 ## 테스트
 
 개발 의존성을 설치한 뒤 Python과 JavaScript 테스트를 각각 실행합니다.
@@ -200,7 +212,7 @@ node --test tests/test_calendar.mjs
 
 JavaScript 테스트는 npm 패키지 없이 Node 내장 `node:test`를 사용합니다.
 KST 변환, 시간/종일 exclusive end, 같은 날·자정·여러 날·월말 경계,
-선택 날짜 포함, 상태/주제/미분류 필터, 10개 단위 페이징 경계,
+선택 날짜 포함, 상태/주제/미분류 필터, 5개 단위 페이징 경계,
 마감 초과 equality 경계 및 여러 호스트
 시간대(`UTC`, `America/New_York`, `Asia/Seoul`)의 동일 결과를 검증합니다.
 Python 테스트는 임시 SQLite DB를 사용하므로 실제 데이터에 영향을 주지
@@ -217,6 +229,7 @@ app/
     app.js                             FullCalendar 초기화와 CRUD 연결
     calendar-adapter.js                KST, 주제 필터 및 API↔캘린더 순수 변환
     vendor/fullcalendar/7.0.2/         로컬 FullCalendar와 라이선스
+    vendor/pretendard/1.3.9/           로컬 가변 WOFF2와 라이선스
 tests/
   test_api.py                          일정/주제 API와 정적 자산 통합 테스트
   test_migration.py                    v0/v1 DB 마이그레이션 테스트

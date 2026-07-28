@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Pretendard";
+  src: url("/static/vendor/pretendard/1.3.9/PretendardVariable.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 45 920;
+  font-display: swap;
+}
+
 :root {
   color-scheme: light;
   --paper: #fbfaf6;
@@ -33,7 +41,9 @@ body {
   background:
     linear-gradient(rgb(255 255 255 / 42%) 1px, transparent 1px) 0 0 / 100% 30px,
     var(--paper);
-  font-family: "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
+  font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  font-optical-sizing: auto;
+  line-height: 1.45;
 }
 
 button, input, textarea, select { font: inherit; }
@@ -54,14 +64,14 @@ button { color: inherit; }
   margin: 2px 0 0;
   letter-spacing: -.04em;
 }
-.brand h1 { font-family: Georgia, "Times New Roman", serif; font-size: clamp(25px, 3vw, 34px); }
+.brand h1 { font-size: clamp(25px, 3vw, 34px); font-weight: 820; }
 .eyebrow { margin: 0; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .16em; }
 
 .month-title {
   min-width: 136px;
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
   font-size: 22px;
+  font-weight: 780;
   text-align: center;
 }
 
@@ -177,7 +187,7 @@ button { color: inherit; }
 .diary-layout {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 350px);
   align-items: stretch;
   min-height: 0;
   gap: 16px;
@@ -263,12 +273,28 @@ button { color: inherit; }
 .selected-task-card.is-overdue { outline: 1px solid var(--danger); }
 .selected-task-card.is-done { opacity: .68; }
 .selected-task-card.is-done .selected-task-title { text-decoration: line-through; }
-.selected-task-main { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 60px; padding: 9px 10px; border: 0; background: transparent; text-align: left; cursor: pointer; }
-.selected-task-status { flex: none; font-size: 10px; font-weight: 800; }
-.selected-task-copy { display: grid; min-width: 0; gap: 3px; color: var(--ink); }
-.selected-task-title { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.selected-task-main { display: flex; align-items: flex-start; gap: 9px; width: 100%; min-height: 72px; padding: 10px; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.selected-task-status { flex: none; margin-top: 2px; font-size: 9px; font-weight: 800; }
+.selected-task-copy { display: grid; min-width: 0; gap: 4px; color: var(--ink); }
+.selected-task-title {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 720;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
 .selected-task-time { color: var(--muted); font-size: 11px; }
 .selected-task-topics { display: flex; min-width: 0; gap: 4px; overflow: hidden; }
+.selected-task-topics .topic-hashtag:not(.topic-hashtag-more) {
+  min-width: 0;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .topic-hashtag {
   display: inline-flex;
   align-items: center;
@@ -282,6 +308,7 @@ button { color: inherit; }
   font-size: 9px;
   font-weight: 750;
 }
+.topic-hashtag-more { margin-left: auto; border-color: var(--line); color: var(--muted); background: var(--surface-muted); }
 .overdue-mark { flex: none; display: grid; place-items: center; width: 19px; height: 19px; border-radius: 50%; color: white; background: var(--danger); font-size: 12px; font-weight: 900; }
 .selected-empty { display: grid; place-content: center; min-height: 100%; color: #9a9a91; text-align: center; }
 .selected-empty span { font-size: 24px; }

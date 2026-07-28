@@ -50,7 +50,7 @@ const previousSelectedPage = document.querySelector("#previous-selected-page");
 const nextSelectedPage = document.querySelector("#next-selected-page");
 const selectedPageStatus = document.querySelector("#selected-page-status");
 
-const SELECTED_PAGE_SIZE = 10;
+const SELECTED_PAGE_SIZE = 5;
 let tasks = [];
 let topics = [];
 let calendar;
@@ -131,14 +131,29 @@ function topicStyle(element, color) {
   element.style.setProperty("--topic-color", color);
 }
 
-function appendTopicTags(container, taskTopics) {
-  taskTopics.forEach((topic) => {
+function appendTopicTags(container, taskTopics, limit = 2) {
+  taskTopics.slice(0, limit).forEach((topic) => {
     const tag = document.createElement("span");
     tag.className = "topic-hashtag";
     tag.textContent = `#${topic.name}`;
+    tag.title = `#${topic.name}`;
     topicStyle(tag, topic.color);
     container.append(tag);
   });
+  if (taskTopics.length > limit) {
+    const remaining = document.createElement("span");
+    remaining.className = "topic-hashtag topic-hashtag-more";
+    remaining.textContent = `+${taskTopics.length - limit}`;
+    remaining.setAttribute(
+      "aria-label",
+      `추가 주제 ${taskTopics.length - limit}개`,
+    );
+    remaining.title = taskTopics
+      .slice(limit)
+      .map((topic) => `#${topic.name}`)
+      .join(" ");
+    container.append(remaining);
+  }
 }
 
 function renderTaskTopicOptions(selectedIds = new Set()) {
@@ -309,7 +324,9 @@ function renderSelectedDate() {
     if (task.status === "done") article.classList.add("is-done");
     if (isTaskOverdue(task)) article.classList.add("is-overdue");
     card.querySelector(".selected-task-status").textContent = STATUS_LABELS[task.status];
-    card.querySelector(".selected-task-title").textContent = task.title;
+    const taskTitle = card.querySelector(".selected-task-title");
+    taskTitle.textContent = task.title;
+    taskTitle.title = task.title;
     card.querySelector(".selected-task-time").textContent = formatTaskTime(task, selectedKstDate);
     appendTopicTags(card.querySelector(".selected-task-topics"), task.topics ?? []);
     card.querySelector(".overdue-mark").hidden = !isTaskOverdue(task);
