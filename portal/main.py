@@ -12,7 +12,7 @@ from apps.calendar.app.main import (
     resolve_database_path,
     verify_database,
 )
-from portal.registry import STATIC_DIR, HubApp, load_apps
+from shared.app_registry import AppManifest, AppRegistry
 from shared.templating import (
     SHARED_STATIC_DIR,
     create_templates,
@@ -20,13 +20,18 @@ from shared.templating import (
 )
 
 PORTAL_DIR = Path(__file__).resolve().parent
+STATIC_DIR = PORTAL_DIR / "static"
 PORTAL_TEMPLATES_DIR = PORTAL_DIR / "templates"
 templates = create_templates(PORTAL_TEMPLATES_DIR)
 
 
-def create_app(database_path: str | Path | None = None) -> FastAPI:
+def create_app(
+    database_path: str | Path | None = None,
+    *,
+    app_registry: AppRegistry | None = None,
+) -> FastAPI:
     resolved_database_path = resolve_database_path(database_path)
-    registered_apps = load_apps()
+    registry = app_registry or AppRegistry.load_default()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -43,6 +48,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     application.state.calendar_database_path = resolved_database_path
+    application.state.app_registry = registry
     application.mount(
         "/static/shared",
         StaticFiles(directory=SHARED_STATIC_DIR),
@@ -57,20 +63,20 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             "home.html",
             shell_context(
                 request,
-                registered_apps,
+                registry,
                 current_app_id="home",
                 page_title="Home",
             ),
         )
 
-    @application.get("/api/hub/apps", response_model=list[HubApp])
-    def list_apps() -> list[HubApp]:
-        return registered_apps
+    @application.get("/api/hub/apps", response_model=list[AppManifest])
+    def list_apps() -> tuple[AppManifest, ...]:
+        return registry.get_enabled()
 
     calendar_application = create_calendar_app(
         resolved_database_path,
         initialize_on_startup=False,
-        registered_apps=registered_apps,
+        registered_apps=registry.get_enabled(),
     )
     application.mount("/apps/calendar", calendar_application, name="calendar")
     return application

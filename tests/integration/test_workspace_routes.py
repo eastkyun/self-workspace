@@ -47,7 +47,8 @@ def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) 
     assert portal_state.status_code == 200
     assert portal_icon.status_code == 200
     assert registry.status_code == 200
-    assert registry.json()[0]["url"] == "/apps/calendar/"
+    assert registry.json()[0]["route"] == "/apps/calendar/"
+    assert registry.json()[0]["display_name"] == "Calendar"
     assert calendar_redirect.status_code in {307, 308}
     assert calendar_redirect.headers["location"].endswith("/apps/calendar/")
     assert calendar.status_code == 200

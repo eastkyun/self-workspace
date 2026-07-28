@@ -48,13 +48,13 @@
             {% for app in navigation_apps %}
             <a
               class="workspace-nav-link{% if current_app_id == app.id %} is-active{% endif %}"
-              href="{% if app.kind == 'external' %}{{ app.url }}{% else %}{{ workspace_path(app.url) }}{% endif %}"
+              href="{% if app.kind == 'external' %}{{ app.route if app.route is defined else app.url }}{% else %}{{ workspace_path(app.route if app.route is defined else app.url) }}{% endif %}"
               data-app-id="{{ app.id }}"
               {% if current_app_id == app.id %}aria-current="page"{% endif %}
               {% if app.kind == 'external' %}target="_blank" rel="noopener noreferrer"{% endif %}
             >
               <img class="workspace-nav-icon" src="{{ workspace_path(app.icon) }}" alt="">
-              <span class="workspace-nav-label">{{ app.name }}</span>
+              <span class="workspace-nav-label">{{ app.display_name if app.display_name is defined else app.name }}</span>
             </a>
             {% else %}
             <p class="workspace-navigation-empty">등록된 앱이 없습니다.</p>
@@ -133,21 +133,21 @@
         <button id="launcher-close" class="workspace-icon-button" type="button" aria-label="앱 런처 닫기">×</button>
       </div>
       <div id="launcher-grid" class="workspace-launcher-grid">
-        {% for app in apps %}
+        {% for app in launcher_apps %}
         <div class="workspace-launcher-item" data-app-id="{{ app.id }}">
           <a
-            href="{% if app.kind == 'external' %}{{ app.url }}{% else %}{{ workspace_path(app.url) }}{% endif %}"
+            href="{% if app.kind == 'external' %}{{ app.route if app.route is defined else app.url }}{% else %}{{ workspace_path(app.route if app.route is defined else app.url) }}{% endif %}"
             {% if app.kind == 'external' %}target="_blank" rel="noopener noreferrer"{% endif %}
           >
             <img src="{{ workspace_path(app.icon) }}" alt="">
-            <span>{{ app.name }}</span>
+            <span>{{ app.display_name if app.display_name is defined else app.name }}</span>
           </a>
           <button
             class="workspace-pin-button"
             type="button"
             data-pin-app="{{ app.id }}"
-            data-default-pinned="{{ 'true' if app.defaultPinned else 'false' }}"
-            aria-label="{{ app.name }} 고정"
+            data-default-pinned="{{ 'true' if (app.default_pinned if app.default_pinned is defined else app.defaultPinned) else 'false' }}"
+            aria-label="{{ app.display_name if app.display_name is defined else app.name }} 고정"
           ></button>
         </div>
         {% endfor %}

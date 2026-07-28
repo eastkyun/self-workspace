@@ -1,5 +1,5 @@
 export function defaultPinnedIds(apps) {
-  return apps.filter((app) => app.defaultPinned).map((app) => app.id);
+  return apps.filter((app) => app.default_pinned).map((app) => app.id);
 }
 
 export function decodePinnedIds(serialized, apps) {

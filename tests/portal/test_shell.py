@@ -4,19 +4,8 @@ import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
-from shared.app_registry import HubApp
+from shared.app_registry import AppRegistry
 from shared.templating import create_templates, shell_context, workspace_path
-
-
-def calendar_app() -> HubApp:
-    return HubApp(
-        id="calendar",
-        name="Calendar",
-        kind="internal",
-        url="/apps/calendar/",
-        icon="/static/icons/calendar.svg",
-        description="calendar",
-    )
 
 
 def test_shell_context_selects_current_app() -> None:
@@ -26,7 +15,7 @@ def test_shell_context_selects_current_app() -> None:
     def index(request: Request) -> dict:
         context = shell_context(
             request,
-            [calendar_app()],
+            AppRegistry.load_default(),
             current_app_id="calendar",
             page_title="Calendar",
         )
@@ -36,6 +25,7 @@ def test_shell_context_selects_current_app() -> None:
             "navigation_app_ids": [
                 item.id for item in context["navigation_apps"]
             ],
+            "launcher_app_ids": [item.id for item in context["launcher_apps"]],
         }
 
     with TestClient(app) as client:
@@ -44,6 +34,7 @@ def test_shell_context_selects_current_app() -> None:
     assert payload["current_app_id"] == "calendar"
     assert payload["current_app_name"] == "Calendar"
     assert payload["navigation_app_ids"] == ["calendar"]
+    assert payload["launcher_app_ids"] == ["calendar"]
 
 
 def test_workspace_path_uses_external_root_path() -> None:
@@ -72,7 +63,7 @@ def test_shared_shell_renders_navigation_and_content(tmp_path: Path) -> None:
             "page.html",
             shell_context(
                 request,
-                [calendar_app()],
+                AppRegistry.load_default(),
                 current_app_id="calendar",
                 page_title="Calendar",
             ),
@@ -84,7 +75,7 @@ def test_shared_shell_renders_navigation_and_content(tmp_path: Path) -> None:
     assert response.status_code == 200
     assert 'id="sidebar"' in response.text
     assert 'class="workspace-header"' in response.text
-    assert 'data-app-id="calendar"' in response.text
+    assert response.text.count('data-app-id="calendar"') == 2
     assert 'aria-current="page"' in response.text
     assert 'id="content"' in response.text
     assert "<iframe" not in response.text

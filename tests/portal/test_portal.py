@@ -1,108 +1,94 @@
-import json
 from pathlib import Path
 
-import pytest
-from pydantic import ValidationError
+from fastapi.testclient import TestClient
 
-from portal.registry import HubApp, load_apps, navigation_apps
-
-
-def test_registry_loads_internal_calendar_app() -> None:
-    apps = load_apps()
-
-    assert [app.id for app in apps] == ["calendar"]
-    assert apps[0].url == "/apps/calendar/"
-    assert apps[0].enabled is True
-    assert apps[0].navigationVisible is True
-    assert apps[0].defaultPinned is True
-
-
-@pytest.mark.parametrize(
-    ("kind", "url"),
-    [
-        ("internal", "/calendar"),
-        ("external", "http://example.com"),
-        ("external", "javascript:alert(1)"),
-    ],
+from portal.main import create_app
+from shared.app_registry import (
+    AppCategory,
+    AppManifest,
+    AppRegistry,
+    RegistryDocument,
 )
-def test_registry_rejects_unsafe_urls(kind: str, url: str) -> None:
-    with pytest.raises(ValidationError):
-        HubApp(
-            id="unsafe",
-            name="Unsafe",
-            kind=kind,
-            url=url,
-            icon="/static/icons/calendar.svg",
-            description="invalid",
+
+
+def manifest(
+    app_id: str,
+    *,
+    order: int,
+    enabled: bool = True,
+    navigation_visible: bool = True,
+    launcher_visible: bool = True,
+) -> AppManifest:
+    return AppManifest(
+        id=app_id,
+        name=app_id,
+        display_name=app_id.title(),
+        description=f"{app_id} app",
+        icon="/static/icons/calendar.svg",
+        route=f"/apps/{app_id}/",
+        category="productivity",
+        enabled=enabled,
+        default_pinned=app_id == "calendar",
+        navigation_visible=navigation_visible,
+        launcher_visible=launcher_visible,
+        order=order,
+        version="1.0.0",
+    )
+
+
+def registry(*apps: AppManifest) -> AppRegistry:
+    return AppRegistry(
+        RegistryDocument(
+            schema_version=1,
+            categories=(
+                AppCategory(
+                    id="productivity",
+                    display_name="Productivity",
+                    order=10,
+                ),
+            ),
+            apps=apps,
         )
-
-
-def test_registry_rejects_duplicate_ids(tmp_path: Path) -> None:
-    calendar = {
-        "id": "calendar",
-        "name": "Calendar",
-        "kind": "internal",
-        "url": "/apps/calendar/",
-        "icon": "/static/icons/calendar.svg",
-        "description": "calendar",
-    }
-    registry_path = tmp_path / "apps.json"
-    registry_path.write_text(
-        json.dumps({"apps": [calendar, calendar]}),
-        encoding="utf-8",
     )
 
-    with pytest.raises(ValueError, match="unique"):
-        load_apps(registry_path)
+
+def test_default_registry_loads_internal_calendar_app() -> None:
+    app_registry = AppRegistry.load_default()
+
+    assert [app.id for app in app_registry.get_all()] == ["calendar"]
+    assert app_registry.get_app("calendar").route == "/apps/calendar/"
+    assert app_registry.get_app("calendar").navigation_visible is True
+    assert app_registry.get_app("calendar").launcher_visible is True
+    assert app_registry.get_default_pinned_ids() == ("calendar",)
 
 
-def test_registry_filters_disabled_apps_and_hidden_navigation(tmp_path: Path) -> None:
-    registry_path = tmp_path / "apps.json"
-    registry_path.write_text(
-        json.dumps(
-            {
-                "apps": [
-                    {
-                        "id": "disabled",
-                        "name": "Disabled",
-                        "kind": "internal",
-                        "url": "/apps/disabled/",
-                        "icon": "/static/icons/calendar.svg",
-                        "description": "disabled",
-                        "enabled": False,
-                        "order": 1,
-                    },
-                    {
-                        "id": "hidden",
-                        "name": "Hidden",
-                        "kind": "internal",
-                        "url": "/apps/hidden/",
-                        "icon": "/static/icons/calendar.svg",
-                        "description": "hidden from navigation",
-                        "navigationVisible": False,
-                        "order": 2,
-                    },
-                    {
-                        "id": "calendar",
-                        "name": "Calendar",
-                        "kind": "internal",
-                        "url": "/apps/calendar/",
-                        "icon": "/static/icons/calendar.svg",
-                        "description": "calendar",
-                        "order": 3,
-                    },
-                ]
-            }
-        ),
-        encoding="utf-8",
+def test_portal_surfaces_use_the_same_registry_snapshot(tmp_path: Path) -> None:
+    app_registry = registry(
+        manifest("calendar", order=10, launcher_visible=False),
+        manifest("launcher", order=20, navigation_visible=False),
+        manifest("disabled", order=30, enabled=False),
     )
+    application = create_app(tmp_path / "calendar.db", app_registry=app_registry)
 
-    apps = load_apps(registry_path)
+    with TestClient(application) as client:
+        home = client.get("/")
+        api = client.get("/api/hub/apps")
 
-    assert [app.id for app in apps] == ["hidden", "calendar"]
-    assert [app.id for app in navigation_apps(apps)] == ["calendar"]
-    assert [app.id for app in load_apps(registry_path, include_disabled=True)] == [
-        "disabled",
-        "hidden",
-        "calendar",
-    ]
+    assert application.state.app_registry is app_registry
+    assert api.status_code == 200
+    assert [app["id"] for app in api.json()] == ["calendar", "launcher"]
+    assert home.text.count('data-app-id="calendar"') == 1
+    assert home.text.count('data-app-id="launcher"') == 1
+    assert 'data-app-id="disabled"' not in home.text
+
+
+def test_hub_api_uses_canonical_registry_fields(tmp_path: Path) -> None:
+    with TestClient(create_app(tmp_path / "calendar.db")) as client:
+        payload = client.get("/api/hub/apps").json()[0]
+
+    assert payload["id"] == "calendar"
+    assert payload["display_name"] == "Calendar"
+    assert payload["route"] == "/apps/calendar/"
+    assert payload["default_pinned"] is True
+    assert "url" not in payload
+    assert "defaultPinned" not in payload

@@ -7,8 +7,8 @@ import {
 } from "../../portal/static/hub-state.js";
 
 const apps = [
-  { id: "calendar", defaultPinned: true },
-  { id: "docs", defaultPinned: false },
+  { id: "calendar", default_pinned: true },
+  { id: "docs", default_pinned: false },
 ];
 
 test("uses registry defaults when no storage exists", () => {

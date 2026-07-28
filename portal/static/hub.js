@@ -26,7 +26,7 @@ function savePinnedIds() {
 }
 
 function linkAttributes(link, app) {
-  link.href = app.url;
+  link.href = app.route;
   if (app.kind === "external") {
     link.target = "_blank";
     link.rel = "noopener noreferrer";
@@ -43,11 +43,11 @@ function appCard(app) {
   card.dataset.appId = app.id;
   linkAttributes(link, app);
   icon.src = app.icon;
-  fragment.querySelector(".hub-app-name").textContent = app.name;
+  fragment.querySelector(".hub-app-name").textContent = app.display_name;
   fragment.querySelector(".hub-app-description").textContent = app.description;
   pinButton.textContent = pinnedIds.has(app.id) ? "고정 해제" : "고정";
   pinButton.setAttribute("aria-pressed", String(pinnedIds.has(app.id)));
-  pinButton.setAttribute("aria-label", `${app.name} ${pinButton.textContent}`);
+  pinButton.setAttribute("aria-label", `${app.display_name} ${pinButton.textContent}`);
   pinButton.addEventListener("click", () => togglePin(app.id));
   return fragment;
 }
