@@ -9,6 +9,7 @@
 !.codex/prompts/**
 
 .venv/
+.playwright-browsers/
 __pycache__/
 *.py[cod]
 .pytest_cache/

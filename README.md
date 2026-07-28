@@ -20,6 +20,8 @@ docs/            편입·DB·registry 운영 문서
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements-dev.txt
+PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers \
+  python -m playwright install chromium
 uvicorn portal.main:app --reload
 ```
 
@@ -45,6 +47,9 @@ python -m pytest -q -p no:cacheprovider \
   tests/calendar tests/portal tests/integration
 
 node --test tests/calendar/test_calendar.mjs
+
+PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers \
+  python -m pytest -q tests/e2e
 ```
 
 Codex filesystem sandbox 안에서는 AnyIO cross-thread blocking portal 제한 때문에 `TestClient`가
