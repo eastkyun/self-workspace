@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="세 단계로 작업을 관리하는 단순한 칸반 보드">
+    <title>Simple Kanban</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">MY WORKSPACE</p>
+        <h1>Simple Kanban</h1>
+      </div>
+      <button class="button button-primary" id="new-task-button" type="button">
+        <span aria-hidden="true">＋</span> 새 작업
+      </button>
+    </header>
+
+    <div class="notification" id="notification" role="status" aria-live="polite" hidden></div>
+
+    <main class="board" id="board" aria-label="할 일 칸반 보드">
+      <section class="column" data-status="todo" aria-labelledby="todo-title">
+        <header class="column-header">
+          <div class="column-heading">
+            <span class="status-dot status-dot-todo" aria-hidden="true"></span>
+            <h2 id="todo-title">할 일</h2>
+          </div>
+          <span class="task-count" data-count="todo" aria-label="할 일 작업 수">0</span>
+        </header>
+        <div class="task-list" data-task-list="todo"></div>
+        <button class="add-column-task" data-add-status="todo" type="button">＋ 작업 추가</button>
+      </section>
+
+      <section class="column" data-status="doing" aria-labelledby="doing-title">
+        <header class="column-header">
+          <div class="column-heading">
+            <span class="status-dot status-dot-doing" aria-hidden="true"></span>
+            <h2 id="doing-title">진행 중</h2>
+          </div>
+          <span class="task-count" data-count="doing" aria-label="진행 중 작업 수">0</span>
+        </header>
+        <div class="task-list" data-task-list="doing"></div>
+        <button class="add-column-task" data-add-status="doing" type="button">＋ 작업 추가</button>
+      </section>
+
+      <section class="column" data-status="done" aria-labelledby="done-title">
+        <header class="column-header">
+          <div class="column-heading">
+            <span class="status-dot status-dot-done" aria-hidden="true"></span>
+            <h2 id="done-title">완료</h2>
+          </div>
+          <span class="task-count" data-count="done" aria-label="완료 작업 수">0</span>
+        </header>
+        <div class="task-list" data-task-list="done"></div>
+        <button class="add-column-task" data-add-status="done" type="button">＋ 작업 추가</button>
+      </section>
+    </main>
+
+    <dialog class="task-dialog" id="task-dialog" aria-labelledby="dialog-title">
+      <form id="task-form">
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">TASK DETAILS</p>
+            <h2 id="dialog-title">새 작업</h2>
+          </div>
+          <button class="icon-button" id="close-dialog" type="button" aria-label="닫기">×</button>
+        </div>
+
+        <input id="task-id" type="hidden">
+        <label for="task-title">제목</label>
+        <input id="task-title" name="title" type="text" maxlength="120" required autofocus>
+
+        <label for="task-description">설명 <span class="optional">(선택)</span></label>
+        <textarea id="task-description" name="description" rows="5"></textarea>
+
+        <label for="task-status">상태</label>
+        <select id="task-status" name="status">
+          <option value="todo">할 일</option>
+          <option value="doing">진행 중</option>
+          <option value="done">완료</option>
+        </select>
+
+        <div class="dialog-actions">
+          <button class="button button-secondary" id="cancel-dialog" type="button">취소</button>
+          <button class="button button-primary" type="submit">저장</button>
+        </div>
+      </form>
+    </dialog>
+
+    <template id="empty-state-template">
+      <div class="empty-state">
+        <span aria-hidden="true">○</span>
+        <p>아직 작업이 없습니다</p>
+      </div>
+    </template>
+
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>
+
