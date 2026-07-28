@@ -236,7 +236,6 @@ function formatSelectedDate(date) {
 function closeTopicOverflow({ returnFocus = false } = {}) {
   topicOverflowPopover.hidden = true;
   topicOverflowButton.setAttribute("aria-expanded", "false");
-  topicOverflowButton.textContent = "⌄";
   if (
     returnFocus
     && !topicOverflowButton.classList.contains("is-concealed")
@@ -249,7 +248,6 @@ function toggleTopicOverflow() {
   const opening = topicOverflowPopover.hidden;
   topicOverflowPopover.hidden = !opening;
   topicOverflowButton.setAttribute("aria-expanded", String(opening));
-  topicOverflowButton.textContent = opening ? "⌃" : "⌄";
   if (opening) topicOverflowPopover.querySelector("[data-topic-filter]")?.focus();
 }
 

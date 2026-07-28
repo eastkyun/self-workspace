@@ -79,14 +79,28 @@ button { color: inherit; }
 .new-task-button { justify-self: end; }
 .create-control { position: relative; }
 .create-menu-trigger {
-  display: grid;
-  place-items: center;
+  position: relative;
+  display: block;
   width: 44px;
   height: 44px;
   min-height: 44px;
   padding: 0;
   font-size: 22px;
   line-height: 1;
+}
+.create-plus-icon {
+  display: block;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  transform: translate(-50%, -50%);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
 }
 .create-menu {
   position: absolute;
@@ -244,14 +258,19 @@ button { color: inherit; }
 .topic-filter-nav {
   min-width: 0;
   overflow-x: auto;
-  scrollbar-width: thin;
+  scrollbar-width: none;
 }
+.topic-filter-nav::-webkit-scrollbar { display: none; }
 .topic-filter-list { display: flex; align-items: center; width: max-content; min-width: 100%; gap: 6px; }
 .topic-overflow-button {
   position: relative;
   z-index: 2;
+  display: block;
+  place-self: center;
+  flex: none;
   width: 30px;
   height: 30px;
+  margin: 0;
   padding: 0;
   border: 1px solid var(--line);
   border-radius: 9px;
@@ -268,6 +287,25 @@ button { color: inherit; }
   background: color-mix(in srgb, var(--primary) 8%, white);
 }
 .topic-overflow-button.is-concealed { visibility: hidden; pointer-events: none; }
+.control-chevron-icon {
+  display: block;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transform: translate(-50%, -50%);
+  transition: transform 140ms ease;
+  vector-effect: non-scaling-stroke;
+}
+.topic-overflow-button[aria-expanded="true"] .topic-overflow-icon {
+  transform: translate(-50%, -50%) rotate(180deg);
+}
 .topic-overflow-popover {
   position: absolute;
   z-index: 15;
@@ -385,8 +423,13 @@ button { color: inherit; }
   font-weight: 800;
 }
 .pagination-button {
+  position: relative;
+  display: block;
+  align-self: center;
+  flex: none;
   width: 30px;
   height: 30px;
+  margin: 0;
   padding: 0;
   border: 1px solid var(--line);
   border-radius: 8px;

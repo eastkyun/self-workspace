@@ -86,7 +86,13 @@ test("uses readable two-line cards and summarizes excess topic tags", () => {
 test("centers the header create button in a fixed square", () => {
   assert.match(
     stylesSource,
-    /\.create-menu-trigger\s*\{[^}]*display:\s*grid[^}]*place-items:\s*center[^}]*width:\s*44px[^}]*height:\s*44px/s,
+    /\.create-menu-trigger\s*\{[^}]*position:\s*relative[^}]*width:\s*44px[^}]*height:\s*44px/s,
+  );
+  assert.match(indexSource, /class="create-plus-icon"[^>]*viewBox="0 0 20 20"/);
+  assert.match(indexSource, /d="M10 4V16M4 10H16"/);
+  assert.match(
+    stylesSource,
+    /\.create-plus-icon\s*\{[^}]*position:\s*absolute[^}]*top:\s*50%[^}]*left:\s*50%[^}]*transform:\s*translate\(-50%, -50%\)/s,
   );
 });
 
@@ -94,9 +100,24 @@ test("configures an accessible active-topic overflow popover", () => {
   assert.match(indexSource, /id="topic-overflow-button"/);
   assert.match(indexSource, /aria-expanded="false"/);
   assert.match(indexSource, /id="topic-overflow-popover"/);
+  assert.match(indexSource, /class="control-chevron-icon topic-overflow-icon"/);
+  assert.doesNotMatch(appSource, /topicOverflowButton\.textContent/);
   assert.match(appSource, /new ResizeObserver\(updateTopicOverflowButton\)/);
   assert.match(appSource, /scrollWidth\s*>\s*topicFilterViewport\.clientWidth/);
   assert.match(appSource, /event\.key === "Escape"/);
+  assert.match(
+    indexSource,
+    /id="previous-selected-page"[\s\S]*M12\.5 5L7\.5 10L12\.5 15/,
+  );
+  assert.match(
+    indexSource,
+    /id="next-selected-page"[\s\S]*M7\.5 5L12\.5 10L7\.5 15/,
+  );
+  assert.match(
+    stylesSource,
+    /\.topic-overflow-button\s*\{[^}]*display:\s*block[^}]*place-self:\s*center[^}]*width:\s*30px[^}]*height:\s*30px/s,
+  );
+  assert.match(stylesSource, /\.topic-filter-nav::\-webkit-scrollbar\s*\{\s*display:\s*none;/);
 });
 
 test("adds the KST offset and seconds to a datetime-local value", () => {

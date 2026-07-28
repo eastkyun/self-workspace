@@ -37,7 +37,11 @@
           aria-label="새 항목 만들기"
           aria-expanded="false"
           aria-controls="create-menu"
-        >＋</button>
+        >
+          <svg class="create-plus-icon" viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M10 4V16M4 10H16"></path>
+          </svg>
+        </button>
         <div class="create-menu" id="create-menu" role="menu" hidden>
           <button type="button" role="menuitem" id="new-task-button">일정 추가</button>
           <button type="button" role="menuitem" id="new-topic-button">주제 추가</button>
@@ -95,7 +99,11 @@
               aria-expanded="false"
               aria-controls="topic-overflow-popover"
               hidden
-            >⌄</button>
+            >
+              <svg class="control-chevron-icon topic-overflow-icon" viewBox="0 0 20 20" aria-hidden="true">
+                <path d="M5 7.5L10 12.5L15 7.5"></path>
+              </svg>
+            </button>
             <div class="topic-overflow-popover" id="topic-overflow-popover" hidden>
               <div class="topic-overflow-header">
                 <strong>활성 주제</strong>
@@ -106,9 +114,17 @@
           </nav>
           <div class="selected-task-list" id="selected-task-list"></div>
           <nav class="selected-pagination" id="selected-pagination" aria-label="선택한 날짜 일정 페이지" hidden>
-            <button class="pagination-button" id="previous-selected-page" type="button" aria-label="이전 일정 페이지">‹</button>
+            <button class="pagination-button" id="previous-selected-page" type="button" aria-label="이전 일정 페이지">
+              <svg class="control-chevron-icon" viewBox="0 0 20 20" aria-hidden="true">
+                <path d="M12.5 5L7.5 10L12.5 15"></path>
+              </svg>
+            </button>
             <span id="selected-page-status" aria-live="polite">1 / 1</span>
-            <button class="pagination-button" id="next-selected-page" type="button" aria-label="다음 일정 페이지">›</button>
+            <button class="pagination-button" id="next-selected-page" type="button" aria-label="다음 일정 페이지">
+              <svg class="control-chevron-icon" viewBox="0 0 20 20" aria-hidden="true">
+                <path d="M7.5 5L12.5 10L7.5 15"></path>
+              </svg>
+            </button>
           </nav>
           <button class="button button-secondary add-date-task" id="add-date-task" type="button">
             ＋ 이 날짜에 일정 추가
