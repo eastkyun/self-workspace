@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator
 from contextlib import asynccontextmanager, contextmanager
 from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from shared.app_registry import PORTAL_STATIC_DIR, HubApp, load_apps
+from shared.app_registry import AppRegistry, PORTAL_STATIC_DIR
 from shared.templating import SHARED_STATIC_DIR, create_templates, shell_context
 
 APP_DIR = Path(__file__).resolve().parent
@@ -641,10 +641,10 @@ def create_app(
     database_path: str | Path | None = None,
     *,
     initialize_on_startup: bool = True,
-    registered_apps: Sequence[HubApp] | None = None,
+    app_registry: AppRegistry | None = None,
 ) -> FastAPI:
     resolved_database_path = resolve_database_path(database_path)
-    shell_apps = list(registered_apps) if registered_apps is not None else load_apps()
+    registry = app_registry or AppRegistry.load_default()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -658,6 +658,7 @@ def create_app(
         lifespan=lifespan,
     )
     application.state.database_path = resolved_database_path
+    application.state.app_registry = registry
     application.mount(
         "/static/icons",
         StaticFiles(directory=PORTAL_STATIC_DIR / "icons"),
@@ -677,7 +678,7 @@ def create_app(
             "calendar.html",
             shell_context(
                 request,
-                shell_apps,
+                registry,
                 current_app_id="calendar",
                 page_title="Calendar",
             ),

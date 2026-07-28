@@ -67,6 +67,15 @@ def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) 
         assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
 
 
+def test_portal_and_calendar_share_one_registry_snapshot(tmp_path: Path) -> None:
+    application = create_app(tmp_path / "calendar.db")
+    calendar_mount = next(
+        route for route in application.routes if route.path == "/apps/calendar"
+    )
+
+    assert calendar_mount.app.state.app_registry is application.state.app_registry
+
+
 def test_portal_verifies_existing_v2_database_without_mutation(tmp_path: Path) -> None:
     database_path = tmp_path / "calendar.db"
     initialize_database(database_path)

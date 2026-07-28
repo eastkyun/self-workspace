@@ -76,7 +76,7 @@ def create_app(
     calendar_application = create_calendar_app(
         resolved_database_path,
         initialize_on_startup=False,
-        registered_apps=registry.get_enabled(),
+        app_registry=registry,
     )
     application.mount("/apps/calendar", calendar_application, name="calendar")
     return application
