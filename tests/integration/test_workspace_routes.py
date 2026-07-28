@@ -18,8 +18,6 @@ def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) 
 
     with TestClient(create_app(database_path)) as client:
         portal = client.get("/")
-        portal_stylesheet = client.get("/static/styles.css")
-        portal_script = client.get("/static/app.js")
         shell_stylesheet = client.get("/static/shared/shell.css")
         shell_script = client.get("/static/shared/shell.js")
         hub_stylesheet = client.get("/static/hub.css")
@@ -42,8 +40,6 @@ def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) 
     assert 'class="workspace-header"' in portal.text
     assert portal.text.count('aria-current="page"') == 1
     assert ">Home</span>" in portal.text
-    assert portal_stylesheet.status_code == 200
-    assert portal_script.status_code == 200
     assert shell_stylesheet.status_code == 200
     assert shell_script.status_code == 200
     assert hub_stylesheet.status_code == 200
@@ -127,9 +123,6 @@ def test_calendar_frontend_uses_mount_relative_urls() -> None:
 
 def test_portal_runtime_assets_do_not_reference_external_hosts() -> None:
     paths = [
-        Path("portal/static/index.html"),
-        Path("portal/static/app.js"),
-        Path("portal/static/styles.css"),
         Path("portal/templates/home.html"),
         Path("portal/static/hub.js"),
         Path("portal/static/hub.css"),

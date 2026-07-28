@@ -13,6 +13,8 @@
   "url": "/apps/calendar/",
   "icon": "/static/icons/calendar.svg",
   "description": "월간 캘린더에서 일정과 주제를 관리합니다.",
+  "enabled": true,
+  "navigationVisible": true,
   "defaultPinned": true,
   "order": 10
 }
@@ -21,7 +23,10 @@
 - `id`: 소문자로 시작하는 영문 소문자·숫자·하이픈 조합, registry 내 고유값
 - `kind=internal`: URL은 `/apps/`로 시작
 - `icon`: `portal/static/icons/`에 실제로 존재하는 로컬 SVG
+- `enabled`: `false`이면 Hub, Sidebar, launcher와 기본 API 응답에서 제외
+- `navigationVisible`: `false`이면 Hub와 launcher에는 표시하지만 Sidebar에서는 제외
 - `defaultPinned`: 저장된 사용자 설정이 없을 때 기본 고정 여부
+- `order`: Sidebar, launcher와 Hub 목록에서 사용하는 공통 정렬 순서
 
 ## 외부 바로가기
 
@@ -43,3 +48,6 @@
 
 고정 앱 ID는 `my-workspace:pinned-apps:v1` localStorage key에 저장합니다. 손상되거나 삭제된 앱 ID는
 무시하고 registry 기본값으로 복구합니다.
+
+Sidebar와 launcher는 서버가 같은 registry snapshot으로 렌더링합니다. Home은 App Registry 항목이
+아닌 고정 Workspace navigation이며, 현재 앱에는 `aria-current="page"`가 적용됩니다.

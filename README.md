@@ -6,9 +6,9 @@
 ## 구조
 
 ```text
-apps/calendar/   Calendar FastAPI sub-application과 로컬 vendor 자산
-portal/          App Hub 서버와 정적 UI
-shared/          workspace 공용 경로
+apps/calendar/   Calendar FastAPI sub-application, template, 로컬 vendor 자산
+portal/          App Hub composition root, Home template와 전용 자산
+shared/          공통 App Shell template, design token, navigation과 registry
 instance/        Git에서 제외되는 실행 데이터
 tests/           Calendar 원본 회귀와 Portal 통합 테스트
 docs/            편입·DB·registry 운영 문서
@@ -22,7 +22,7 @@ source .venv/bin/activate
 python -m pip install -r requirements-dev.txt
 PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers \
   python -m playwright install chromium
-uvicorn portal.main:app --reload
+python -m uvicorn portal.main:app --reload
 ```
 
 - App Hub: <http://127.0.0.1:8000/>
@@ -33,7 +33,7 @@ uvicorn portal.main:app --reload
 Calendar DB 기본 경로는 workspace 기준 `instance/calendar/tasks.db`입니다.
 
 ```bash
-CALENDAR_DB_PATH=/absolute/path/tasks.db uvicorn portal.main:app
+CALENDAR_DB_PATH=/absolute/path/tasks.db python -m uvicorn portal.main:app
 ```
 
 호환을 위해 `TODO_DB_PATH`도 지원하지만 `CALENDAR_DB_PATH`가 우선합니다. 운영 환경에서는 상대경로보다
@@ -46,7 +46,7 @@ PYTHONDONTWRITEBYTECODE=1 \
 python -m pytest -q -p no:cacheprovider \
   tests/calendar tests/portal tests/integration
 
-node --test tests/calendar/test_calendar.mjs
+node --test tests/calendar/*.mjs tests/portal/*.mjs
 
 PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers \
   python -m pytest -q tests/e2e
@@ -61,6 +61,18 @@ Codex filesystem sandbox 안에서는 AnyIO cross-thread blocking portal 제한 
 Calendar의 FullCalendar 7.0.2와 Pretendard 1.3.9는 기존 vendor 파일을 그대로 사용합니다.
 Portal과 Calendar의 정상 로드/CRUD는 외부 host에 요청하지 않습니다. 외부 App Hub 항목은 로컬
 메타데이터와 아이콘만 렌더링하며 사용자가 링크를 클릭할 때만 새 탭으로 이동합니다.
+
+## App Shell
+
+`shared/templates/app_shell.html`이 Sidebar, Header, 앱 launcher, 모바일 drawer와 main content
+영역을 제공합니다. `portal/templates/home.html`과
+`apps/calendar/app/templates/calendar.html`은 같은 shell을 상속합니다. Calendar는 계속
+FastAPI sub-application으로 mount되므로 `/apps/calendar/api/*`와
+`/apps/calendar/static/*` 계약은 유지됩니다.
+
+공통 디자인 토큰과 shell 레이아웃은 `shared/static/shell.css`, 공통 navigation·focus·sidebar
+상태는 `shared/static/shell.js`에 있습니다. Calendar의 toolbar, grid, 일정 panel과 dialog
+스타일은 Calendar 전용 stylesheet에 남아 있습니다.
 
 ## 운영 문서
 

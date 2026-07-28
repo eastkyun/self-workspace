@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from shared.app_registry import HubApp, load_apps
+from shared.app_registry import PORTAL_STATIC_DIR, HubApp, load_apps
 from shared.templating import SHARED_STATIC_DIR, create_templates, shell_context
 
 APP_DIR = Path(__file__).resolve().parent
@@ -658,6 +658,11 @@ def create_app(
         lifespan=lifespan,
     )
     application.state.database_path = resolved_database_path
+    application.mount(
+        "/static/icons",
+        StaticFiles(directory=PORTAL_STATIC_DIR / "icons"),
+        name="workspace-icons",
+    )
     application.mount(
         "/static/shared",
         StaticFiles(directory=SHARED_STATIC_DIR),

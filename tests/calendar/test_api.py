@@ -454,6 +454,7 @@ def test_deleting_task_cascades_relations_but_keeps_topic(client: TestClient):
 
 def test_serves_page_and_static_assets(client: TestClient):
     page = client.get("/")
+    calendar_icon = client.get("/static/icons/calendar.svg")
     shell_stylesheet = client.get("/static/shared/shell.css")
     shell_script = client.get("/static/shared/shell.js")
     stylesheet = client.get("/static/styles.css")
@@ -484,6 +485,7 @@ def test_serves_page_and_static_assets(client: TestClient):
     )
 
     assert page.status_code == 200
+    assert calendar_icon.status_code == 200
     assert 'id="sidebar"' in page.text
     assert 'class="workspace-header"' in page.text
     assert page.text.count('aria-current="page"') == 1

@@ -5,6 +5,8 @@
 > UI/API/정적 자산은 각각 `/apps/calendar/`, `/apps/calendar/api/*`,
 > `/apps/calendar/static/*`에서 제공합니다. 아래 `/api/*`, `/static/*` 설명은
 > Calendar factory를 직접 실행할 때의 내부 route 계약입니다.
+> Calendar UI는 `shared/templates/app_shell.html`을 상속하므로 통합 실행 시
+> Portal Sidebar, Header와 앱 launcher 안에서 렌더링됩니다.
 
 FastAPI와 SQLite로 만든 단일 사용자용 월간 일정 관리 앱입니다. 로컬에 포함한
 FullCalendar로 여러 날짜에 걸친 일정을 표시하고, `할 일`, `진행 중`, `완료`
@@ -42,11 +44,11 @@ python3 -m pip install -r requirements.txt
 uvicorn apps.calendar.app.main:app --reload
 ```
 
-브라우저에서 <http://127.0.0.1:8000>을 엽니다. 기본 데이터베이스는
-`instance/tasks.db`입니다. 다른 경로를 사용하려면 다음과 같이 지정합니다.
+브라우저에서 <http://127.0.0.1:8000>을 엽니다. workspace 기준 기본 데이터베이스는
+`instance/calendar/tasks.db`입니다. 다른 경로를 사용하려면 다음과 같이 지정합니다.
 
 ```bash
-TODO_DB_PATH=/path/to/tasks.db uvicorn app.main:app
+CALENDAR_DB_PATH=/path/to/tasks.db uvicorn apps.calendar.app.main:app
 ```
 
 ## KST 일정 시각 계약
