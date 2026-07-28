@@ -1,27 +1,19 @@
-<!doctype html>
-<html lang="ko">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+{% extends "app_shell.html" %}
+
+{% block page_head %}
     <meta name="description" content="월간 캘린더로 일정을 기록하고 관리하는 다이어리">
-    <title>월간 일정 다이어리</title>
-    <link
-      rel="preload"
-      href="./static/vendor/pretendard/1.3.9/PretendardVariable.woff2"
-      as="font"
-      type="font/woff2"
-      crossorigin
-    >
     <link rel="stylesheet" href="./static/vendor/fullcalendar/7.0.2/skeleton.css">
     <link rel="stylesheet" href="./static/vendor/fullcalendar/7.0.2/themes/classic/theme.css">
     <link rel="stylesheet" href="./static/vendor/fullcalendar/7.0.2/themes/classic/palette.css">
     <link rel="stylesheet" href="./static/styles.css">
-  </head>
-  <body>
-    <header class="app-header">
-      <div class="brand">
+{% endblock %}
+
+{% block content %}
+  <div class="calendar-page">
+    <header class="calendar-toolbar">
+      <div class="calendar-identity">
         <p class="eyebrow">MONTHLY DIARY</p>
-        <h1>일정 다이어리</h1>
+        <h2>일정 다이어리</h2>
       </div>
       <div class="calendar-navigation" aria-label="달력 탐색">
         <button class="icon-button navigation-button" id="previous-month" type="button" aria-label="이전 달">‹</button>
@@ -51,7 +43,7 @@
 
     <div class="notification" id="notification" role="status" aria-live="polite" hidden></div>
 
-    <main class="app-content">
+    <main class="calendar-content">
       <section class="filter-bar" aria-label="일정 필터와 범례">
         <div class="filter-group" aria-label="상태 필터">
           <label class="filter-chip status-todo">
@@ -244,9 +236,12 @@
       </article>
     </template>
 
+  </div>
+{% endblock %}
+
+{% block page_scripts %}
     <script src="./static/vendor/fullcalendar/7.0.2/fullcalendar.global.js"></script>
     <script src="./static/vendor/fullcalendar/7.0.2/locales-all/global.js"></script>
     <script src="./static/vendor/fullcalendar/7.0.2/themes/classic/global.js"></script>
     <script type="module" src="./static/app.js"></script>
-  </body>
-</html>
+{% endblock %}

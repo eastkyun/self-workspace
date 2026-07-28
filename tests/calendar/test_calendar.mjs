@@ -17,7 +17,11 @@ const stylesSource = await readFile(
   "utf8",
 );
 const indexSource = await readFile(
-  new URL("../../apps/calendar/app/static/index.html", import.meta.url),
+  new URL("../../apps/calendar/app/templates/calendar.html", import.meta.url),
+  "utf8",
+);
+const shellStylesSource = await readFile(
+  new URL("../../shared/static/shell.css", import.meta.url),
   "utf8",
 );
 const adapterUrl = `data:text/javascript;base64,${Buffer.from(adapterSource).toString("base64")}`;
@@ -67,9 +71,10 @@ test("uses FullCalendar v7 render and singular class APIs", () => {
 
 test("keeps the calendar inside the viewport without page scrolling", () => {
   assert.match(appSource, /height:\s*"100%"/);
-  assert.match(stylesSource, /height:\s*100dvh/);
-  assert.match(stylesSource, /body\s*\{[^}]*overflow:\s*hidden/s);
-  assert.match(stylesSource, /\.app-content\s*\{[^}]*min-height:\s*0[^}]*overflow:\s*hidden/s);
+  assert.match(shellStylesSource, /height:\s*100dvh/);
+  assert.match(shellStylesSource, /body\s*\{[^}]*overflow:\s*hidden/s);
+  assert.match(stylesSource, /\.calendar-page\s*\{[^}]*height:\s*100%[^}]*min-height:\s*0[^}]*overflow:\s*hidden/s);
+  assert.match(stylesSource, /\.calendar-content\s*\{[^}]*min-height:\s*0[^}]*overflow:\s*hidden/s);
   assert.match(stylesSource, /\.fc-daygrid-day-frame\s*\{\s*min-height:\s*0;/);
 });
 
@@ -82,7 +87,7 @@ test("configures selected-date pagination in 5-item pages", () => {
 test("uses readable two-line cards and summarizes excess topic tags", () => {
   assert.match(appSource, /appendTopicTags\(container, taskTopics, limit = 2\)/);
   assert.match(appSource, /topic-hashtag-more/);
-  assert.match(stylesSource, /PretendardVariable\.woff2/);
+  assert.match(shellStylesSource, /PretendardVariable\.woff2/);
   assert.match(stylesSource, /-webkit-line-clamp:\s*2/);
 });
 

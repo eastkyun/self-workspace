@@ -29,6 +29,10 @@ def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) 
         registry = client.get("/api/hub/apps")
         calendar_redirect = client.get("/apps/calendar", follow_redirects=False)
         calendar = client.get("/apps/calendar/")
+        calendar_shell_stylesheet = client.get(
+            "/apps/calendar/static/shared/shell.css"
+        )
+        calendar_shell_script = client.get("/apps/calendar/static/shared/shell.js")
         stylesheet = client.get("/apps/calendar/static/styles.css")
         tasks = client.get("/apps/calendar/api/tasks")
 
@@ -51,7 +55,13 @@ def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) 
     assert calendar_redirect.status_code in {307, 308}
     assert calendar_redirect.headers["location"].endswith("/apps/calendar/")
     assert calendar.status_code == 200
+    assert 'id="sidebar"' in calendar.text
+    assert 'class="workspace-header"' in calendar.text
+    assert calendar.text.count('aria-current="page"') == 1
+    assert 'data-app-id="calendar"' in calendar.text
     assert 'id="calendar"' in calendar.text
+    assert calendar_shell_stylesheet.status_code == 200
+    assert calendar_shell_script.status_code == 200
     assert stylesheet.status_code == 200
     assert tasks.status_code == 200
     assert tasks.json() == []
@@ -87,12 +97,14 @@ def test_portal_rejects_legacy_database_without_mutation(tmp_path: Path) -> None
 
 def test_calendar_frontend_uses_mount_relative_urls() -> None:
     static_dir = Path("apps/calendar/app/static")
-    index = (static_dir / "index.html").read_text(encoding="utf-8")
+    template = Path("apps/calendar/app/templates/calendar.html").read_text(
+        encoding="utf-8"
+    )
     styles = (static_dir / "styles.css").read_text(encoding="utf-8")
     script = (static_dir / "app.js").read_text(encoding="utf-8")
 
-    assert 'href="/static/' not in index
-    assert 'src="/static/' not in index
+    assert 'href="/static/' not in template
+    assert 'src="/static/' not in template
     assert 'url("/static/' not in styles
     assert 'new URL("./", document.baseURI)' in script
     assert 'request("/api/' not in script

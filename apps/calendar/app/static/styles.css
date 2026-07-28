@@ -1,11 +1,3 @@
-@font-face {
-  font-family: "Pretendard";
-  src: url("vendor/pretendard/1.3.9/PretendardVariable.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 45 920;
-  font-display: swap;
-}
-
 :root {
   color-scheme: light;
   --paper: #fbfaf6;
@@ -25,23 +17,17 @@
 
 * { box-sizing: border-box; }
 
-html, body {
-  min-width: 320px;
+.calendar-page {
+  display: flex;
   width: 100%;
   height: 100%;
-}
-
-body {
-  display: flex;
+  min-height: 0;
   flex-direction: column;
-  height: 100dvh;
-  margin: 0;
   overflow: hidden;
   color: var(--ink);
   background:
     linear-gradient(rgb(255 255 255 / 42%) 1px, transparent 1px) 0 0 / 100% 30px,
     var(--paper);
-  font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   font-optical-sizing: auto;
   line-height: 1.45;
 }
@@ -49,7 +35,7 @@ body {
 button, input, textarea, select { font: inherit; }
 button { color: inherit; }
 
-.app-header {
+.calendar-toolbar {
   flex: none;
   display: grid;
   grid-template-columns: 1fr auto auto 1fr;
@@ -60,11 +46,11 @@ button { color: inherit; }
   background: rgb(251 250 246 / 92%);
 }
 
-.brand h1, .dialog-header h2, .date-panel h2 {
+.calendar-identity h2, .dialog-header h2, .date-panel h2 {
   margin: 2px 0 0;
   letter-spacing: -.04em;
 }
-.brand h1 { font-size: clamp(25px, 3vw, 34px); font-weight: 820; }
+.calendar-identity h2 { font-size: clamp(23px, 3vw, 30px); font-weight: 820; }
 .eyebrow { margin: 0; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .16em; }
 
 .month-title {
@@ -165,7 +151,7 @@ button { color: inherit; }
   background: #fff1ef;
 }
 
-.app-content {
+.calendar-content {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -539,8 +525,8 @@ button { color: inherit; }
 .delete-dialog-button { color: var(--danger); border-color: #e7b7b3; background: #fff4f3; }
 
 @media (max-width: 860px) {
-  .app-header { grid-template-columns: 1fr auto; gap: 8px 13px; padding-block: 10px; }
-  .brand { grid-column: 1; }
+  .calendar-toolbar { grid-template-columns: 1fr auto; gap: 8px 13px; padding-block: 10px; }
+  .calendar-identity { grid-column: 1; }
   .new-task-button { grid-column: 2; grid-row: 1; }
   .calendar-navigation { grid-column: 1; grid-row: 2; }
   .month-title { grid-column: 2; grid-row: 2; font-size: 20px; text-align: right; }
@@ -554,11 +540,11 @@ button { color: inherit; }
 }
 
 @media (max-width: 520px) {
-  .app-header { padding: 8px 10px; }
-  .brand h1 { font-size: 23px; }
+  .calendar-toolbar { padding: 8px 10px; }
+  .calendar-identity h2 { font-size: 21px; }
   .eyebrow { display: none; }
-  .create-menu { position: fixed; top: 58px; right: 10px; }
-  .app-content { padding: 7px 8px 8px; }
+  .create-menu { top: calc(100% + 7px); right: 0; }
+  .calendar-content { padding: 7px 8px 8px; }
   .filter-bar { min-height: 40px; margin-bottom: 7px; }
   .filter-bar { overflow-x: auto; }
   .filter-group { flex-wrap: nowrap; }

@@ -2,26 +2,30 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import asynccontextmanager, contextmanager
 from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, HTTPException, Response, status
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from shared.app_registry import HubApp, load_apps
+from shared.templating import SHARED_STATIC_DIR, create_templates, shell_context
+
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
+TEMPLATES_DIR = APP_DIR / "templates"
 WORKSPACE_ROOT = APP_DIR.parents[2]
 DEFAULT_DB_PATH = WORKSPACE_ROOT / "instance" / "calendar" / "tasks.db"
 TaskStatus = Literal["todo", "doing", "done"]
 KST = ZoneInfo("Asia/Seoul")
 SCHEMA_VERSION = 2
 CALENDAR_SCHEMA_VERSION = 1
+templates = create_templates(TEMPLATES_DIR)
 
 
 def utc_now() -> str:
@@ -637,8 +641,10 @@ def create_app(
     database_path: str | Path | None = None,
     *,
     initialize_on_startup: bool = True,
+    registered_apps: Sequence[HubApp] | None = None,
 ) -> FastAPI:
     resolved_database_path = resolve_database_path(database_path)
+    shell_apps = list(registered_apps) if registered_apps is not None else load_apps()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -652,11 +658,25 @@ def create_app(
         lifespan=lifespan,
     )
     application.state.database_path = resolved_database_path
+    application.mount(
+        "/static/shared",
+        StaticFiles(directory=SHARED_STATIC_DIR),
+        name="shared-static",
+    )
     application.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     @application.get("/", include_in_schema=False)
-    def index() -> FileResponse:
-        return FileResponse(STATIC_DIR / "index.html")
+    def index(request: Request):
+        return templates.TemplateResponse(
+            request,
+            "calendar.html",
+            shell_context(
+                request,
+                shell_apps,
+                current_app_id="calendar",
+                page_title="Calendar",
+            ),
+        )
 
     @application.get("/api/topics", response_model=list[Topic])
     def list_topics() -> list[Topic]:

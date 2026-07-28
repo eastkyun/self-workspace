@@ -71,6 +71,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
     calendar_application = create_calendar_app(
         resolved_database_path,
         initialize_on_startup=False,
+        registered_apps=registered_apps,
     )
     application.mount("/apps/calendar", calendar_application, name="calendar")
     return application

@@ -454,6 +454,8 @@ def test_deleting_task_cascades_relations_but_keeps_topic(client: TestClient):
 
 def test_serves_page_and_static_assets(client: TestClient):
     page = client.get("/")
+    shell_stylesheet = client.get("/static/shared/shell.css")
+    shell_script = client.get("/static/shared/shell.js")
     stylesheet = client.get("/static/styles.css")
     script = client.get("/static/app.js")
     adapter = client.get("/static/calendar-adapter.js")
@@ -482,6 +484,9 @@ def test_serves_page_and_static_assets(client: TestClient):
     )
 
     assert page.status_code == 200
+    assert 'id="sidebar"' in page.text
+    assert 'class="workspace-header"' in page.text
+    assert page.text.count('aria-current="page"') == 1
     assert 'id="calendar"' in page.text
     assert 'id="create-menu-button"' in page.text
     assert 'id="topic-filter-list"' in page.text
@@ -492,6 +497,8 @@ def test_serves_page_and_static_assets(client: TestClient):
     assert 'id="task-topic-options"' in page.text
     assert "cdn.jsdelivr" not in page.text
     assert "unpkg" not in page.text
+    assert shell_stylesheet.status_code == 200
+    assert shell_script.status_code == 200
     assert stylesheet.status_code == 200
     assert ".calendar-shell" in stylesheet.text
     assert script.status_code == 200
