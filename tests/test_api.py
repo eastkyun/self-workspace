@@ -485,6 +485,8 @@ def test_serves_page_and_static_assets(client: TestClient):
     assert 'id="calendar"' in page.text
     assert 'id="create-menu-button"' in page.text
     assert 'id="topic-filter-list"' in page.text
+    assert 'id="topic-overflow-button"' in page.text
+    assert 'id="topic-overflow-popover"' in page.text
     assert 'id="selected-pagination"' in page.text
     assert 'id="topic-dialog"' in page.text
     assert 'id="task-topic-options"' in page.text

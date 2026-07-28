@@ -83,8 +83,26 @@
             </div>
             <span class="selected-count" id="selected-count">0</span>
           </header>
-          <nav class="topic-filter-nav" aria-label="선택한 날짜 주제">
-            <div class="topic-filter-list" id="topic-filter-list"></div>
+          <nav class="topic-filter-shell" id="topic-filter-shell" aria-label="선택한 날짜 주제">
+            <div class="topic-filter-nav" id="topic-filter-viewport">
+              <div class="topic-filter-list" id="topic-filter-list"></div>
+            </div>
+            <button
+              class="topic-overflow-button"
+              id="topic-overflow-button"
+              type="button"
+              aria-label="활성 주제 전체 보기"
+              aria-expanded="false"
+              aria-controls="topic-overflow-popover"
+              hidden
+            >⌄</button>
+            <div class="topic-overflow-popover" id="topic-overflow-popover" hidden>
+              <div class="topic-overflow-header">
+                <strong>활성 주제</strong>
+                <span id="active-topic-count">0</span>
+              </div>
+              <div class="topic-overflow-list" id="topic-overflow-list"></div>
+            </div>
           </nav>
           <div class="selected-task-list" id="selected-task-list"></div>
           <nav class="selected-pagination" id="selected-pagination" aria-label="선택한 날짜 일정 페이지" hidden>

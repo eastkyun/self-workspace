@@ -124,6 +124,47 @@ export function topicCountsForTasks(tasks, topics) {
   return { all: tasks.length, unclassified, byTopic };
 }
 
+export function activeTopicOptions(topics, counts) {
+  const options = [
+    {
+      id: "all",
+      name: "전체",
+      color: null,
+      count: counts.all,
+      topic: null,
+    },
+  ];
+  if (counts.unclassified > 0) {
+    options.push({
+      id: "unclassified",
+      name: "미분류",
+      color: null,
+      count: counts.unclassified,
+      topic: null,
+    });
+  }
+  sortTopics(topics).forEach((topic) => {
+    const count = counts.byTopic[String(topic.id)] ?? 0;
+    if (count > 0) {
+      options.push({
+        id: String(topic.id),
+        name: topic.name,
+        color: topic.color,
+        count,
+        topic,
+      });
+    }
+  });
+  return options;
+}
+
+export function normalizeSelectedTopicId(selectedTopicId, options) {
+  const normalized = String(selectedTopicId);
+  return options.some((option) => String(option.id) === normalized)
+    ? normalized
+    : "all";
+}
+
 export function paginateItems(items, requestedPage, pageSize = 5) {
   if (!Number.isInteger(pageSize) || pageSize <= 0) {
     throw new RangeError("pageSize must be a positive integer");

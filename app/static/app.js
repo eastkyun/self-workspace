@@ -1,4 +1,5 @@
 import {
+  activeTopicOptions,
   allDayInputToRange,
   apiTimestampToLocalInput,
   filterTasks,
@@ -6,6 +7,7 @@ import {
   formatTaskTime,
   isTaskOverdue,
   localDateTimeToKst,
+  normalizeSelectedTopicId,
   paginateItems,
   sortTopics,
   taskToCalendarEvent,
@@ -49,6 +51,12 @@ const selectedPagination = document.querySelector("#selected-pagination");
 const previousSelectedPage = document.querySelector("#previous-selected-page");
 const nextSelectedPage = document.querySelector("#next-selected-page");
 const selectedPageStatus = document.querySelector("#selected-page-status");
+const topicFilterShell = document.querySelector("#topic-filter-shell");
+const topicFilterViewport = document.querySelector("#topic-filter-viewport");
+const topicOverflowButton = document.querySelector("#topic-overflow-button");
+const topicOverflowPopover = document.querySelector("#topic-overflow-popover");
+const topicOverflowList = document.querySelector("#topic-overflow-list");
+const activeTopicCount = document.querySelector("#active-topic-count");
 
 const SELECTED_PAGE_SIZE = 5;
 let tasks = [];
@@ -225,6 +233,44 @@ function formatSelectedDate(date) {
   return `${year}년 ${month}월 ${day}일 ${weekday}`;
 }
 
+function closeTopicOverflow({ returnFocus = false } = {}) {
+  topicOverflowPopover.hidden = true;
+  topicOverflowButton.setAttribute("aria-expanded", "false");
+  topicOverflowButton.textContent = "⌄";
+  if (
+    returnFocus
+    && !topicOverflowButton.classList.contains("is-concealed")
+  ) {
+    topicOverflowButton.focus();
+  }
+}
+
+function toggleTopicOverflow() {
+  const opening = topicOverflowPopover.hidden;
+  topicOverflowPopover.hidden = !opening;
+  topicOverflowButton.setAttribute("aria-expanded", String(opening));
+  topicOverflowButton.textContent = opening ? "⌃" : "⌄";
+  if (opening) topicOverflowPopover.querySelector("[data-topic-filter]")?.focus();
+}
+
+function selectTopicFilter(id) {
+  selectedTopicId = String(id);
+  selectedPage = 1;
+  closeTopicOverflow();
+  renderSelectedDate();
+}
+
+function updateTopicOverflowButton() {
+  topicOverflowButton.hidden = false;
+  const overflowing = (
+    topicFilterViewport.scrollWidth > topicFilterViewport.clientWidth + 1
+  );
+  topicOverflowButton.classList.toggle("is-concealed", !overflowing);
+  topicOverflowButton.disabled = !overflowing;
+  topicOverflowButton.setAttribute("aria-hidden", String(!overflowing));
+  if (!overflowing) closeTopicOverflow();
+}
+
 function topicFilterItem({ id, name, color, count, topic = null }) {
   const wrapper = document.createElement("span");
   wrapper.className = "topic-filter-item";
@@ -233,7 +279,10 @@ function topicFilterItem({ id, name, color, count, topic = null }) {
   button.className = "topic-filter-button";
   button.dataset.topicFilter = String(id);
   button.setAttribute("aria-pressed", String(String(selectedTopicId) === String(id)));
-  topicStyle(button, color);
+  const displayColor = color ?? (
+    String(id) === "all" ? "var(--primary)" : "var(--muted)"
+  );
+  topicStyle(button, displayColor);
 
   const dot = document.createElement("span");
   dot.className = "topic-dot";
@@ -244,11 +293,7 @@ function topicFilterItem({ id, name, color, count, topic = null }) {
   countElement.className = "topic-filter-count";
   countElement.textContent = count;
   button.append(dot, label, countElement);
-  button.addEventListener("click", () => {
-    selectedTopicId = String(id);
-    selectedPage = 1;
-    renderSelectedDate();
-  });
+  button.addEventListener("click", () => selectTopicFilter(id));
   wrapper.append(button);
 
   if (topic) {
@@ -257,7 +302,10 @@ function topicFilterItem({ id, name, color, count, topic = null }) {
     manage.className = "topic-manage-button";
     manage.textContent = "⋯";
     manage.setAttribute("aria-label", `${topic.name} 주제 관리`);
-    manage.addEventListener("click", () => openTopicDialog(topic));
+    manage.addEventListener("click", () => {
+      closeTopicOverflow();
+      openTopicDialog(topic);
+    });
     wrapper.append(manage);
   }
   return wrapper;
@@ -266,29 +314,16 @@ function topicFilterItem({ id, name, color, count, topic = null }) {
 function renderTopicFilters(selectedDateTasks) {
   const orderedTopics = sortTopics(topics);
   const counts = topicCountsForTasks(selectedDateTasks, orderedTopics);
-  topicFilterList.replaceChildren(
-    topicFilterItem({
-      id: "all",
-      name: "전체",
-      color: "var(--primary)",
-      count: counts.all,
-    }),
-    topicFilterItem({
-      id: "unclassified",
-      name: "미분류",
-      color: "var(--muted)",
-      count: counts.unclassified,
-    }),
-    ...orderedTopics.map((topic) =>
-      topicFilterItem({
-        id: topic.id,
-        name: topic.name,
-        color: topic.color,
-        count: counts.byTopic[String(topic.id)] ?? 0,
-        topic,
-      })
-    ),
-  );
+  const options = activeTopicOptions(orderedTopics, counts);
+  const normalizedTopicId = normalizeSelectedTopicId(selectedTopicId, options);
+  if (normalizedTopicId !== String(selectedTopicId)) {
+    selectedTopicId = normalizedTopicId;
+    selectedPage = 1;
+  }
+  topicFilterList.replaceChildren(...options.map(topicFilterItem));
+  topicOverflowList.replaceChildren(...options.map(topicFilterItem));
+  activeTopicCount.textContent = Math.max(options.length - 1, 0);
+  window.requestAnimationFrame(updateTopicOverflowButton);
 }
 
 function renderSelectedDate() {
@@ -553,6 +588,8 @@ createMenuButton.addEventListener("click", (event) => {
   setCreateMenu(createMenu.hidden);
 });
 createMenu.addEventListener("click", (event) => event.stopPropagation());
+topicFilterShell.addEventListener("click", (event) => event.stopPropagation());
+topicOverflowButton.addEventListener("click", toggleTopicOverflow);
 document.querySelector("#new-task-button").addEventListener("click", () => {
   setCreateMenu(false);
   openTaskDialog();
@@ -561,11 +598,17 @@ document.querySelector("#new-topic-button").addEventListener("click", () => {
   setCreateMenu(false);
   openTopicDialog();
 });
-document.addEventListener("click", () => setCreateMenu(false));
+document.addEventListener("click", () => {
+  setCreateMenu(false);
+  closeTopicOverflow();
+});
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !createMenu.hidden) {
     setCreateMenu(false);
     createMenuButton.focus();
+  }
+  if (event.key === "Escape" && !topicOverflowPopover.hidden) {
+    closeTopicOverflow({ returnFocus: true });
   }
 });
 document.querySelector("#add-date-task").addEventListener("click", () => openTaskDialog(null, selectedKstDate));
@@ -609,4 +652,5 @@ topicDialog.addEventListener("click", (event) => {
   refreshViews();
 }));
 
+new ResizeObserver(updateTopicOverflowButton).observe(topicFilterViewport);
 loadData().catch((error) => showError(error.message));

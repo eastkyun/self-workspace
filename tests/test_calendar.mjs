@@ -13,9 +13,14 @@ const stylesSource = await readFile(
   new URL("../app/static/styles.css", import.meta.url),
   "utf8",
 );
+const indexSource = await readFile(
+  new URL("../app/static/index.html", import.meta.url),
+  "utf8",
+);
 const adapterUrl = `data:text/javascript;base64,${Buffer.from(adapterSource).toString("base64")}`;
 const {
   KST_OFFSET,
+  activeTopicOptions,
   addCalendarDays,
   allDayInputToRange,
   apiTimestampToLocalInput,
@@ -24,6 +29,7 @@ const {
   filterTasksByTopic,
   isTaskOverdue,
   localDateTimeToKst,
+  normalizeSelectedTopicId,
   paginateItems,
   sortTopics,
   taskOccursOnDate,
@@ -75,6 +81,15 @@ test("uses readable two-line cards and summarizes excess topic tags", () => {
   assert.match(appSource, /topic-hashtag-more/);
   assert.match(stylesSource, /PretendardVariable\.woff2/);
   assert.match(stylesSource, /-webkit-line-clamp:\s*2/);
+});
+
+test("configures an accessible active-topic overflow popover", () => {
+  assert.match(indexSource, /id="topic-overflow-button"/);
+  assert.match(indexSource, /aria-expanded="false"/);
+  assert.match(indexSource, /id="topic-overflow-popover"/);
+  assert.match(appSource, /new ResizeObserver\(updateTopicOverflowButton\)/);
+  assert.match(appSource, /scrollWidth\s*>\s*topicFilterViewport\.clientWidth/);
+  assert.match(appSource, /event\.key === "Escape"/);
 });
 
 test("adds the KST offset and seconds to a datetime-local value", () => {
@@ -331,6 +346,46 @@ test("counts a multi-topic task once in all and once in each related topic", () 
     unclassified: 1,
     byTopic: { 1: 2, 2: 1 },
   });
+});
+
+test("shows only active topics after all and conditional unclassified", () => {
+  const topics = [
+    { id: 3, name: "beta", color: "#333333" },
+    { id: 2, name: "Alpha", color: "#222222" },
+    { id: 1, name: "alpha", color: "#111111" },
+  ];
+  const counts = {
+    all: 4,
+    unclassified: 1,
+    byTopic: { 1: 2, 2: 0, 3: 1 },
+  };
+
+  assert.deepEqual(
+    activeTopicOptions(topics, counts).map(({ id, count }) => [id, count]),
+    [["all", 4], ["unclassified", 1], ["1", 2], ["3", 1]],
+  );
+  assert.deepEqual(topics.map(({ id }) => id), [3, 2, 1]);
+});
+
+test("hides zero-count unclassified and falls back from inactive topics", () => {
+  const options = activeTopicOptions(
+    [{ id: 1, name: "업무", color: "#3366CC" }],
+    { all: 0, unclassified: 0, byTopic: { 1: 0 } },
+  );
+
+  assert.deepEqual(options.map(({ id }) => id), ["all"]);
+  assert.equal(normalizeSelectedTopicId("unclassified", options), "all");
+  assert.equal(normalizeSelectedTopicId(1, options), "all");
+  assert.equal(normalizeSelectedTopicId("all", options), "all");
+});
+
+test("keeps an active selected topic normalized as a string", () => {
+  const options = activeTopicOptions(
+    [{ id: 7, name: "업무", color: "#3366CC" }],
+    { all: 2, unclassified: 0, byTopic: { 7: 2 } },
+  );
+
+  assert.equal(normalizeSelectedTopicId(7, options), "7");
 });
 
 test("paginates selected-date items at 5-item boundaries", () => {
