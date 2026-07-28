@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -108,10 +109,10 @@ def test_mobile_sidebar_collapses_and_opens(page: Page, live_server: str) -> Non
     open_button = page.get_by_role("button", name="사이드바 열기")
     expect(open_button).to_be_visible()
     open_button.click()
-    expect(page.locator("body")).to_have_class("sidebar-open")
+    expect(page.locator("body")).to_have_class(re.compile(r"\bsidebar-open\b"))
     expect(page.locator("#sidebar-close")).to_be_focused()
     page.keyboard.press("Escape")
-    expect(page.locator("body")).not_to_have_class("sidebar-open")
+    expect(page.locator("body")).not_to_have_class(re.compile(r"\bsidebar-open\b"))
     expect(open_button).to_be_focused()
     assert external_requests == []
 

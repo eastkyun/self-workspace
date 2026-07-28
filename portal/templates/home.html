@@ -1,0 +1,53 @@
+{% extends "app_shell.html" %}
+
+{% block page_head %}
+    <link rel="stylesheet" href="./static/hub.css">
+{% endblock %}
+
+{% block content %}
+<div class="hub-page">
+  <section class="hub-welcome" aria-labelledby="hub-welcome-title">
+    <p class="workspace-eyebrow">APP HUB</p>
+    <h2 id="hub-welcome-title">좋은 오후예요</h2>
+  </section>
+
+  <section aria-labelledby="pinned-title">
+    <div class="hub-section-heading">
+      <div>
+        <p class="workspace-eyebrow">PINNED</p>
+        <h2 id="pinned-title">고정한 앱</h2>
+      </div>
+      <p>자주 쓰는 앱을 빠르게 여세요.</p>
+    </div>
+    <div id="pinned-apps" class="hub-card-grid" aria-live="polite"></div>
+    <p id="pinned-empty" class="hub-empty-state" hidden>런처에서 앱을 고정하면 여기에 표시됩니다.</p>
+  </section>
+
+  <section aria-labelledby="all-apps-title">
+    <div class="hub-section-heading">
+      <div>
+        <p class="workspace-eyebrow">DISCOVER</p>
+        <h2 id="all-apps-title">모든 앱</h2>
+      </div>
+    </div>
+    <div id="all-apps" class="hub-card-grid"></div>
+  </section>
+</div>
+
+<template id="app-card-template">
+  <article class="hub-app-card">
+    <a class="hub-app-card-link">
+      <img class="hub-app-icon" alt="">
+      <span class="hub-app-copy">
+        <strong class="hub-app-name"></strong>
+        <span class="hub-app-description"></span>
+      </span>
+    </a>
+    <button class="hub-pin-button" type="button"></button>
+  </article>
+</template>
+{% endblock %}
+
+{% block page_scripts %}
+    <script type="module" src="./static/hub.js"></script>
+{% endblock %}

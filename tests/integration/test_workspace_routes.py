@@ -20,6 +20,10 @@ def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) 
         portal = client.get("/")
         portal_stylesheet = client.get("/static/styles.css")
         portal_script = client.get("/static/app.js")
+        shell_stylesheet = client.get("/static/shared/shell.css")
+        shell_script = client.get("/static/shared/shell.js")
+        hub_stylesheet = client.get("/static/hub.css")
+        hub_script = client.get("/static/hub.js")
         portal_state = client.get("/static/hub-state.js")
         portal_icon = client.get("/static/icons/calendar.svg")
         registry = client.get("/api/hub/apps")
@@ -31,8 +35,15 @@ def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) 
     assert portal.status_code == 200
     assert 'id="sidebar"' in portal.text
     assert 'id="launcher"' in portal.text
+    assert 'class="workspace-header"' in portal.text
+    assert portal.text.count('aria-current="page"') == 1
+    assert ">Home</span>" in portal.text
     assert portal_stylesheet.status_code == 200
     assert portal_script.status_code == 200
+    assert shell_stylesheet.status_code == 200
+    assert shell_script.status_code == 200
+    assert hub_stylesheet.status_code == 200
+    assert hub_script.status_code == 200
     assert portal_state.status_code == 200
     assert portal_icon.status_code == 200
     assert registry.status_code == 200
@@ -92,6 +103,12 @@ def test_portal_runtime_assets_do_not_reference_external_hosts() -> None:
         Path("portal/static/index.html"),
         Path("portal/static/app.js"),
         Path("portal/static/styles.css"),
+        Path("portal/templates/home.html"),
+        Path("portal/static/hub.js"),
+        Path("portal/static/hub.css"),
+        Path("shared/templates/app_shell.html"),
+        Path("shared/static/shell.js"),
+        Path("shared/static/shell.css"),
     ]
 
     for path in paths:

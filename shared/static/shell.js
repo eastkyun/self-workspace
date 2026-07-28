@@ -64,7 +64,7 @@ function notifyLayoutChange() {
 }
 
 function setMobileSidebar(open, { restoreFocus = true } = {}) {
-  body.classList.toggle("mobile-sidebar-open", open);
+  body.classList.toggle("sidebar-open", open);
   sidebarOpen?.setAttribute("aria-expanded", String(open));
   sidebar?.setAttribute("aria-hidden", String(!open));
   if (workspaceFrame) workspaceFrame.inert = open;
@@ -125,14 +125,21 @@ for (const button of pinButtons) {
   });
 }
 
+window.addEventListener("workspace:pins-sync", (event) => {
+  const ids = Array.isArray(event.detail?.pinnedIds) ? event.detail.pinnedIds : [];
+  pinnedIds = new Set(ids.filter((id) => registeredIds.has(id)));
+  savePinnedIds();
+  renderPins();
+});
+
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && body.classList.contains("mobile-sidebar-open")) {
+  if (event.key === "Escape" && body.classList.contains("sidebar-open")) {
     setMobileSidebar(false);
     return;
   }
   if (
     event.key === "Tab"
-    && body.classList.contains("mobile-sidebar-open")
+    && body.classList.contains("sidebar-open")
     && !desktopQuery.matches
   ) {
     const focusable = focusableSidebarElements();

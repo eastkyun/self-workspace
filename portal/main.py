@@ -3,8 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
 from apps.calendar.app.main import (
@@ -15,6 +14,15 @@ from apps.calendar.app.main import (
 )
 from portal.registry import STATIC_DIR, HubApp, load_apps
 from shared.paths import CALENDAR_DB_PATH
+from shared.templating import (
+    SHARED_STATIC_DIR,
+    create_templates,
+    shell_context,
+)
+
+PORTAL_DIR = Path(__file__).resolve().parent
+PORTAL_TEMPLATES_DIR = PORTAL_DIR / "templates"
+templates = create_templates(PORTAL_TEMPLATES_DIR)
 
 
 def create_app(database_path: str | Path | None = None) -> FastAPI:
@@ -36,11 +44,25 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     application.state.calendar_database_path = resolved_database_path
+    application.mount(
+        "/static/shared",
+        StaticFiles(directory=SHARED_STATIC_DIR),
+        name="shared-static",
+    )
     application.mount("/static", StaticFiles(directory=STATIC_DIR), name="portal-static")
 
     @application.get("/", include_in_schema=False)
-    def index() -> FileResponse:
-        return FileResponse(STATIC_DIR / "index.html")
+    def index(request: Request):
+        return templates.TemplateResponse(
+            request,
+            "home.html",
+            shell_context(
+                request,
+                registered_apps,
+                current_app_id="home",
+                page_title="Home",
+            ),
+        )
 
     @application.get("/api/hub/apps", response_model=list[HubApp])
     def list_apps() -> list[HubApp]:

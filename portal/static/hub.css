@@ -1,0 +1,74 @@
+.hub-page {
+  height: 100%;
+  padding: 28px clamp(20px, 4vw, 48px) 56px;
+  overflow-y: auto;
+}
+
+.hub-welcome { margin-bottom: 46px; }
+.hub-welcome h2 { margin: 0; font-size: clamp(30px, 4vw, 44px); letter-spacing: -.04em; }
+.hub-section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin: 34px 0 18px; }
+.hub-section-heading h2 { margin: 0; font-size: 24px; }
+.hub-section-heading > p { margin: 0; color: var(--workspace-muted); font-size: 14px; }
+
+.hub-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 16px;
+}
+
+.hub-app-card {
+  position: relative;
+  min-height: 150px;
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--workspace-radius-lg);
+  background: var(--workspace-surface);
+  box-shadow: var(--workspace-shadow-sm);
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+
+.hub-app-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 8%);
+}
+
+.hub-app-card-link {
+  display: flex;
+  height: 100%;
+  gap: 16px;
+  padding: 24px;
+}
+
+.hub-app-icon { width: 48px; height: 48px; flex: none; }
+.hub-app-copy { display: grid; align-content: start; gap: 8px; }
+.hub-app-name { font-size: 17px; }
+.hub-app-description { color: var(--workspace-muted); font-size: 14px; line-height: 1.55; }
+
+.hub-pin-button {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  border: 0;
+  color: var(--workspace-muted);
+  background: transparent;
+  font-size: 12px;
+}
+
+.hub-empty-state {
+  padding: 28px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 16px;
+  color: var(--workspace-muted);
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .hub-page { padding: 22px 18px 48px; }
+  .hub-welcome { margin-bottom: 32px; }
+  .hub-section-heading { align-items: flex-end; }
+  .hub-section-heading > p { display: none; }
+  .hub-card-grid { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hub-app-card { transition: none; }
+}
