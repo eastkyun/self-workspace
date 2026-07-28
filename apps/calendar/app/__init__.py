@@ -1,0 +1,2 @@
+"""Todo board application package."""
+
