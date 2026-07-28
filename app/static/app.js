@@ -2,11 +2,14 @@ import {
   allDayInputToRange,
   apiTimestampToLocalInput,
   filterTasks,
+  filterTasksByTopic,
   formatTaskTime,
   isTaskOverdue,
   localDateTimeToKst,
+  sortTopics,
   taskToCalendarEvent,
   tasksForDate,
+  topicCountsForTasks,
 } from "./calendar-adapter.js";
 
 const STATUS_LABELS = { todo: "할 일", doing: "진행 중", done: "완료" };
@@ -29,10 +32,24 @@ const selectedTemplate = document.querySelector("#selected-task-template");
 const deleteDialogButton = document.querySelector("#delete-task-button");
 const statusFilters = [...document.querySelectorAll("[data-status-filter]")];
 const overdueFilter = document.querySelector("#overdue-filter");
+const createMenuButton = document.querySelector("#create-menu-button");
+const createMenu = document.querySelector("#create-menu");
+const topicFilterList = document.querySelector("#topic-filter-list");
+const taskTopicOptions = document.querySelector("#task-topic-options");
+const taskTopicEmpty = document.querySelector("#task-topic-empty");
+const topicDialog = document.querySelector("#topic-dialog");
+const topicForm = document.querySelector("#topic-form");
+const topicIdInput = document.querySelector("#topic-id");
+const topicNameInput = document.querySelector("#topic-name");
+const topicColorInput = document.querySelector("#topic-color");
+const topicColorValue = document.querySelector("#topic-color-value");
+const deleteTopicButton = document.querySelector("#delete-topic-button");
 
 let tasks = [];
+let topics = [];
 let calendar;
 let selectedKstDate = currentKstDate();
+let selectedTopicId = "all";
 let notificationTimer;
 let overdueRefreshTimer;
 
@@ -97,6 +114,62 @@ function showError(message) {
   }, 5000);
 }
 
+function setCreateMenu(open) {
+  createMenu.hidden = !open;
+  createMenuButton.setAttribute("aria-expanded", String(open));
+  if (open) createMenu.querySelector("[role='menuitem']")?.focus();
+}
+
+function topicStyle(element, color) {
+  element.style.setProperty("--topic-color", color);
+}
+
+function appendTopicTags(container, taskTopics) {
+  taskTopics.forEach((topic) => {
+    const tag = document.createElement("span");
+    tag.className = "topic-hashtag";
+    tag.textContent = `#${topic.name}`;
+    topicStyle(tag, topic.color);
+    container.append(tag);
+  });
+}
+
+function renderTaskTopicOptions(selectedIds = new Set()) {
+  taskTopicOptions.replaceChildren();
+  const orderedTopics = sortTopics(topics);
+  taskTopicEmpty.hidden = orderedTopics.length > 0;
+  orderedTopics.forEach((topic) => {
+    const label = document.createElement("label");
+    label.className = "task-topic-choice";
+    topicStyle(label, topic.color);
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = topic.id;
+    input.checked = selectedIds.has(topic.id);
+    input.dataset.taskTopic = "";
+    const text = document.createElement("span");
+    text.textContent = `#${topic.name}`;
+    label.append(input, text);
+    taskTopicOptions.append(label);
+  });
+}
+
+function openTopicDialog(topic = null) {
+  topicForm.reset();
+  topicIdInput.value = topic?.id ?? "";
+  topicNameInput.value = topic?.name ?? "";
+  topicColorInput.value = (topic?.color ?? "#375F55").toLowerCase();
+  topicColorValue.value = topicColorInput.value.toUpperCase();
+  document.querySelector("#topic-dialog-title").textContent = topic ? "주제 수정" : "새 주제";
+  deleteTopicButton.hidden = !topic;
+  topicDialog.showModal();
+  topicNameInput.focus();
+}
+
+function closeTopicDialog() {
+  topicDialog.close();
+}
+
 function activeFilters() {
   return {
     statuses: new Set(statusFilters.filter((input) => input.checked).map((input) => input.value)),
@@ -130,8 +203,75 @@ function formatSelectedDate(date) {
   return `${year}년 ${month}월 ${day}일 ${weekday}`;
 }
 
+function topicFilterItem({ id, name, color, count, topic = null }) {
+  const wrapper = document.createElement("span");
+  wrapper.className = "topic-filter-item";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "topic-filter-button";
+  button.dataset.topicFilter = String(id);
+  button.setAttribute("aria-pressed", String(String(selectedTopicId) === String(id)));
+  topicStyle(button, color);
+
+  const dot = document.createElement("span");
+  dot.className = "topic-dot";
+  dot.setAttribute("aria-hidden", "true");
+  const label = document.createElement("span");
+  label.textContent = name;
+  const countElement = document.createElement("span");
+  countElement.className = "topic-filter-count";
+  countElement.textContent = count;
+  button.append(dot, label, countElement);
+  button.addEventListener("click", () => {
+    selectedTopicId = String(id);
+    renderSelectedDate();
+  });
+  wrapper.append(button);
+
+  if (topic) {
+    const manage = document.createElement("button");
+    manage.type = "button";
+    manage.className = "topic-manage-button";
+    manage.textContent = "⋯";
+    manage.setAttribute("aria-label", `${topic.name} 주제 관리`);
+    manage.addEventListener("click", () => openTopicDialog(topic));
+    wrapper.append(manage);
+  }
+  return wrapper;
+}
+
+function renderTopicFilters(selectedDateTasks) {
+  const orderedTopics = sortTopics(topics);
+  const counts = topicCountsForTasks(selectedDateTasks, orderedTopics);
+  topicFilterList.replaceChildren(
+    topicFilterItem({
+      id: "all",
+      name: "전체",
+      color: "var(--primary)",
+      count: counts.all,
+    }),
+    topicFilterItem({
+      id: "unclassified",
+      name: "미분류",
+      color: "var(--muted)",
+      count: counts.unclassified,
+    }),
+    ...orderedTopics.map((topic) =>
+      topicFilterItem({
+        id: topic.id,
+        name: topic.name,
+        color: topic.color,
+        count: counts.byTopic[String(topic.id)] ?? 0,
+        topic,
+      })
+    ),
+  );
+}
+
 function renderSelectedDate() {
-  const selectedTasks = tasksForDate(visibleTasks(), selectedKstDate);
+  const selectedDateTasks = tasksForDate(visibleTasks(), selectedKstDate);
+  renderTopicFilters(selectedDateTasks);
+  const selectedTasks = filterTasksByTopic(selectedDateTasks, selectedTopicId);
   document.querySelector("#selected-date-title").textContent = formatSelectedDate(selectedKstDate);
   document.querySelector("#selected-count").textContent = selectedTasks.length;
   selectedList.replaceChildren();
@@ -153,6 +293,7 @@ function renderSelectedDate() {
     card.querySelector(".selected-task-status").textContent = STATUS_LABELS[task.status];
     card.querySelector(".selected-task-title").textContent = task.title;
     card.querySelector(".selected-task-time").textContent = formatTaskTime(task, selectedKstDate);
+    appendTopicTags(card.querySelector(".selected-task-topics"), task.topics ?? []);
     card.querySelector(".overdue-mark").hidden = !isTaskOverdue(task);
     card.querySelector(".selected-task-main").addEventListener("click", () => openTaskDialog(task));
     selectedList.append(card);
@@ -172,6 +313,21 @@ function refreshViews() {
 
 async function loadTasks() {
   tasks = await request("/api/tasks");
+  refreshViews();
+}
+
+async function loadData() {
+  [tasks, topics] = await Promise.all([
+    request("/api/tasks"),
+    request("/api/topics"),
+  ]);
+  if (
+    selectedTopicId !== "all"
+    && selectedTopicId !== "unclassified"
+    && !topics.some((topic) => String(topic.id) === String(selectedTopicId))
+  ) {
+    selectedTopicId = "unclassified";
+  }
   refreshViews();
 }
 
@@ -199,6 +355,9 @@ function openTaskDialog(task = null, date = null) {
   document.querySelector("#dialog-title").textContent = task ? "일정 수정" : "새 일정";
   deleteDialogButton.hidden = !task;
   setAllDayMode(allDayInput.checked);
+  renderTaskTopicOptions(
+    new Set((task?.topics ?? []).map((topic) => topic.id)),
+  );
   dialog.showModal();
   titleInput.focus();
 }
@@ -229,6 +388,8 @@ async function saveTask(event) {
     description: descriptionInput.value,
     status: statusInput.value,
     all_day: allDayInput.checked,
+    topic_ids: [...document.querySelectorAll("[data-task-topic]:checked")]
+      .map((input) => Number(input.value)),
     ...range,
   };
 
@@ -239,6 +400,37 @@ async function saveTask(event) {
     });
     closeTaskDialog();
     await loadTasks();
+  } catch (error) {
+    showError(error.message);
+  }
+}
+
+async function saveTopic(event) {
+  event.preventDefault();
+  const id = topicIdInput.value;
+  try {
+    await request(id ? `/api/topics/${id}` : "/api/topics", {
+      method: id ? "PATCH" : "POST",
+      body: JSON.stringify({
+        name: topicNameInput.value,
+        color: topicColorInput.value.toUpperCase(),
+      }),
+    });
+    closeTopicDialog();
+    await loadData();
+  } catch (error) {
+    showError(error.message);
+  }
+}
+
+async function deleteTopic() {
+  const topic = topics.find((item) => String(item.id) === topicIdInput.value);
+  if (!topic || !window.confirm(`“${topic.name}” 주제를 삭제할까요? 일정은 삭제되지 않습니다.`)) return;
+  try {
+    await request(`/api/topics/${topic.id}`, { method: "DELETE" });
+    selectedTopicId = "unclassified";
+    closeTopicDialog();
+    await loadData();
   } catch (error) {
     showError(error.message);
   }
@@ -318,7 +510,26 @@ calendar = new FullCalendar.Calendar(document.querySelector("#calendar"), {
 });
 calendar.render();
 
-document.querySelector("#new-task-button").addEventListener("click", () => openTaskDialog());
+createMenuButton.addEventListener("click", (event) => {
+  event.stopPropagation();
+  setCreateMenu(createMenu.hidden);
+});
+createMenu.addEventListener("click", (event) => event.stopPropagation());
+document.querySelector("#new-task-button").addEventListener("click", () => {
+  setCreateMenu(false);
+  openTaskDialog();
+});
+document.querySelector("#new-topic-button").addEventListener("click", () => {
+  setCreateMenu(false);
+  openTopicDialog();
+});
+document.addEventListener("click", () => setCreateMenu(false));
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !createMenu.hidden) {
+    setCreateMenu(false);
+    createMenuButton.focus();
+  }
+});
 document.querySelector("#add-date-task").addEventListener("click", () => openTaskDialog(null, selectedKstDate));
 document.querySelector("#previous-month").addEventListener("click", () => calendar.prev());
 document.querySelector("#next-month").addEventListener("click", () => calendar.next());
@@ -328,15 +539,25 @@ document.querySelector("#today-button").addEventListener("click", () => {
 });
 document.querySelector("#close-dialog").addEventListener("click", closeTaskDialog);
 document.querySelector("#cancel-dialog").addEventListener("click", closeTaskDialog);
+document.querySelector("#close-topic-dialog").addEventListener("click", closeTopicDialog);
+document.querySelector("#cancel-topic-dialog").addEventListener("click", closeTopicDialog);
 allDayInput.addEventListener("change", () => setAllDayMode(allDayInput.checked));
+topicColorInput.addEventListener("input", () => {
+  topicColorValue.value = topicColorInput.value.toUpperCase();
+});
 deleteDialogButton.addEventListener("click", () => {
   const task = tasks.find((item) => String(item.id) === taskIdInput.value);
   deleteTask(task);
 });
 form.addEventListener("submit", saveTask);
+topicForm.addEventListener("submit", saveTopic);
+deleteTopicButton.addEventListener("click", deleteTopic);
 dialog.addEventListener("click", (event) => {
   if (event.target === dialog) closeTaskDialog();
 });
+topicDialog.addEventListener("click", (event) => {
+  if (event.target === topicDialog) closeTopicDialog();
+});
 [...statusFilters, overdueFilter].forEach((input) => input.addEventListener("change", refreshViews));
 
-loadTasks().catch((error) => showError(error.message));
+loadData().catch((error) => showError(error.message));

@@ -2,13 +2,15 @@
 
 FastAPI와 SQLite로 만든 단일 사용자용 월간 일정 관리 앱입니다. 로컬에 포함한
 FullCalendar로 여러 날짜에 걸친 일정을 표시하고, `할 일`, `진행 중`, `완료`
-상태와 마감 초과 여부를 함께 관리합니다.
+상태, 여러 주제, 마감 초과 여부를 함께 관리합니다.
 
 ## 주요 기능
 
 - 월간 캘린더와 선택한 날짜의 일정 목록
 - 시간 일정 및 종일 일정 추가, 수정, 삭제
 - 상태별 필터와 마감 초과 미완료 필터
+- 이름과 색상을 가진 주제 관리 및 일정별 다중 주제 지정
+- 선택 날짜의 전체, 미분류, 주제별 색상 칩 필터
 - 데스크톱 우측 일정 패널과 모바일 하단 일정 패널
 - SQLite 영구 저장 및 기존 칸반 데이터베이스 자동 마이그레이션
 - 외부 CDN 없이 동작하는 FullCalendar 로컬 정적 자산
@@ -65,8 +67,10 @@ FullCalendar에는 `start: "2026-07-28"`, `end: "2026-07-29"`로
 
 ## 기존 DB 마이그레이션
 
-앱 시작 시 날짜 컬럼이 없는 기존 칸반 `tasks` 테이블을 자동으로 v1
-캘린더 스키마로 마이그레이션합니다.
+현재 데이터베이스 스키마는 v2입니다. 앱 시작 시 기존 v0 칸반 또는 v1 캘린더
+DB를 자동으로 마이그레이션합니다.
+
+### v0 칸반 → v2
 
 1. 마이그레이션 전에 DB와 같은 디렉터리에
    `tasks.db.pre-calendar-v0.bak` 백업을 한 번 만듭니다.
@@ -79,12 +83,25 @@ FullCalendar에는 `start: "2026-07-28"`, `end: "2026-07-29"`로
 4. `created_at`을 사용할 수 없으면 timezone-aware `updated_at`을
    사용합니다. 둘 다 유효하지 않으면 임의 값을 쓰지 않고 마이그레이션을
    중단합니다.
-5. 성공 후 SQLite `user_version`은 `1`이며, 이후 시작은 데이터를 다시
+5. 일정 변환 후 주제 테이블을 추가하며, 기존 일정은 연결된 주제가 없는
+   `미분류` 일정이 됩니다.
+6. 성공 후 SQLite `user_version`은 `2`이며, 이후 시작은 데이터를 다시
    변환하지 않습니다.
 
 마이그레이션된 임시 일정 시각은 앱에서 실제 일정에 맞게 수정하십시오.
 복구가 필요하면 앱을 중지하고 현재 DB를 별도 보관한 뒤
 `tasks.db.pre-calendar-v0.bak`을 원래 DB 경로로 복사합니다.
+
+### v1 캘린더 → v2
+
+1. 마이그레이션 전에 `tasks.db.pre-topics-v1.bak` 백업을 한 번 만듭니다.
+2. 기존 일정 행과 시각은 변경하지 않고 `topics`, `task_topics` 테이블을
+   추가합니다.
+3. 기존 일정은 주제 연결이 없으므로 UI의 `미분류` 칩에서 조회됩니다.
+4. 주제를 삭제하면 일정은 유지되고 연결만 삭제됩니다.
+
+각 주제는 대소문자를 구분하지 않는 고유 이름과 `#RRGGBB` 색상을 저장합니다.
+서로 다른 주제가 같은 색상을 사용하는 것은 허용됩니다.
 
 ## API
 
@@ -94,6 +111,10 @@ FullCalendar에는 `start: "2026-07-28"`, `end: "2026-07-29"`로
 | `POST` | `/api/tasks` | 일정 생성 |
 | `PATCH` | `/api/tasks/{id}` | 일정 필드 또는 호환용 위치 변경 |
 | `DELETE` | `/api/tasks/{id}` | 일정 삭제 |
+| `GET` | `/api/topics` | 주제 이름순 조회 |
+| `POST` | `/api/topics` | 주제 생성 |
+| `PATCH` | `/api/topics/{id}` | 주제 이름 또는 색상 수정 |
+| `DELETE` | `/api/topics/{id}` | 주제 연결 삭제, 일정 유지 |
 
 시간 일정 생성 예시:
 
@@ -104,7 +125,8 @@ FullCalendar에는 `start: "2026-07-28"`, `end: "2026-07-29"`로
   "status": "todo",
   "all_day": false,
   "start_at": "2026-07-28T09:30:00+09:00",
-  "due_at": "2026-07-28T10:30:00+09:00"
+  "due_at": "2026-07-28T10:30:00+09:00",
+  "topic_ids": [1, 2]
 }
 ```
 
@@ -138,6 +160,19 @@ FullCalendar에는 `start: "2026-07-28"`, `end: "2026-07-29"`로
 `position` 필드는 유지되지만 캘린더 UI에서 일정 순서를 드래그해 변경하지
 않습니다.
 
+주제 생성 예시:
+
+```json
+{
+  "name": "업무",
+  "color": "#3366CC"
+}
+```
+
+일정 생성과 수정의 `topic_ids`는 여러 ID를 받을 수 있습니다. PATCH에서
+`topic_ids`를 생략하면 기존 연결을 유지하고, 빈 배열을 보내면 모든 연결을
+제거합니다. 일정 응답에는 이름순 `topics` 배열이 포함됩니다.
+
 ## FullCalendar 로컬 자산
 
 이 저장소는 **FullCalendar Standard 7.0.2**의 공식 global bundle과 Classic
@@ -164,7 +199,7 @@ node --test tests/test_calendar.mjs
 
 JavaScript 테스트는 npm 패키지 없이 Node 내장 `node:test`를 사용합니다.
 KST 변환, 시간/종일 exclusive end, 같은 날·자정·여러 날·월말 경계,
-선택 날짜 포함, 상태 필터, 마감 초과 equality 경계 및 여러 호스트
+선택 날짜 포함, 상태/주제/미분류 필터, 마감 초과 equality 경계 및 여러 호스트
 시간대(`UTC`, `America/New_York`, `Asia/Seoul`)의 동일 결과를 검증합니다.
 Python 테스트는 임시 SQLite DB를 사용하므로 실제 데이터에 영향을 주지
 않습니다.
@@ -173,15 +208,15 @@ Python 테스트는 임시 SQLite DB를 사용하므로 실제 데이터에 영�
 
 ```text
 app/
-  main.py                              FastAPI, SQLite, 마이그레이션, REST API
+  main.py                              FastAPI, SQLite, v0/v1→v2 마이그레이션, REST API
   static/
     index.html                         월간 캘린더 및 일정 폼
     styles.css                         다이어리 테마와 반응형 레이아웃
     app.js                             FullCalendar 초기화와 CRUD 연결
-    calendar-adapter.js                KST 및 API↔캘린더 순수 변환
+    calendar-adapter.js                KST, 주제 필터 및 API↔캘린더 순수 변환
     vendor/fullcalendar/7.0.2/         로컬 FullCalendar와 라이선스
 tests/
-  test_api.py                          API와 정적 자산 통합 테스트
-  test_migration.py                    기존 DB 마이그레이션 테스트
-  test_calendar.mjs                    캘린더 어댑터 Node 단위 테스트
+  test_api.py                          일정/주제 API와 정적 자산 통합 테스트
+  test_migration.py                    v0/v1 DB 마이그레이션 테스트
+  test_calendar.mjs                    캘린더·주제 어댑터 Node 단위 테스트
 ```

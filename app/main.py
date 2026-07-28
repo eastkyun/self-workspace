@@ -19,7 +19,8 @@ STATIC_DIR = APP_DIR / "static"
 DEFAULT_DB_PATH = APP_DIR.parent / "instance" / "tasks.db"
 TaskStatus = Literal["todo", "doing", "done"]
 KST = ZoneInfo("Asia/Seoul")
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+CALENDAR_SCHEMA_VERSION = 1
 
 
 def utc_now() -> str:
@@ -71,6 +72,14 @@ class TaskCreate(ScheduleFields):
     all_day: bool = False
     start_at: datetime
     due_at: datetime
+    topic_ids: list[int] = Field(default_factory=list)
+
+    @field_validator("topic_ids")
+    @classmethod
+    def topic_ids_must_be_positive_and_unique(cls, value: list[int]) -> list[int]:
+        if any(topic_id <= 0 for topic_id in value):
+            raise ValueError("topic IDs must be positive")
+        return list(dict.fromkeys(value))
 
     @model_validator(mode="after")
     def schedule_must_be_ordered(self) -> TaskCreate:
@@ -88,12 +97,58 @@ class TaskUpdate(ScheduleFields):
     all_day: bool | None = None
     start_at: datetime | None = None
     due_at: datetime | None = None
+    topic_ids: list[int] | None = None
+
+    @field_validator("topic_ids")
+    @classmethod
+    def topic_ids_must_be_positive_and_unique(
+        cls, value: list[int] | None
+    ) -> list[int] | None:
+        if value is not None and any(topic_id <= 0 for topic_id in value):
+            raise ValueError("topic IDs must be positive")
+        return None if value is None else list(dict.fromkeys(value))
 
     @model_validator(mode="after")
     def supplied_schedule_must_be_ordered(self) -> TaskUpdate:
         if self.start_at is not None and self.due_at is not None:
             normalize_schedule(self.start_at, self.due_at, bool(self.all_day))
         return self
+
+
+class TopicFields(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=40)
+    color: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+
+    @field_validator("color")
+    @classmethod
+    def normalize_color(cls, value: str) -> str:
+        return value.upper()
+
+
+class TopicCreate(TopicFields):
+    pass
+
+
+class TopicUpdate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str | None = Field(default=None, min_length=1, max_length=40)
+    color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+
+    @field_validator("color")
+    @classmethod
+    def normalize_color(cls, value: str | None) -> str | None:
+        return value.upper() if value is not None else None
+
+
+class Topic(BaseModel):
+    id: int
+    name: str
+    color: str
+    created_at: str
+    updated_at: str
 
 
 class Task(BaseModel):
@@ -107,10 +162,17 @@ class Task(BaseModel):
     due_at: str
     created_at: str
     updated_at: str
+    topics: list[Topic] = Field(default_factory=list)
 
 
-def row_to_task(row: sqlite3.Row) -> Task:
-    return Task.model_validate(dict(row))
+def row_to_topic(row: sqlite3.Row) -> Topic:
+    return Topic.model_validate(
+        {field: row[field] for field in Topic.model_fields}
+    )
+
+
+def row_to_task(row: sqlite3.Row, topics: list[Topic] | None = None) -> Task:
+    return Task.model_validate({**dict(row), "topics": topics or []})
 
 
 def resolve_database_path(database_path: str | Path | None) -> Path:
@@ -118,7 +180,7 @@ def resolve_database_path(database_path: str | Path | None) -> Path:
     return Path(configured)
 
 
-def create_latest_schema(connection: sqlite3.Connection, table: str = "tasks") -> None:
+def create_tasks_schema(connection: sqlite3.Connection, table: str = "tasks") -> None:
     connection.execute(
         f"""
         CREATE TABLE {table} (
@@ -145,6 +207,39 @@ def create_latest_schema(connection: sqlite3.Connection, table: str = "tasks") -
     )
 
 
+def create_topics_schema(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE topics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            color TEXT NOT NULL CHECK (
+                color GLOB '#[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]'
+                    || '[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]'
+            ),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE task_topics (
+            task_id INTEGER NOT NULL
+                REFERENCES tasks(id) ON DELETE CASCADE,
+            topic_id INTEGER NOT NULL
+                REFERENCES topics(id) ON DELETE CASCADE,
+            PRIMARY KEY (task_id, topic_id)
+        )
+        """
+    )
+
+
+def create_latest_schema(connection: sqlite3.Connection) -> None:
+    create_tasks_schema(connection)
+    create_topics_schema(connection)
+
+
 def create_indexes(connection: sqlite3.Connection) -> None:
     connection.execute(
         "CREATE INDEX IF NOT EXISTS idx_tasks_status_position "
@@ -154,12 +249,19 @@ def create_indexes(connection: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_tasks_date_range "
         "ON tasks (start_at, due_at)"
     )
+    if connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'task_topics'"
+    ).fetchone():
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_task_topics_topic_task "
+            "ON task_topics (topic_id, task_id)"
+        )
 
 
-def backup_legacy_database(database_path: Path) -> Path | None:
+def backup_database(database_path: Path, suffix: str) -> Path | None:
     if str(database_path) == ":memory:":
         return None
-    backup_path = Path(f"{database_path}.pre-calendar-v0.bak")
+    backup_path = Path(f"{database_path}.{suffix}")
     if not backup_path.exists():
         with (
             sqlite3.connect(database_path) as source,
@@ -172,10 +274,14 @@ def backup_legacy_database(database_path: Path) -> Path | None:
 def migrate_v0_to_v1(
     connection: sqlite3.Connection, database_path: Path, create_backup: bool
 ) -> None:
-    backup_path = backup_legacy_database(database_path) if create_backup else None
+    backup_path = (
+        backup_database(database_path, "pre-calendar-v0.bak")
+        if create_backup
+        else None
+    )
     backup_note = f"; backup: {backup_path}" if backup_path else ""
     try:
-        create_latest_schema(connection, "tasks_v1")
+        create_tasks_schema(connection, "tasks_v1")
         legacy_rows = connection.execute(
             """
             SELECT id, title, description, status, position, created_at, updated_at
@@ -229,21 +335,46 @@ def migrate_v0_to_v1(
         connection.execute("DROP TABLE tasks")
         connection.execute("ALTER TABLE tasks_v1 RENAME TO tasks")
         create_indexes(connection)
-        connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        connection.execute(f"PRAGMA user_version = {CALENDAR_SCHEMA_VERSION}")
     except Exception as error:
         raise RuntimeError(f"calendar schema migration failed{backup_note}: {error}") from error
+
+
+def migrate_v1_to_v2(
+    connection: sqlite3.Connection,
+    database_path: Path,
+    create_backup: bool,
+) -> None:
+    backup_path = (
+        backup_database(database_path, "pre-topics-v1.bak")
+        if create_backup
+        else None
+    )
+    backup_note = f"; backup: {backup_path}" if backup_path else ""
+    try:
+        create_topics_schema(connection)
+        create_indexes(connection)
+        connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+    except Exception as error:
+        raise RuntimeError(f"topics schema migration failed{backup_note}: {error}") from error
 
 
 def initialize_database(database_path: Path, *, create_backup: bool = True) -> None:
     database_path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(database_path, isolation_level=None) as connection:
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
         connection.execute("BEGIN IMMEDIATE")
         try:
-            table_exists = connection.execute(
-                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tasks'"
-            ).fetchone()
-            if table_exists is None:
+            tables = {
+                row["name"]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+            if "tasks" not in tables:
+                if {"topics", "task_topics"}.intersection(tables):
+                    raise RuntimeError("database has a partial topics schema")
                 create_latest_schema(connection)
                 create_indexes(connection)
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
@@ -254,13 +385,37 @@ def initialize_database(database_path: Path, *, create_backup: bool = True) -> N
                 schedule_columns = {"all_day", "start_at", "due_at"}
                 if not schedule_columns.intersection(columns):
                     migrate_v0_to_v1(connection, database_path, create_backup)
+                    migrate_v1_to_v2(connection, database_path, create_backup=False)
                 elif not schedule_columns.issubset(columns):
                     raise RuntimeError(
                         "tasks table has a partially migrated calendar schema"
                     )
                 else:
-                    create_indexes(connection)
-                    connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+                    topic_tables = {"topics", "task_topics"}.intersection(tables)
+                    if not topic_tables:
+                        migrate_v1_to_v2(
+                            connection, database_path, create_backup=create_backup
+                        )
+                    elif topic_tables != {"topics", "task_topics"}:
+                        raise RuntimeError("database has a partial topics schema")
+                    else:
+                        topic_columns = {
+                            row["name"]
+                            for row in connection.execute("PRAGMA table_info(topics)")
+                        }
+                        relation_columns = {
+                            row["name"]
+                            for row in connection.execute(
+                                "PRAGMA table_info(task_topics)"
+                            )
+                        }
+                        if not {"id", "name", "color"}.issubset(topic_columns) or not {
+                            "task_id",
+                            "topic_id",
+                        }.issubset(relation_columns):
+                            raise RuntimeError("database has a partial topics schema")
+                        create_indexes(connection)
+                        connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             connection.commit()
         except Exception:
             connection.rollback()
@@ -271,6 +426,7 @@ def initialize_database(database_path: Path, *, create_backup: bool = True) -> N
 def database_connection(database_path: Path) -> Iterator[sqlite3.Connection]:
     connection = sqlite3.connect(database_path)
     connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
     try:
         yield connection
         connection.commit()
@@ -288,6 +444,96 @@ def fetch_task(connection: sqlite3.Connection, task_id: int) -> sqlite3.Row:
     if row is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return row
+
+
+def fetch_topic(connection: sqlite3.Connection, topic_id: int) -> sqlite3.Row:
+    row = connection.execute(
+        "SELECT * FROM topics WHERE id = ?", (topic_id,)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    return row
+
+
+def task_topics(
+    connection: sqlite3.Connection, task_ids: list[int]
+) -> dict[int, list[Topic]]:
+    result = {task_id: [] for task_id in task_ids}
+    if not task_ids:
+        return result
+    placeholders = ", ".join("?" for _ in task_ids)
+    rows = connection.execute(
+        f"""
+        SELECT tt.task_id, t.id, t.name, t.color, t.created_at, t.updated_at
+        FROM task_topics AS tt
+        JOIN topics AS t ON t.id = tt.topic_id
+        WHERE tt.task_id IN ({placeholders})
+        ORDER BY t.name COLLATE NOCASE, t.id
+        """,
+        task_ids,
+    ).fetchall()
+    for row in rows:
+        result[row["task_id"]].append(row_to_topic(row))
+    return result
+
+
+def rows_to_tasks(
+    connection: sqlite3.Connection, rows: list[sqlite3.Row]
+) -> list[Task]:
+    topics_by_task = task_topics(connection, [row["id"] for row in rows])
+    return [
+        row_to_task(row, topics_by_task.get(row["id"], []))
+        for row in rows
+    ]
+
+
+def task_from_row(connection: sqlite3.Connection, row: sqlite3.Row) -> Task:
+    return rows_to_tasks(connection, [row])[0]
+
+
+def validate_topic_ids(
+    connection: sqlite3.Connection, topic_ids: list[int]
+) -> None:
+    if not topic_ids:
+        return
+    placeholders = ", ".join("?" for _ in topic_ids)
+    found = {
+        row["id"]
+        for row in connection.execute(
+            f"SELECT id FROM topics WHERE id IN ({placeholders})", topic_ids
+        )
+    }
+    missing = [topic_id for topic_id in topic_ids if topic_id not in found]
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown topic IDs: {', '.join(map(str, missing))}",
+        )
+
+
+def replace_task_topics(
+    connection: sqlite3.Connection, task_id: int, topic_ids: list[int]
+) -> None:
+    connection.execute("DELETE FROM task_topics WHERE task_id = ?", (task_id,))
+    connection.executemany(
+        "INSERT INTO task_topics (task_id, topic_id) VALUES (?, ?)",
+        [(task_id, topic_id) for topic_id in topic_ids],
+    )
+
+
+def ensure_topic_name_available(
+    connection: sqlite3.Connection,
+    name: str,
+    *,
+    excluded_id: int | None = None,
+) -> None:
+    query = "SELECT 1 FROM topics WHERE name = ? COLLATE NOCASE"
+    values: list[object] = [name]
+    if excluded_id is not None:
+        query += " AND id != ?"
+        values.append(excluded_id)
+    if connection.execute(query, values).fetchone():
+        raise HTTPException(status_code=409, detail="Topic name already exists")
 
 
 def ordered_task_ids(
@@ -326,7 +572,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
 
     application = FastAPI(
         title="Calendar Diary",
-        version="1.0.0",
+        version="2.0.0",
         lifespan=lifespan,
     )
     application.state.database_path = resolved_database_path
@@ -335,6 +581,68 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
     @application.get("/", include_in_schema=False)
     def index() -> FileResponse:
         return FileResponse(STATIC_DIR / "index.html")
+
+    @application.get("/api/topics", response_model=list[Topic])
+    def list_topics() -> list[Topic]:
+        with database_connection(resolved_database_path) as connection:
+            rows = connection.execute(
+                "SELECT * FROM topics ORDER BY name COLLATE NOCASE, id"
+            ).fetchall()
+        return [row_to_topic(row) for row in rows]
+
+    @application.post(
+        "/api/topics", response_model=Topic, status_code=status.HTTP_201_CREATED
+    )
+    def create_topic(payload: TopicCreate) -> Topic:
+        now = utc_now()
+        with database_connection(resolved_database_path) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            ensure_topic_name_available(connection, payload.name)
+            cursor = connection.execute(
+                """
+                INSERT INTO topics (name, color, created_at, updated_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (payload.name, payload.color, now, now),
+            )
+            row = fetch_topic(connection, cursor.lastrowid)
+        return row_to_topic(row)
+
+    @application.patch("/api/topics/{topic_id}", response_model=Topic)
+    def update_topic(topic_id: int, payload: TopicUpdate) -> Topic:
+        changes = payload.model_dump(exclude_unset=True)
+        if not changes or any(value is None for value in changes.values()):
+            raise HTTPException(
+                status_code=422,
+                detail="At least one non-null topic field is required",
+            )
+        with database_connection(resolved_database_path) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            fetch_topic(connection, topic_id)
+            if "name" in changes:
+                ensure_topic_name_available(
+                    connection, changes["name"], excluded_id=topic_id
+                )
+            assignments = [f"{field} = ?" for field in changes]
+            values = list(changes.values())
+            assignments.append("updated_at = ?")
+            values.extend((utc_now(), topic_id))
+            connection.execute(
+                f"UPDATE topics SET {', '.join(assignments)} WHERE id = ?",
+                values,
+            )
+            row = fetch_topic(connection, topic_id)
+        return row_to_topic(row)
+
+    @application.delete(
+        "/api/topics/{topic_id}", status_code=status.HTTP_204_NO_CONTENT
+    )
+    def delete_topic(topic_id: int) -> Response:
+        with database_connection(resolved_database_path) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            fetch_topic(connection, topic_id)
+            connection.execute("DELETE FROM topics WHERE id = ?", (topic_id,))
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @application.get("/api/tasks", response_model=list[Task])
     def list_tasks() -> list[Task]:
@@ -346,7 +654,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                 ORDER BY start_at, due_at, position, id
                 """
             ).fetchall()
-        return [row_to_task(row) for row in rows]
+            return rows_to_tasks(connection, rows)
 
     @application.post(
         "/api/tasks", response_model=Task, status_code=status.HTTP_201_CREATED
@@ -358,6 +666,7 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         )
         with database_connection(resolved_database_path) as connection:
             connection.execute("BEGIN IMMEDIATE")
+            validate_topic_ids(connection, payload.topic_ids)
             next_position = connection.execute(
                 """
                 SELECT COALESCE(MAX(position) + 1, 0)
@@ -387,7 +696,11 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
                 ),
             )
             row = fetch_task(connection, cursor.lastrowid)
-        return row_to_task(row)
+            replace_task_topics(
+                connection, cursor.lastrowid, payload.topic_ids
+            )
+            result = task_from_row(connection, row)
+        return result
 
     @application.patch("/api/tasks/{task_id}", response_model=Task)
     def update_task(task_id: int, payload: TaskUpdate) -> Task:
@@ -400,6 +713,8 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
         with database_connection(resolved_database_path) as connection:
             connection.execute("BEGIN IMMEDIATE")
             current = fetch_task(connection, task_id)
+            if "topic_ids" in changes:
+                validate_topic_ids(connection, changes["topic_ids"])
             old_status = current["status"]
             target_status = changes.get("status", old_status)
 
@@ -454,8 +769,11 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             connection.execute(
                 f"UPDATE tasks SET {', '.join(assignments)} WHERE id = ?", values
             )
+            if "topic_ids" in changes:
+                replace_task_topics(connection, task_id, changes["topic_ids"])
             row = fetch_task(connection, task_id)
-        return row_to_task(row)
+            result = task_from_row(connection, row)
+        return result
 
     @application.delete(
         "/api/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT

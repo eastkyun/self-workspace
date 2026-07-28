@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from app.main import initialize_database
+from app.main import create_indexes, create_tasks_schema, initialize_database
 
 
 def create_legacy_database(path: Path, rows: list[tuple] | None = None) -> None:
@@ -33,6 +33,28 @@ def create_legacy_database(path: Path, rows: list[tuple] | None = None) -> None:
             """,
             rows or [],
         )
+
+
+def create_calendar_v1_database(path: Path) -> None:
+    with sqlite3.connect(path) as connection:
+        create_tasks_schema(connection)
+        create_indexes(connection)
+        connection.execute(
+            """
+            INSERT INTO tasks (
+                id, title, description, status, position, all_day,
+                start_at, due_at, created_at, updated_at
+            )
+            VALUES (7, '기존 일정', '', 'doing', 0, 0, ?, ?, ?, ?)
+            """,
+            (
+                "2026-07-28T09:00:00+09:00",
+                "2026-07-28T10:00:00+09:00",
+                "2026-07-28T00:00:00Z",
+                "2026-07-28T00:00:00Z",
+            ),
+        )
+        connection.execute("PRAGMA user_version = 1")
 
 
 def test_migrates_legacy_rows_and_creates_backup(tmp_path: Path):
@@ -71,7 +93,7 @@ def test_migrates_legacy_rows_and_creates_backup(tmp_path: Path):
             "created_at": "2026-07-28T00:30:15+00:00",
             "updated_at": "2026-07-28T01:00:00+00:00",
         }
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
         indexes = {
             item[1] for item in connection.execute("PRAGMA index_list(tasks)")
         }
@@ -175,10 +197,10 @@ def test_concurrent_initialization_migrates_legacy_database_once(tmp_path: Path)
             "2026-07-28T10:00:00+09:00",
         )
     ]
-    assert version == 1
+    assert version == 2
 
 
-def test_new_database_uses_schema_v1(tmp_path: Path):
+def test_new_database_uses_schema_v2(tmp_path: Path):
     database_path = tmp_path / "tasks.db"
 
     initialize_database(database_path)
@@ -188,5 +210,112 @@ def test_new_database_uses_schema_v1(tmp_path: Path):
             row[1] for row in connection.execute("PRAGMA table_info(tasks)")
         }
         version = connection.execute("PRAGMA user_version").fetchone()[0]
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        relation_indexes = {
+            row[1] for row in connection.execute("PRAGMA index_list(task_topics)")
+        }
+        foreign_keys = connection.execute(
+            "PRAGMA foreign_key_list(task_topics)"
+        ).fetchall()
     assert {"all_day", "start_at", "due_at"} <= columns
-    assert version == 1
+    assert {"topics", "task_topics"} <= tables
+    assert "idx_task_topics_topic_task" in relation_indexes
+    assert len(foreign_keys) == 2
+    assert version == 2
+
+
+def test_migrates_v1_to_v2_without_changing_tasks_and_creates_backup(tmp_path: Path):
+    database_path = tmp_path / "tasks.db"
+    create_calendar_v1_database(database_path)
+
+    initialize_database(database_path)
+
+    backup_path = Path(f"{database_path}.pre-topics-v1.bak")
+    assert backup_path.exists()
+    with sqlite3.connect(database_path) as connection:
+        task = connection.execute(
+            "SELECT id, title, status, start_at, due_at FROM tasks"
+        ).fetchone()
+        topics = connection.execute("SELECT * FROM topics").fetchall()
+        relations = connection.execute("SELECT * FROM task_topics").fetchall()
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
+    assert task == (
+        7,
+        "기존 일정",
+        "doing",
+        "2026-07-28T09:00:00+09:00",
+        "2026-07-28T10:00:00+09:00",
+    )
+    assert topics == []
+    assert relations == []
+    assert version == 2
+
+    with sqlite3.connect(backup_path) as backup:
+        backup_tables = {
+            row[0]
+            for row in backup.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        assert "topics" not in backup_tables
+        assert backup.execute("PRAGMA user_version").fetchone()[0] == 1
+
+
+def test_v1_to_v2_migration_is_idempotent(tmp_path: Path):
+    database_path = tmp_path / "tasks.db"
+    create_calendar_v1_database(database_path)
+
+    initialize_database(database_path)
+    initialize_database(database_path)
+
+    with sqlite3.connect(database_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM tasks").fetchone()[0] == 1
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+
+
+def test_partial_topics_schema_is_rejected_without_data_loss(tmp_path: Path):
+    database_path = tmp_path / "tasks.db"
+    create_calendar_v1_database(database_path)
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE topics (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                color TEXT NOT NULL
+            )
+            """
+        )
+
+    with pytest.raises(RuntimeError, match="partial topics schema"):
+        initialize_database(database_path, create_backup=False)
+
+    with sqlite3.connect(database_path) as connection:
+        assert connection.execute("SELECT title FROM tasks").fetchone() == (
+            "기존 일정",
+        )
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
+
+
+def test_concurrent_v1_initialization_migrates_topics_once(tmp_path: Path):
+    database_path = tmp_path / "tasks.db"
+    create_calendar_v1_database(database_path)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        list(executor.map(lambda _: initialize_database(database_path), range(2)))
+
+    with sqlite3.connect(database_path) as connection:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
+    assert {"topics", "task_topics"} <= tables
+    assert version == 2

@@ -85,6 +85,45 @@ export function filterTasks(tasks, filters = {}, now = new Date()) {
   );
 }
 
+function topicSortKey(name) {
+  return name.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+}
+
+export function sortTopics(topics) {
+  return [...topics].sort((left, right) => {
+    const leftName = topicSortKey(left.name);
+    const rightName = topicSortKey(right.name);
+    if (leftName < rightName) return -1;
+    if (leftName > rightName) return 1;
+    return left.id - right.id;
+  });
+}
+
+export function filterTasksByTopic(tasks, selectedTopicId) {
+  if (selectedTopicId === "all") return [...tasks];
+  if (selectedTopicId === "unclassified") {
+    return tasks.filter((task) => !task.topics?.length);
+  }
+  return tasks.filter((task) =>
+    task.topics?.some((topic) => String(topic.id) === String(selectedTopicId))
+  );
+}
+
+export function topicCountsForTasks(tasks, topics) {
+  const byTopic = Object.fromEntries(topics.map((topic) => [String(topic.id), 0]));
+  let unclassified = 0;
+  tasks.forEach((task) => {
+    if (!task.topics?.length) {
+      unclassified += 1;
+      return;
+    }
+    new Set(task.topics.map((topic) => String(topic.id))).forEach((topicId) => {
+      if (Object.hasOwn(byTopic, topicId)) byTopic[topicId] += 1;
+    });
+  });
+  return { all: tasks.length, unclassified, byTopic };
+}
+
 export function taskToCalendarEvent(task, now = new Date()) {
   const overdue = isTaskOverdue(task, now);
   const classNames = [`status-${task.status}`];

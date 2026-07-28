@@ -22,9 +22,20 @@
         <button class="icon-button navigation-button" id="next-month" type="button" aria-label="다음 달">›</button>
       </div>
       <h2 class="month-title" id="month-title" aria-live="polite"></h2>
-      <button class="button button-primary new-task-button" id="new-task-button" type="button">
-        <span aria-hidden="true">＋</span> 새 일정
-      </button>
+      <div class="create-control new-task-button">
+        <button
+          class="button button-primary create-menu-trigger"
+          id="create-menu-button"
+          type="button"
+          aria-label="새 항목 만들기"
+          aria-expanded="false"
+          aria-controls="create-menu"
+        >＋</button>
+        <div class="create-menu" id="create-menu" role="menu" hidden>
+          <button type="button" role="menuitem" id="new-task-button">일정 추가</button>
+          <button type="button" role="menuitem" id="new-topic-button">주제 추가</button>
+        </div>
+      </div>
     </header>
 
     <div class="notification" id="notification" role="status" aria-live="polite" hidden></div>
@@ -65,6 +76,9 @@
             </div>
             <span class="selected-count" id="selected-count">0</span>
           </header>
+          <nav class="topic-filter-nav" aria-label="선택한 날짜 주제">
+            <div class="topic-filter-list" id="topic-filter-list"></div>
+          </nav>
           <div class="selected-task-list" id="selected-task-list"></div>
           <button class="button button-secondary add-date-task" id="add-date-task" type="button">
             ＋ 이 날짜에 일정 추가
@@ -89,6 +103,14 @@
 
         <label for="task-description">설명 <span class="optional">(선택)</span></label>
         <textarea id="task-description" name="description" rows="4"></textarea>
+
+        <fieldset class="topic-fieldset">
+          <legend>주제 <span class="optional">(여러 개 선택 가능)</span></legend>
+          <div class="task-topic-options" id="task-topic-options"></div>
+          <p class="topic-empty-message" id="task-topic-empty" hidden>
+            등록된 주제가 없습니다. 상단 ＋ 메뉴에서 주제를 추가할 수 있습니다.
+          </p>
+        </fieldset>
 
         <label class="all-day-toggle" for="task-all-day">
           <input id="task-all-day" name="all_day" type="checkbox">
@@ -133,6 +155,35 @@
       </form>
     </dialog>
 
+    <dialog class="task-dialog topic-dialog" id="topic-dialog" aria-labelledby="topic-dialog-title">
+      <form id="topic-form">
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">TOPIC DETAILS</p>
+            <h2 id="topic-dialog-title">새 주제</h2>
+          </div>
+          <button class="icon-button" id="close-topic-dialog" type="button" aria-label="닫기">×</button>
+        </div>
+
+        <input id="topic-id" type="hidden">
+        <label for="topic-name">이름</label>
+        <input id="topic-name" name="name" type="text" maxlength="40" required>
+
+        <label for="topic-color">색상</label>
+        <div class="topic-color-field">
+          <input id="topic-color" name="color" type="color" value="#375f55" required>
+          <output id="topic-color-value" for="topic-color">#375F55</output>
+        </div>
+
+        <div class="dialog-actions">
+          <button class="button delete-dialog-button" id="delete-topic-button" type="button" hidden>삭제</button>
+          <span class="action-spacer"></span>
+          <button class="button button-secondary" id="cancel-topic-dialog" type="button">취소</button>
+          <button class="button button-primary" type="submit">저장</button>
+        </div>
+      </form>
+    </dialog>
+
     <template id="selected-task-template">
       <article class="selected-task-card">
         <button class="selected-task-main" type="button">
@@ -140,6 +191,7 @@
           <span class="selected-task-copy">
             <strong class="selected-task-title"></strong>
             <span class="selected-task-time"></span>
+            <span class="selected-task-topics"></span>
           </span>
           <span class="overdue-mark" aria-label="마감 초과" hidden>!</span>
         </button>

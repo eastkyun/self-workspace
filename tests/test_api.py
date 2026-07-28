@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+import sqlite3
 
 import pytest
 from fastapi.testclient import TestClient
@@ -36,6 +37,14 @@ def tasks_in(client: TestClient, status: str) -> list[dict]:
     response = client.get("/api/tasks")
     assert response.status_code == 200
     return [task for task in response.json() if task["status"] == status]
+
+
+def create_topic(
+    client: TestClient, name: str, color: str = "#3366CC"
+) -> dict:
+    response = client.post("/api/topics", json={"name": name, "color": color})
+    assert response.status_code == 201
+    return response.json()
 
 
 def test_empty_database_returns_empty_list(client: TestClient):
@@ -276,6 +285,173 @@ def test_lists_tasks_in_calendar_order(client: TestClient):
     assert [task["id"] for task in response.json()] == [earlier["id"], later["id"]]
 
 
+def test_topic_crud_allows_duplicate_colors_and_sorts_names(client: TestClient):
+    beta = create_topic(client, "beta", "#3366cc")
+    alpha = create_topic(client, "Alpha", "#3366CC")
+
+    response = client.get("/api/topics")
+
+    assert [topic["id"] for topic in response.json()] == [alpha["id"], beta["id"]]
+    assert {topic["color"] for topic in response.json()} == {"#3366CC"}
+
+    updated = client.patch(
+        f"/api/topics/{beta['id']}",
+        json={"name": "Gamma", "color": "#AA44CC"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["name"] == "Gamma"
+    assert updated.json()["color"] == "#AA44CC"
+
+    deleted = client.delete(f"/api/topics/{alpha['id']}")
+    assert deleted.status_code == 204
+    assert [topic["id"] for topic in client.get("/api/topics").json()] == [
+        beta["id"]
+    ]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"name": "", "color": "#3366CC"},
+        {"name": "x" * 41, "color": "#3366CC"},
+        {"name": "업무", "color": "blue"},
+        {"name": "업무", "color": "#12345"},
+    ],
+)
+def test_topic_create_rejects_invalid_input(client: TestClient, payload: dict):
+    assert client.post("/api/topics", json=payload).status_code == 422
+
+
+def test_topic_names_are_unique_case_insensitively(client: TestClient):
+    topic = create_topic(client, "Work")
+
+    duplicate_create = client.post(
+        "/api/topics", json={"name": " work ", "color": "#CC6633"}
+    )
+    other = create_topic(client, "개인", "#CC6633")
+    duplicate_update = client.patch(
+        f"/api/topics/{other['id']}", json={"name": "WORK"}
+    )
+
+    assert duplicate_create.status_code == 409
+    assert duplicate_update.status_code == 409
+    assert client.get("/api/topics").json()[0]["id"] == topic["id"]
+
+
+def test_topic_update_requires_a_non_null_field_and_missing_topic_is_404(
+    client: TestClient,
+):
+    topic = create_topic(client, "업무")
+
+    assert client.patch(f"/api/topics/{topic['id']}", json={}).status_code == 422
+    assert (
+        client.patch(
+            f"/api/topics/{topic['id']}", json={"color": None}
+        ).status_code
+        == 422
+    )
+    assert client.patch("/api/topics/999", json={"name": "없음"}).status_code == 404
+    assert client.delete("/api/topics/999").status_code == 404
+
+
+def test_task_supports_multiple_topics_and_patch_semantics(client: TestClient):
+    work = create_topic(client, "Work", "#3366CC")
+    personal = create_topic(client, "personal", "#CC6633")
+
+    created = client.post(
+        "/api/tasks",
+        json={
+            "title": "다중 주제",
+            "start_at": START_AT,
+            "due_at": DUE_AT,
+            "topic_ids": [personal["id"], work["id"], personal["id"]],
+        },
+    )
+
+    assert created.status_code == 201
+    task = created.json()
+    assert [topic["id"] for topic in task["topics"]] == [
+        personal["id"],
+        work["id"],
+    ]
+
+    kept = client.patch(f"/api/tasks/{task['id']}", json={"title": "수정"})
+    assert [topic["id"] for topic in kept.json()["topics"]] == [
+        personal["id"],
+        work["id"],
+    ]
+
+    cleared = client.patch(f"/api/tasks/{task['id']}", json={"topic_ids": []})
+    assert cleared.status_code == 200
+    assert cleared.json()["topics"] == []
+
+
+def test_unknown_topic_ids_reject_task_changes_atomically(client: TestClient):
+    topic = create_topic(client, "업무")
+    task = client.post(
+        "/api/tasks",
+        json={
+            "title": "원본",
+            "start_at": START_AT,
+            "due_at": DUE_AT,
+            "topic_ids": [topic["id"]],
+        },
+    ).json()
+
+    response = client.patch(
+        f"/api/tasks/{task['id']}",
+        json={"title": "변경되면 안 됨", "topic_ids": [999]},
+    )
+
+    assert response.status_code == 422
+    stored = client.get("/api/tasks").json()[0]
+    assert stored["title"] == "원본"
+    assert [item["id"] for item in stored["topics"]] == [topic["id"]]
+
+
+def test_deleting_topic_removes_only_relations_and_unclassifies_task(
+    client: TestClient,
+):
+    topic = create_topic(client, "업무")
+    task = client.post(
+        "/api/tasks",
+        json={
+            "title": "유지할 일정",
+            "start_at": START_AT,
+            "due_at": DUE_AT,
+            "topic_ids": [topic["id"]],
+        },
+    ).json()
+
+    assert client.delete(f"/api/topics/{topic['id']}").status_code == 204
+    stored = client.get("/api/tasks").json()
+    assert [item["id"] for item in stored] == [task["id"]]
+    assert stored[0]["topics"] == []
+
+
+def test_deleting_task_cascades_relations_but_keeps_topic(client: TestClient):
+    topic = create_topic(client, "업무")
+    task = client.post(
+        "/api/tasks",
+        json={
+            "title": "삭제할 일정",
+            "start_at": START_AT,
+            "due_at": DUE_AT,
+            "topic_ids": [topic["id"]],
+        },
+    ).json()
+
+    assert client.delete(f"/api/tasks/{task['id']}").status_code == 204
+    with sqlite3.connect(client.app.state.database_path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM task_topics"
+        ).fetchone()[0] == 0
+    assert [item["id"] for item in client.get("/api/topics").json()] == [
+        topic["id"]
+    ]
+
+
 def test_serves_page_and_static_assets(client: TestClient):
     page = client.get("/")
     stylesheet = client.get("/static/styles.css")
@@ -301,6 +477,10 @@ def test_serves_page_and_static_assets(client: TestClient):
 
     assert page.status_code == 200
     assert 'id="calendar"' in page.text
+    assert 'id="create-menu-button"' in page.text
+    assert 'id="topic-filter-list"' in page.text
+    assert 'id="topic-dialog"' in page.text
+    assert 'id="task-topic-options"' in page.text
     assert "cdn.jsdelivr" not in page.text
     assert "unpkg" not in page.text
     assert stylesheet.status_code == 200

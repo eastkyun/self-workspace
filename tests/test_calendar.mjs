@@ -21,11 +21,14 @@ const {
   apiTimestampToLocalInput,
   calendarAllDayRangeToApi,
   filterTasks,
+  filterTasksByTopic,
   isTaskOverdue,
   localDateTimeToKst,
+  sortTopics,
   taskOccursOnDate,
   taskToCalendarEvent,
   tasksForDate,
+  topicCountsForTasks,
 } = await import(adapterUrl);
 
 function task(overrides = {}) {
@@ -37,6 +40,7 @@ function task(overrides = {}) {
     all_day: false,
     start_at: "2026-07-28T09:00:00+09:00",
     due_at: "2026-07-28T10:00:00+09:00",
+    topics: [],
     ...overrides,
   };
 }
@@ -251,6 +255,68 @@ test("filters tasks to the selected statuses", () => {
     ).map(({ id }) => id),
     [2],
   );
+});
+
+test("sorts topics case-insensitively by name and then ID", () => {
+  const topics = [
+    { id: 3, name: "beta" },
+    { id: 2, name: "Alpha" },
+    { id: 1, name: "alpha" },
+  ];
+
+  assert.deepEqual(
+    sortTopics(topics).map(({ id }) => id),
+    [1, 2, 3],
+  );
+  assert.deepEqual(topics.map(({ id }) => id), [3, 2, 1]);
+});
+
+test("filters the selected-date list by all, unclassified, or a topic", () => {
+  const work = { id: 1, name: "업무", color: "#3366CC" };
+  const personal = { id: 2, name: "개인", color: "#CC6633" };
+  const tasks = [
+    task({ id: 1, topics: [work, personal] }),
+    task({ id: 2, topics: [personal] }),
+    task({ id: 3 }),
+  ];
+
+  assert.deepEqual(
+    filterTasksByTopic(tasks, "all").map(({ id }) => id),
+    [1, 2, 3],
+  );
+  assert.deepEqual(
+    filterTasksByTopic(tasks, work.id).map(({ id }) => id),
+    [1],
+  );
+  assert.deepEqual(
+    filterTasksByTopic(tasks, personal.id).map(({ id }) => id),
+    [1, 2],
+  );
+  assert.deepEqual(
+    filterTasksByTopic(tasks, "unclassified").map(({ id }) => id),
+    [3],
+  );
+});
+
+test("counts a multi-topic task once in all and once in each related topic", () => {
+  const topics = [
+    { id: 1, name: "업무", color: "#3366CC" },
+    { id: 2, name: "회사", color: "#3366CC" },
+  ];
+  const counts = topicCountsForTasks(
+    [
+      task({ id: 1, topics }),
+      task({ id: 2, topics: [topics[0]] }),
+      task({ id: 3 }),
+    ],
+    topics,
+  );
+
+  assert.deepEqual(counts, {
+    all: 3,
+    unclassified: 1,
+    byTopic: { 1: 2, 2: 1 },
+  });
 });
 
 test("marks an unfinished task overdue only when its due instant is earlier than now", () => {
