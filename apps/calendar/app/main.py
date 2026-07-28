@@ -16,7 +16,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
-DEFAULT_DB_PATH = APP_DIR.parent / "instance" / "tasks.db"
+WORKSPACE_ROOT = APP_DIR.parents[2]
+DEFAULT_DB_PATH = WORKSPACE_ROOT / "instance" / "calendar" / "tasks.db"
 TaskStatus = Literal["todo", "doing", "done"]
 KST = ZoneInfo("Asia/Seoul")
 SCHEMA_VERSION = 2
@@ -176,8 +177,14 @@ def row_to_task(row: sqlite3.Row, topics: list[Topic] | None = None) -> Task:
 
 
 def resolve_database_path(database_path: str | Path | None) -> Path:
-    configured = database_path or os.getenv("TODO_DB_PATH") or DEFAULT_DB_PATH
-    return Path(configured)
+    configured = (
+        database_path
+        or os.getenv("CALENDAR_DB_PATH")
+        or os.getenv("TODO_DB_PATH")
+        or DEFAULT_DB_PATH
+    )
+    path = Path(configured).expanduser()
+    return path if path.is_absolute() else WORKSPACE_ROOT / path
 
 
 def create_tasks_schema(connection: sqlite3.Connection, table: str = "tasks") -> None:
@@ -422,6 +429,70 @@ def initialize_database(database_path: Path, *, create_backup: bool = True) -> N
             raise
 
 
+def verify_database(database_path: Path) -> None:
+    if not database_path.is_file():
+        raise RuntimeError(f"calendar database does not exist: {database_path}")
+
+    database_uri = f"{database_path.resolve().as_uri()}?mode=ro"
+    with sqlite3.connect(database_uri, uri=True) as connection:
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
+
+        quick_check = connection.execute("PRAGMA quick_check").fetchone()[0]
+        if quick_check != "ok":
+            raise RuntimeError(f"calendar database quick_check failed: {quick_check}")
+
+        foreign_key_errors = connection.execute("PRAGMA foreign_key_check").fetchall()
+        if foreign_key_errors:
+            raise RuntimeError("calendar database foreign_key_check failed")
+
+        user_version = connection.execute("PRAGMA user_version").fetchone()[0]
+        if user_version != SCHEMA_VERSION:
+            raise RuntimeError(
+                "calendar database requires an offline migration: "
+                f"expected schema v{SCHEMA_VERSION}, found v{user_version}"
+            )
+
+        tables = {
+            row["name"]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        required_tables = {"tasks", "topics", "task_topics"}
+        if not required_tables.issubset(tables):
+            missing = ", ".join(sorted(required_tables - tables))
+            raise RuntimeError(f"calendar database is missing tables: {missing}")
+
+        required_columns = {
+            "tasks": {
+                "id",
+                "title",
+                "description",
+                "status",
+                "position",
+                "all_day",
+                "start_at",
+                "due_at",
+                "created_at",
+                "updated_at",
+            },
+            "topics": {"id", "name", "color", "created_at", "updated_at"},
+            "task_topics": {"task_id", "topic_id"},
+        }
+        for table, expected_columns in required_columns.items():
+            actual_columns = {
+                row["name"]
+                for row in connection.execute(f"PRAGMA table_info({table})")
+            }
+            missing_columns = expected_columns - actual_columns
+            if missing_columns:
+                missing = ", ".join(sorted(missing_columns))
+                raise RuntimeError(
+                    f"calendar database table {table} is missing columns: {missing}"
+                )
+
+
 @contextmanager
 def database_connection(database_path: Path) -> Iterator[sqlite3.Connection]:
     connection = sqlite3.connect(database_path)
@@ -562,12 +633,17 @@ def write_positions(
     )
 
 
-def create_app(database_path: str | Path | None = None) -> FastAPI:
+def create_app(
+    database_path: str | Path | None = None,
+    *,
+    initialize_on_startup: bool = True,
+) -> FastAPI:
     resolved_database_path = resolve_database_path(database_path)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        initialize_database(resolved_database_path)
+        if initialize_on_startup:
+            initialize_database(resolved_database_path)
         yield
 
     application = FastAPI(

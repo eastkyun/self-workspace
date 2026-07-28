@@ -1,0 +1,14 @@
+{
+  "apps": [
+    {
+      "id": "calendar",
+      "name": "Calendar",
+      "kind": "internal",
+      "url": "/apps/calendar/",
+      "icon": "/static/icons/calendar.svg",
+      "description": "월간 캘린더에서 일정과 주제를 관리합니다.",
+      "defaultPinned": true,
+      "order": 10
+    }
+  ]
+}

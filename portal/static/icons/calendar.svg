@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="title">
+  <title id="title">Calendar</title>
+  <rect x="5" y="8" width="38" height="35" rx="8" fill="#f6f7f9" stroke="#1f2937" stroke-width="2"/>
+  <path d="M6 18h36" stroke="#1f2937" stroke-width="2"/>
+  <path d="M15 5v7M33 5v7" stroke="#1f2937" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="17" cy="27" r="3" fill="#10a37f"/>
+  <circle cx="27" cy="27" r="3" fill="#10a37f"/>
+  <circle cx="17" cy="36" r="3" fill="#10a37f"/>
+</svg>

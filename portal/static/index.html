@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>My Workspace</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <div class="workspace-shell">
+      <aside id="sidebar" class="sidebar" aria-label="앱 사이드바">
+        <div class="sidebar-header">
+          <a class="brand" href="/" aria-label="My Workspace 홈">
+            <span class="brand-mark" aria-hidden="true">M</span>
+            <span>My Workspace</span>
+          </a>
+          <button id="sidebar-close" class="icon-button mobile-only" type="button" aria-label="사이드바 닫기">×</button>
+        </div>
+        <nav aria-label="등록된 앱">
+          <p class="section-label">Apps</p>
+          <div id="sidebar-apps" class="sidebar-apps"></div>
+        </nav>
+        <div class="sidebar-footer">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span>모든 자산을 로컬에서 제공</span>
+        </div>
+      </aside>
+
+      <button id="sidebar-scrim" class="sidebar-scrim" type="button" aria-label="사이드바 닫기"></button>
+
+      <main class="main-content">
+        <header class="topbar">
+          <button id="sidebar-open" class="icon-button mobile-only" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="사이드바 열기">☰</button>
+          <div>
+            <p class="eyebrow">APP HUB</p>
+            <h1>좋은 오후예요</h1>
+          </div>
+          <button id="launcher-toggle" class="launcher-button" type="button" aria-controls="launcher" aria-expanded="false">
+            <span class="dot-grid" aria-hidden="true"></span>
+            <span class="sr-only">앱 런처 열기</span>
+          </button>
+        </header>
+
+        <section aria-labelledby="pinned-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">PINNED</p>
+              <h2 id="pinned-title">고정한 앱</h2>
+            </div>
+            <p>자주 쓰는 앱을 빠르게 여세요.</p>
+          </div>
+          <div id="pinned-apps" class="card-grid" aria-live="polite"></div>
+          <p id="pinned-empty" class="empty-state" hidden>런처에서 앱을 고정하면 여기에 표시됩니다.</p>
+        </section>
+
+        <section aria-labelledby="all-apps-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">DISCOVER</p>
+              <h2 id="all-apps-title">모든 앱</h2>
+            </div>
+          </div>
+          <div id="all-apps" class="card-grid"></div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="launcher" class="launcher">
+      <div class="launcher-header">
+        <div>
+          <p class="eyebrow">LAUNCHER</p>
+          <h2>앱 메뉴</h2>
+        </div>
+        <button id="launcher-close" class="icon-button" type="button" aria-label="앱 런처 닫기">×</button>
+      </div>
+      <div id="launcher-grid" class="launcher-grid"></div>
+    </dialog>
+
+    <template id="app-card-template">
+      <article class="app-card">
+        <a class="app-card-link">
+          <img class="app-icon" alt="">
+          <span class="app-copy">
+            <strong class="app-name"></strong>
+            <span class="app-description"></span>
+          </span>
+        </a>
+        <button class="pin-button" type="button"></button>
+      </article>
+    </template>
+
+    <script type="module" src="/static/app.js"></script>
+  </body>
+</html>

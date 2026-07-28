@@ -16,6 +16,7 @@ import {
 } from "./calendar-adapter.js";
 
 const STATUS_LABELS = { todo: "할 일", doing: "진행 중", done: "완료" };
+const APP_BASE_URL = new URL("./", document.baseURI);
 const dialog = document.querySelector("#task-dialog");
 const form = document.querySelector("#task-form");
 const titleInput = document.querySelector("#task-title");
@@ -102,7 +103,7 @@ function roundedDefaultRange(date = null) {
 }
 
 async function request(url, options = {}) {
-  const response = await fetch(url, {
+  const response = await fetch(new URL(url, APP_BASE_URL), {
     headers: { "Content-Type": "application/json", ...options.headers },
     ...options,
   });
@@ -380,14 +381,14 @@ function refreshViews() {
 }
 
 async function loadTasks() {
-  tasks = await request("/api/tasks");
+  tasks = await request("api/tasks");
   refreshViews();
 }
 
 async function loadData() {
   [tasks, topics] = await Promise.all([
-    request("/api/tasks"),
-    request("/api/topics"),
+    request("api/tasks"),
+    request("api/topics"),
   ]);
   if (
     selectedTopicId !== "all"
@@ -463,7 +464,7 @@ async function saveTask(event) {
   };
 
   try {
-    await request(id ? `/api/tasks/${id}` : "/api/tasks", {
+    await request(id ? `api/tasks/${id}` : "api/tasks", {
       method: id ? "PATCH" : "POST",
       body: JSON.stringify(payload),
     });
@@ -478,7 +479,7 @@ async function saveTopic(event) {
   event.preventDefault();
   const id = topicIdInput.value;
   try {
-    await request(id ? `/api/topics/${id}` : "/api/topics", {
+    await request(id ? `api/topics/${id}` : "api/topics", {
       method: id ? "PATCH" : "POST",
       body: JSON.stringify({
         name: topicNameInput.value,
@@ -496,7 +497,7 @@ async function deleteTopic() {
   const topic = topics.find((item) => String(item.id) === topicIdInput.value);
   if (!topic || !window.confirm(`“${topic.name}” 주제를 삭제할까요? 일정은 삭제되지 않습니다.`)) return;
   try {
-    await request(`/api/topics/${topic.id}`, { method: "DELETE" });
+    await request(`api/topics/${topic.id}`, { method: "DELETE" });
     selectedTopicId = "unclassified";
     selectedPage = 1;
     closeTopicDialog();
@@ -509,7 +510,7 @@ async function deleteTopic() {
 async function deleteTask(task) {
   if (!task || !window.confirm(`“${task.title}” 일정을 삭제할까요?`)) return;
   try {
-    await request(`/api/tasks/${task.id}`, { method: "DELETE" });
+    await request(`api/tasks/${task.id}`, { method: "DELETE" });
     closeTaskDialog();
     await loadTasks();
   } catch (error) {

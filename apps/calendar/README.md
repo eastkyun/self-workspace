@@ -1,5 +1,11 @@
 # Calendar Diary
 
+> 이 앱은 `my-workspace`의 FastAPI sub-application으로 편입되었습니다.
+> 통합 실행은 workspace 루트에서 `uvicorn portal.main:app`을 사용하고,
+> UI/API/정적 자산은 각각 `/apps/calendar/`, `/apps/calendar/api/*`,
+> `/apps/calendar/static/*`에서 제공합니다. 아래 `/api/*`, `/static/*` 설명은
+> Calendar factory를 직접 실행할 때의 내부 route 계약입니다.
+
 FastAPI와 SQLite로 만든 단일 사용자용 월간 일정 관리 앱입니다. 로컬에 포함한
 FullCalendar로 여러 날짜에 걸친 일정을 표시하고, `할 일`, `진행 중`, `완료`
 상태, 여러 주제, 마감 초과 여부를 함께 관리합니다.
@@ -33,7 +39,7 @@ FullCalendar로 여러 날짜에 걸친 일정을 표시하고, `할 일`, `진�
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -r requirements.txt
-uvicorn app.main:app --reload
+uvicorn apps.calendar.app.main:app --reload
 ```
 
 브라우저에서 <http://127.0.0.1:8000>을 엽니다. 기본 데이터베이스는
@@ -208,7 +214,7 @@ Pretendard로 통일하고, 글꼴을 불러오지 못할 때는 Apple SD Gothic
 ```bash
 python3 -m pip install -r requirements-dev.txt
 .venv/bin/python -m pytest -q
-node --test tests/test_calendar.mjs
+node --test tests/calendar/test_calendar.mjs
 ```
 
 JavaScript 테스트는 npm 패키지 없이 Node 내장 `node:test`를 사용합니다.
