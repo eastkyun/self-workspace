@@ -3,67 +3,82 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="세 단계로 작업을 관리하는 단순한 칸반 보드">
-    <title>Simple Kanban</title>
+    <meta name="description" content="월간 캘린더로 일정을 기록하고 관리하는 다이어리">
+    <title>월간 일정 다이어리</title>
+    <link rel="stylesheet" href="/static/vendor/fullcalendar/7.0.2/skeleton.css">
+    <link rel="stylesheet" href="/static/vendor/fullcalendar/7.0.2/themes/classic/theme.css">
+    <link rel="stylesheet" href="/static/vendor/fullcalendar/7.0.2/themes/classic/palette.css">
     <link rel="stylesheet" href="/static/styles.css">
   </head>
   <body>
     <header class="app-header">
-      <div>
-        <p class="eyebrow">MY WORKSPACE</p>
-        <h1>Simple Kanban</h1>
+      <div class="brand">
+        <p class="eyebrow">MONTHLY DIARY</p>
+        <h1>일정 다이어리</h1>
       </div>
-      <button class="button button-primary" id="new-task-button" type="button">
-        <span aria-hidden="true">＋</span> 새 작업
+      <div class="calendar-navigation" aria-label="달력 탐색">
+        <button class="icon-button navigation-button" id="previous-month" type="button" aria-label="이전 달">‹</button>
+        <button class="button button-secondary today-button" id="today-button" type="button">오늘</button>
+        <button class="icon-button navigation-button" id="next-month" type="button" aria-label="다음 달">›</button>
+      </div>
+      <h2 class="month-title" id="month-title" aria-live="polite"></h2>
+      <button class="button button-primary new-task-button" id="new-task-button" type="button">
+        <span aria-hidden="true">＋</span> 새 일정
       </button>
     </header>
 
     <div class="notification" id="notification" role="status" aria-live="polite" hidden></div>
 
-    <main class="board" id="board" aria-label="할 일 칸반 보드">
-      <section class="column" data-status="todo" aria-labelledby="todo-title">
-        <header class="column-header">
-          <div class="column-heading">
-            <span class="status-dot status-dot-todo" aria-hidden="true"></span>
-            <h2 id="todo-title">할 일</h2>
-          </div>
-          <span class="task-count" data-count="todo" aria-label="할 일 작업 수">0</span>
-        </header>
-        <div class="task-list" data-task-list="todo"></div>
-        <button class="add-column-task" data-add-status="todo" type="button">＋ 작업 추가</button>
+    <main class="app-content">
+      <section class="filter-bar" aria-label="일정 필터와 범례">
+        <div class="filter-group" aria-label="상태 필터">
+          <label class="filter-chip status-todo">
+            <input type="checkbox" value="todo" data-status-filter checked>
+            <span class="status-dot" aria-hidden="true"></span> 할 일
+          </label>
+          <label class="filter-chip status-doing">
+            <input type="checkbox" value="doing" data-status-filter checked>
+            <span class="status-dot" aria-hidden="true"></span> 진행 중
+          </label>
+          <label class="filter-chip status-done">
+            <input type="checkbox" value="done" data-status-filter checked>
+            <span class="status-dot" aria-hidden="true"></span> 완료
+          </label>
+          <label class="filter-chip overdue-filter">
+            <input type="checkbox" id="overdue-filter">
+            <span aria-hidden="true">!</span> 마감 초과 <strong id="overdue-count">0</strong>
+          </label>
+        </div>
+        <p class="filter-empty" id="filter-empty" hidden>표시할 상태를 하나 이상 선택해 주세요.</p>
       </section>
 
-      <section class="column" data-status="doing" aria-labelledby="doing-title">
-        <header class="column-header">
-          <div class="column-heading">
-            <span class="status-dot status-dot-doing" aria-hidden="true"></span>
-            <h2 id="doing-title">진행 중</h2>
-          </div>
-          <span class="task-count" data-count="doing" aria-label="진행 중 작업 수">0</span>
-        </header>
-        <div class="task-list" data-task-list="doing"></div>
-        <button class="add-column-task" data-add-status="doing" type="button">＋ 작업 추가</button>
-      </section>
+      <div class="diary-layout">
+        <section class="calendar-shell" aria-label="월간 일정 달력">
+          <div id="calendar"></div>
+        </section>
 
-      <section class="column" data-status="done" aria-labelledby="done-title">
-        <header class="column-header">
-          <div class="column-heading">
-            <span class="status-dot status-dot-done" aria-hidden="true"></span>
-            <h2 id="done-title">완료</h2>
-          </div>
-          <span class="task-count" data-count="done" aria-label="완료 작업 수">0</span>
-        </header>
-        <div class="task-list" data-task-list="done"></div>
-        <button class="add-column-task" data-add-status="done" type="button">＋ 작업 추가</button>
-      </section>
+        <aside class="date-panel" id="date-panel" aria-labelledby="selected-date-title">
+          <header class="date-panel-header">
+            <div>
+              <p class="eyebrow">SELECTED DATE</p>
+              <h2 id="selected-date-title"></h2>
+            </div>
+            <span class="selected-count" id="selected-count">0</span>
+          </header>
+          <div class="selected-task-list" id="selected-task-list"></div>
+          <button class="button button-secondary add-date-task" id="add-date-task" type="button">
+            ＋ 이 날짜에 일정 추가
+          </button>
+        </aside>
+      </div>
     </main>
 
     <dialog class="task-dialog" id="task-dialog" aria-labelledby="dialog-title">
       <form id="task-form">
         <div class="dialog-header">
           <div>
-            <p class="eyebrow">TASK DETAILS</p>
-            <h2 id="dialog-title">새 작업</h2>
+            <p class="eyebrow">SCHEDULE DETAILS</p>
+            <h2 id="dialog-title">새 일정</h2>
           </div>
           <button class="icon-button" id="close-dialog" type="button" aria-label="닫기">×</button>
         </div>
@@ -73,7 +88,34 @@
         <input id="task-title" name="title" type="text" maxlength="120" required autofocus>
 
         <label for="task-description">설명 <span class="optional">(선택)</span></label>
-        <textarea id="task-description" name="description" rows="5"></textarea>
+        <textarea id="task-description" name="description" rows="4"></textarea>
+
+        <label class="all-day-toggle" for="task-all-day">
+          <input id="task-all-day" name="all_day" type="checkbox">
+          <span>종일 일정</span>
+        </label>
+
+        <div class="date-fields timed-fields" id="timed-fields">
+          <div>
+            <label for="task-start-at">시작</label>
+            <input id="task-start-at" name="start_at" type="datetime-local" step="60">
+          </div>
+          <div>
+            <label for="task-due-at">마감</label>
+            <input id="task-due-at" name="due_at" type="datetime-local" step="60">
+          </div>
+        </div>
+
+        <div class="date-fields all-day-fields" id="all-day-fields" hidden>
+          <div>
+            <label for="task-start-date">시작일</label>
+            <input id="task-start-date" type="date">
+          </div>
+          <div>
+            <label for="task-due-date">마감일</label>
+            <input id="task-due-date" type="date">
+          </div>
+        </div>
 
         <label for="task-status">상태</label>
         <select id="task-status" name="status">
@@ -83,20 +125,30 @@
         </select>
 
         <div class="dialog-actions">
+          <button class="button delete-dialog-button" id="delete-task-button" type="button" hidden>삭제</button>
+          <span class="action-spacer"></span>
           <button class="button button-secondary" id="cancel-dialog" type="button">취소</button>
           <button class="button button-primary" type="submit">저장</button>
         </div>
       </form>
     </dialog>
 
-    <template id="empty-state-template">
-      <div class="empty-state">
-        <span aria-hidden="true">○</span>
-        <p>아직 작업이 없습니다</p>
-      </div>
+    <template id="selected-task-template">
+      <article class="selected-task-card">
+        <button class="selected-task-main" type="button">
+          <span class="selected-task-status"></span>
+          <span class="selected-task-copy">
+            <strong class="selected-task-title"></strong>
+            <span class="selected-task-time"></span>
+          </span>
+          <span class="overdue-mark" aria-label="마감 초과" hidden>!</span>
+        </button>
+      </article>
     </template>
 
-    <script src="/static/app.js" defer></script>
+    <script src="/static/vendor/fullcalendar/7.0.2/fullcalendar.global.js"></script>
+    <script src="/static/vendor/fullcalendar/7.0.2/locales-all/global.js"></script>
+    <script src="/static/vendor/fullcalendar/7.0.2/themes/classic/global.js"></script>
+    <script type="module" src="/static/app.js"></script>
   </body>
 </html>
-

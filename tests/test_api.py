@@ -6,6 +6,9 @@ from fastapi.testclient import TestClient
 
 from app.main import TaskCreate, create_app, initialize_database
 
+START_AT = "2026-07-28T09:00:00+09:00"
+DUE_AT = "2026-07-28T10:00:00+09:00"
+
 
 @pytest.fixture
 def client(tmp_path: Path):
@@ -17,7 +20,13 @@ def client(tmp_path: Path):
 def create_task(client: TestClient, title: str, status: str = "todo") -> dict:
     response = client.post(
         "/api/tasks",
-        json={"title": title, "description": "", "status": status},
+        json={
+            "title": title,
+            "description": "",
+            "status": status,
+            "start_at": START_AT,
+            "due_at": DUE_AT,
+        },
     )
     assert response.status_code == 201
     return response.json()
@@ -37,13 +46,22 @@ def test_empty_database_returns_empty_list(client: TestClient):
 
 
 def test_create_task_uses_defaults_and_appends_position(client: TestClient):
-    first = client.post("/api/tasks", json={"title": "  첫 작업  "})
-    second = client.post("/api/tasks", json={"title": "두 번째"})
+    first = client.post(
+        "/api/tasks",
+        json={"title": "  첫 작업  ", "start_at": START_AT, "due_at": DUE_AT},
+    )
+    second = client.post(
+        "/api/tasks",
+        json={"title": "두 번째", "start_at": START_AT, "due_at": DUE_AT},
+    )
 
     assert first.status_code == 201
     assert first.json()["title"] == "첫 작업"
     assert first.json()["status"] == "todo"
     assert first.json()["position"] == 0
+    assert first.json()["all_day"] is False
+    assert first.json()["start_at"] == START_AT
+    assert first.json()["due_at"] == DUE_AT
     assert second.json()["position"] == 1
 
 
@@ -62,7 +80,14 @@ def test_concurrent_creates_assign_unique_contiguous_positions(tmp_path: Path):
         tasks = list(
             executor.map(
                 create_task_endpoint,
-                [TaskCreate(title=f"작업 {index}") for index in range(30)],
+                [
+                    TaskCreate(
+                        title=f"작업 {index}",
+                        start_at=START_AT,
+                        due_at=DUE_AT,
+                    )
+                    for index in range(30)
+                ],
             )
         )
 
@@ -77,12 +102,52 @@ def test_concurrent_creates_assign_unique_contiguous_positions(tmp_path: Path):
         {"title": "   "},
         {"title": "x" * 121},
         {"title": "작업", "status": "blocked"},
+        {"title": "작업", "start_at": START_AT},
+        {"title": "작업", "start_at": START_AT, "due_at": "2026-07-28T10:00:00"},
+        {
+            "title": "작업",
+            "start_at": DUE_AT,
+            "due_at": START_AT,
+        },
     ],
 )
 def test_create_rejects_invalid_input(client: TestClient, payload: dict):
     response = client.post("/api/tasks", json=payload)
 
     assert response.status_code == 422
+
+
+def test_create_normalizes_offsets_to_kst(client: TestClient):
+    response = client.post(
+        "/api/tasks",
+        json={
+            "title": "UTC 일정",
+            "start_at": "2026-07-28T00:00:00Z",
+            "due_at": "2026-07-28T01:00:00Z",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["start_at"] == START_AT
+    assert response.json()["due_at"] == DUE_AT
+
+
+def test_create_all_day_normalizes_to_kst_day_boundaries(client: TestClient):
+    response = client.post(
+        "/api/tasks",
+        json={
+            "title": "종일 일정",
+            "all_day": True,
+            "start_at": "2026-07-28T15:30:00+09:00",
+            "due_at": "2026-07-30T08:30:00+09:00",
+        },
+    )
+
+    assert response.status_code == 201
+    task = response.json()
+    assert task["all_day"] is True
+    assert task["start_at"] == "2026-07-28T00:00:00+09:00"
+    assert task["due_at"] == "2026-07-30T23:59:59+09:00"
 
 
 def test_partially_updates_title_and_description(client: TestClient):
@@ -97,6 +162,37 @@ def test_partially_updates_title_and_description(client: TestClient):
     assert response.json()["title"] == "변경 제목"
     assert response.json()["description"] == "설명"
     assert response.json()["status"] == "todo"
+
+
+def test_patch_schedule_merges_with_stored_values_and_validates(client: TestClient):
+    task = create_task(client, "일정")
+
+    invalid = client.patch(
+        f"/api/tasks/{task['id']}",
+        json={"start_at": "2026-07-28T11:00:00+09:00"},
+    )
+    valid = client.patch(
+        f"/api/tasks/{task['id']}",
+        json={"due_at": "2026-07-28T11:00:00+09:00"},
+    )
+
+    assert invalid.status_code == 422
+    assert valid.status_code == 200
+    assert valid.json()["start_at"] == START_AT
+    assert valid.json()["due_at"] == "2026-07-28T11:00:00+09:00"
+
+
+def test_patch_all_day_normalizes_existing_schedule(client: TestClient):
+    task = create_task(client, "일정")
+
+    response = client.patch(
+        f"/api/tasks/{task['id']}",
+        json={"all_day": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["start_at"] == "2026-07-28T00:00:00+09:00"
+    assert response.json()["due_at"] == "2026-07-28T23:59:59+09:00"
 
 
 def test_reorders_tasks_within_a_column(client: TestClient):
@@ -156,14 +252,69 @@ def test_rejects_null_update_fields(client: TestClient):
     assert response.status_code == 422
 
 
+def test_lists_tasks_in_calendar_order(client: TestClient):
+    later = client.post(
+        "/api/tasks",
+        json={
+            "title": "나중",
+            "start_at": "2026-07-29T09:00:00+09:00",
+            "due_at": "2026-07-29T10:00:00+09:00",
+        },
+    ).json()
+    earlier = client.post(
+        "/api/tasks",
+        json={
+            "title": "먼저",
+            "status": "done",
+            "start_at": START_AT,
+            "due_at": DUE_AT,
+        },
+    ).json()
+
+    response = client.get("/api/tasks")
+
+    assert [task["id"] for task in response.json()] == [earlier["id"], later["id"]]
+
+
 def test_serves_page_and_static_assets(client: TestClient):
     page = client.get("/")
     stylesheet = client.get("/static/styles.css")
     script = client.get("/static/app.js")
+    adapter = client.get("/static/calendar-adapter.js")
+    fullcalendar = client.get(
+        "/static/vendor/fullcalendar/7.0.2/fullcalendar.global.js"
+    )
+    locales = client.get(
+        "/static/vendor/fullcalendar/7.0.2/locales-all/global.js"
+    )
+    skeleton = client.get("/static/vendor/fullcalendar/7.0.2/skeleton.css")
+    classic_script = client.get(
+        "/static/vendor/fullcalendar/7.0.2/themes/classic/global.js"
+    )
+    classic_theme = client.get(
+        "/static/vendor/fullcalendar/7.0.2/themes/classic/theme.css"
+    )
+    classic_palette = client.get(
+        "/static/vendor/fullcalendar/7.0.2/themes/classic/palette.css"
+    )
+    license_file = client.get("/static/vendor/fullcalendar/7.0.2/LICENSE.md")
 
     assert page.status_code == 200
-    assert "Simple Kanban" in page.text
+    assert 'id="calendar"' in page.text
+    assert "cdn.jsdelivr" not in page.text
+    assert "unpkg" not in page.text
     assert stylesheet.status_code == 200
-    assert "--primary" in stylesheet.text
+    assert ".calendar-shell" in stylesheet.text
     assert script.status_code == 200
     assert "loadTasks" in script.text
+    assert adapter.status_code == 200
+    assert "taskToCalendarEvent" in adapter.text
+    assert fullcalendar.status_code == 200
+    assert "FullCalendar (Vanilla JS) v7.0.2" in fullcalendar.text
+    assert locales.status_code == 200
+    assert skeleton.status_code == 200
+    assert classic_script.status_code == 200
+    assert classic_theme.status_code == 200
+    assert classic_palette.status_code == 200
+    assert license_file.status_code == 200
+    assert "MIT License" in license_file.text
