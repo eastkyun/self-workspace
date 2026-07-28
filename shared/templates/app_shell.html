@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>{{ page_title }} · My Workspace</title>
+    <link rel="stylesheet" href="./static/shared/shell.css">
+    {% block page_head %}{% endblock %}
+  </head>
+  <body class="workspace-body" data-current-app="{{ current_app_id }}">
+    <div class="workspace-shell">
+      <aside id="sidebar" class="workspace-sidebar" aria-label="Workspace 탐색">
+        <div class="workspace-sidebar-header">
+          <a class="workspace-brand" href="{{ workspace_path('/') }}" aria-label="My Workspace 홈">
+            <span class="workspace-brand-mark" aria-hidden="true">M</span>
+            <span class="workspace-brand-copy">My Workspace</span>
+          </a>
+          <button
+            id="sidebar-collapse"
+            class="workspace-icon-button desktop-only"
+            type="button"
+            aria-controls="sidebar"
+            aria-expanded="true"
+            aria-label="사이드바 접기"
+          >‹</button>
+          <button
+            id="sidebar-close"
+            class="workspace-icon-button mobile-only"
+            type="button"
+            aria-label="사이드바 닫기"
+          >×</button>
+        </div>
+
+        <nav class="workspace-navigation" aria-label="Workspace 메뉴">
+          <p class="workspace-section-label">Workspace</p>
+          <a
+            class="workspace-nav-link{% if current_app_id == 'home' %} is-active{% endif %}"
+            href="{{ workspace_path('/') }}"
+            {% if current_app_id == 'home' %}aria-current="page"{% endif %}
+          >
+            <span class="workspace-nav-icon workspace-home-icon" aria-hidden="true">⌂</span>
+            <span class="workspace-nav-label">Home</span>
+          </a>
+
+          <p class="workspace-section-label">Apps</p>
+          <div class="workspace-app-navigation">
+            {% for app in navigation_apps %}
+            <a
+              class="workspace-nav-link{% if current_app_id == app.id %} is-active{% endif %}"
+              href="{% if app.kind == 'external' %}{{ app.url }}{% else %}{{ workspace_path(app.url) }}{% endif %}"
+              data-app-id="{{ app.id }}"
+              {% if current_app_id == app.id %}aria-current="page"{% endif %}
+              {% if app.kind == 'external' %}target="_blank" rel="noopener noreferrer"{% endif %}
+            >
+              <img class="workspace-nav-icon" src="{{ workspace_path(app.icon) }}" alt="">
+              <span class="workspace-nav-label">{{ app.name }}</span>
+            </a>
+            {% else %}
+            <p class="workspace-navigation-empty">등록된 앱이 없습니다.</p>
+            {% endfor %}
+          </div>
+        </nav>
+
+        <div class="workspace-sidebar-management">
+          <p class="workspace-section-label">Manage</p>
+          <button
+            class="workspace-nav-link workspace-launcher-trigger"
+            type="button"
+            aria-controls="launcher"
+            aria-expanded="false"
+          >
+            <span class="workspace-nav-icon" aria-hidden="true">⋮</span>
+            <span class="workspace-nav-label">앱 관리</span>
+          </button>
+        </div>
+
+        <div class="workspace-sidebar-footer">
+          <span class="workspace-status-dot" aria-hidden="true"></span>
+          <span class="workspace-nav-label">모든 자산을 로컬에서 제공</span>
+        </div>
+      </aside>
+
+      <button
+        id="sidebar-scrim"
+        class="workspace-sidebar-scrim"
+        type="button"
+        aria-label="사이드바 닫기"
+        tabindex="-1"
+      ></button>
+
+      <div class="workspace-frame">
+        <header class="workspace-header">
+          <button
+            id="sidebar-open"
+            class="workspace-icon-button mobile-only"
+            type="button"
+            aria-controls="sidebar"
+            aria-expanded="false"
+            aria-label="사이드바 열기"
+          >☰</button>
+          <div class="workspace-header-title">
+            <p class="workspace-eyebrow">MY WORKSPACE</p>
+            <h1>{{ current_app_name }}</h1>
+          </div>
+          <div class="workspace-global-actions">
+            {% block global_actions %}{% endblock %}
+            <button
+              id="launcher-toggle"
+              class="workspace-launcher-button workspace-launcher-trigger"
+              type="button"
+              aria-controls="launcher"
+              aria-expanded="false"
+            >
+              <span class="workspace-dot-grid" aria-hidden="true"></span>
+              <span class="sr-only">앱 런처 열기</span>
+            </button>
+          </div>
+        </header>
+
+        <main id="workspace-main" class="workspace-main">
+          {% block content %}{% endblock %}
+        </main>
+      </div>
+    </div>
+
+    <dialog id="launcher" class="workspace-launcher" aria-labelledby="launcher-title">
+      <div class="workspace-launcher-header">
+        <div>
+          <p class="workspace-eyebrow">LAUNCHER</p>
+          <h2 id="launcher-title">앱 메뉴</h2>
+        </div>
+        <button id="launcher-close" class="workspace-icon-button" type="button" aria-label="앱 런처 닫기">×</button>
+      </div>
+      <div id="launcher-grid" class="workspace-launcher-grid">
+        {% for app in apps %}
+        <div class="workspace-launcher-item" data-app-id="{{ app.id }}">
+          <a
+            href="{% if app.kind == 'external' %}{{ app.url }}{% else %}{{ workspace_path(app.url) }}{% endif %}"
+            {% if app.kind == 'external' %}target="_blank" rel="noopener noreferrer"{% endif %}
+          >
+            <img src="{{ workspace_path(app.icon) }}" alt="">
+            <span>{{ app.name }}</span>
+          </a>
+          <button
+            class="workspace-pin-button"
+            type="button"
+            data-pin-app="{{ app.id }}"
+            data-default-pinned="{{ 'true' if app.defaultPinned else 'false' }}"
+            aria-label="{{ app.name }} 고정"
+          ></button>
+        </div>
+        {% endfor %}
+      </div>
+    </dialog>
+
+    <script type="module" src="./static/shared/shell.js"></script>
+    {% block page_scripts %}{% endblock %}
+  </body>
+</html>
