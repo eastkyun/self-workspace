@@ -3,10 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from shared.app_registry import (
     AppRegistry,
     JsonRegistrySource,
+    RegistryDocument,
     RegistryValidationError,
     normalize_internal_route,
     parse_registry_payload,
@@ -400,3 +402,30 @@ def test_source_merge_aggregates_errors_from_every_source(tmp_path: Path) -> Non
         str(second_path),
     }
     assert issue_codes(caught.value) == {"document_type", "source_error"}
+
+
+def test_registry_document_rejects_unsupported_version_directly() -> None:
+    with pytest.raises(ValidationError, match="unsupported registry schema"):
+        RegistryDocument(schema_version=2, categories=(), apps=())
+
+
+def test_registry_source_cannot_bypass_schema_version_validation() -> None:
+    unsupported = RegistryDocument.model_construct(
+        schema_version=2,
+        categories=(),
+        apps=(),
+    )
+
+    class UnsupportedSource:
+        source_name = "unsupported"
+
+        def load(self):
+            return unsupported
+
+    with pytest.raises(RegistryValidationError) as caught:
+        AppRegistry.from_source(UnsupportedSource())
+
+    assert issue_codes(caught.value) == {"unsupported_schema_version"}
+
+    with pytest.raises(RegistryValidationError, match="received 2"):
+        AppRegistry(unsupported)

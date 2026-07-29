@@ -144,9 +144,18 @@ class AppManifest(BaseModel):
 class RegistryDocument(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: int
+    schema_version: int = Field(strict=True)
     categories: tuple[AppCategory, ...]
     apps: tuple[AppManifest, ...]
+
+    @field_validator("schema_version")
+    @classmethod
+    def validate_schema_version(cls, schema_version: int) -> int:
+        if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
+            raise ValueError(
+                f"unsupported registry schema version: {schema_version}"
+            )
+        return schema_version
 
 
 def _validation_issues(
@@ -434,9 +443,34 @@ class RegistrySource(Protocol):
 class AppRegistry:
     """Immutable, validated snapshot of all registered workspace apps."""
 
-    __slots__ = ("_apps", "_categories", "_app_by_id", "_category_by_id")
+    __slots__ = (
+        "_apps",
+        "_categories",
+        "_app_by_id",
+        "_category_by_id",
+        "_schema_version",
+    )
 
     def __init__(self, document: RegistryDocument) -> None:
+        if (
+            type(document.schema_version) is not int
+            or document.schema_version not in SUPPORTED_SCHEMA_VERSIONS
+        ):
+            raise RegistryValidationError(
+                [
+                    RegistryIssue(
+                        code="unsupported_schema_version",
+                        source="registry document",
+                        field="schema_version",
+                        message=(
+                            f"supported versions are "
+                            f"{sorted(SUPPORTED_SCHEMA_VERSIONS)}; received "
+                            f"{document.schema_version!r}"
+                        ),
+                    )
+                ]
+            )
+        self._schema_version = document.schema_version
         category_by_id = {category.id: category for category in document.categories}
         self._category_by_id = category_by_id
         self._categories = tuple(
@@ -488,9 +522,36 @@ class AppRegistry:
         documents: list[tuple[str, RegistryDocument]] = []
         for source in loaded_sources:
             try:
-                documents.append((source.source_name, source.load()))
+                document = source.load()
             except RegistryValidationError as error:
                 issues.extend(error.issues)
+                continue
+            if not isinstance(document, RegistryDocument):
+                issues.append(
+                    RegistryIssue(
+                        code="document_type",
+                        source=source.source_name,
+                        message="registry source must return RegistryDocument",
+                    )
+                )
+                continue
+            if (
+                type(document.schema_version) is not int
+                or document.schema_version not in SUPPORTED_SCHEMA_VERSIONS
+            ):
+                issues.append(
+                    RegistryIssue(
+                        code="unsupported_schema_version",
+                        source=source.source_name,
+                        field="schema_version",
+                        message=(
+                            f"supported versions are "
+                            f"{sorted(SUPPORTED_SCHEMA_VERSIONS)}; received "
+                            f"{document.schema_version!r}"
+                        ),
+                    )
+                )
+            documents.append((source.source_name, document))
 
         categories = tuple(
             (source_name, category)
@@ -613,7 +674,7 @@ class AppRegistry:
 
         return cls(
             RegistryDocument(
-                schema_version=1,
+                schema_version=documents[0][1].schema_version,
                 categories=tuple(category for _, category in categories),
                 apps=tuple(app for _, app in apps),
             )
@@ -699,7 +760,7 @@ class AppRegistry:
 
     def to_json(self, *, indent: int = 2) -> str:
         document = RegistryDocument(
-            schema_version=1,
+            schema_version=self._schema_version,
             categories=self.categories(),
             apps=self.get_all(),
         )
