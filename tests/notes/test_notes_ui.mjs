@@ -69,6 +69,7 @@ test("API adapter builds mounted relative CRUD requests", async () => {
       ok: true,
       status: options.method === "DELETE" ? 204 : 200,
       json: async () => [],
+      arrayBuffer: async () => new ArrayBuffer(0),
     };
   };
   const api = createNotesApi("./api/notes", fetchImpl);

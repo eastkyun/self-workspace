@@ -130,7 +130,11 @@ async function request(url, options = {}) {
     }
     throw new Error(message);
   }
-  return response.status === 204 ? null : response.json();
+  if (response.status === 204) {
+    await response.arrayBuffer();
+    return null;
+  }
+  return response.json();
 }
 
 async function notesRequest(path = "", options = {}) {
@@ -148,7 +152,11 @@ async function notesRequest(path = "", options = {}) {
     }
     throw new Error(message);
   }
-  return response.status === 204 ? null : response.json();
+  if (response.status === 204) {
+    await response.arrayBuffer();
+    return null;
+  }
+  return response.json();
 }
 
 function showError(message) {

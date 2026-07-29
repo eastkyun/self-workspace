@@ -5,7 +5,11 @@ export function createNotesApi(baseUrl, fetchImpl = fetch) {
       headers: { Accept: "application/json", ...options.headers },
     });
     if (response.ok) {
-      return response.status === 204 ? null : response.json();
+      if (response.status === 204) {
+        await response.arrayBuffer();
+        return null;
+      }
+      return response.json();
     }
     let message = "요청을 처리하지 못했습니다.";
     try {

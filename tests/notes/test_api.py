@@ -43,7 +43,9 @@ def test_crud_contract(client: TestClient) -> None:
     )
     assert updated.status_code == 200
     assert updated.json()["is_pinned"] is True
-    assert client.delete(f"/api/notes/{note['id']}").status_code == 204
+    deleted = client.delete(f"/api/notes/{note['id']}")
+    assert deleted.status_code == 204
+    assert deleted.headers["content-length"] == "0"
     assert client.get(f"/api/notes/{note['id']}").status_code == 404
 
 

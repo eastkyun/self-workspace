@@ -163,7 +163,10 @@ def create_app(
             service.delete_note(note_id)
         except NoteNotFoundError as error:
             raise HTTPException(status_code=404, detail="Note not found") from error
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
+        return Response(
+            status_code=status.HTTP_204_NO_CONTENT,
+            headers={"Content-Length": "0"},
+        )
 
     @application.get(
         "/api/notes/{note_id}/links",
@@ -204,7 +207,10 @@ def create_app(
             service.delete_link(note_id, link_id)
         except (NoteNotFoundError, LinkNotFoundError) as error:
             raise HTTPException(status_code=404, detail="Link not found") from error
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
+        return Response(
+            status_code=status.HTTP_204_NO_CONTENT,
+            headers={"Content-Length": "0"},
+        )
 
     return application
 
