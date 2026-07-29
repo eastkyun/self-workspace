@@ -162,6 +162,44 @@ def test_mobile_sidebar_collapses_and_opens(page: Page, live_server: str) -> Non
     assert external_requests == []
 
 
+@pytest.mark.parametrize(("width", "height"), VIEWPORTS)
+def test_hub_quote_viewport_layout_and_request_health(
+    page: Page,
+    live_server: str,
+    width: int,
+    height: int,
+) -> None:
+    external_requests = assert_same_origin_requests(page, live_server)
+    failed_requests: list[str] = []
+    console_errors: list[str] = []
+    page.on("requestfailed", lambda request: failed_requests.append(request.url))
+    page.on(
+        "console",
+        lambda message: (
+            console_errors.append(message.text) if message.type == "error" else None
+        ),
+    )
+    page.set_viewport_size({"width": width, "height": height})
+    page.goto(live_server)
+
+    quote = page.locator(".hub-quote")
+    expect(quote).to_be_visible()
+    expect(quote.locator("cite")).not_to_be_empty()
+    metrics = page.evaluate(
+        """() => ({
+          innerWidth: window.innerWidth,
+          documentWidth: document.documentElement.scrollWidth,
+          quoteWidth: document.querySelector('.hub-quote').getBoundingClientRect().width,
+          mainWidth: document.querySelector('#workspace-main').getBoundingClientRect().width,
+        })"""
+    )
+    assert metrics["documentWidth"] == metrics["innerWidth"]
+    assert 0 < metrics["quoteWidth"] <= metrics["mainWidth"]
+    assert external_requests == []
+    assert failed_requests == []
+    assert console_errors == []
+
+
 def test_calendar_nested_route_uses_only_local_assets(page: Page, live_server: str) -> None:
     external_requests = assert_same_origin_requests(page, live_server)
     failed_requests: list[str] = []
