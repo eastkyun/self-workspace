@@ -106,8 +106,13 @@ test("calendar description uses the shared compact Markdown editor", () => {
   assert.match(indexSource, /static\/shared\/markdown\/markdown\.css/);
   assert.match(indexSource, /id="task-markdown-toolbar"/);
   assert.match(indexSource, /id="task-markdown-preview"/);
+  assert.match(indexSource, /id="task-description-viewer"/);
+  assert.match(indexSource, /id="edit-task-button"/);
   assert.match(appSource, /profile: "compact"/);
-  assert.match(appSource, /taskMarkdownPreview\.setMode\(task \? "preview" : "editor"\)/);
+  assert.match(appSource, /mountMarkdownViewer\(/);
+  assert.match(appSource, /setTaskDialogMode\(task \? "detail" : "create"\)/);
+  assert.match(appSource, /function enterTaskEditMode\(\)/);
+  assert.match(appSource, /function taskFormIsDirty\(\)/);
   assert.match(appSource, /collectInternalLinks\(task\.description\)/);
 });
 

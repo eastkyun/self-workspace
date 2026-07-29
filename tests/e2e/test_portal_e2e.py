@@ -378,21 +378,71 @@ def test_calendar_shared_markdown_compact_editor_and_viewer(
     expect(dialog).to_be_hidden()
 
     page.get_by_role("button", name="일정 열기: Markdown 일정").click()
-    expect(dialog.locator("#task-description")).to_be_hidden()
-    expect(preview.locator("strong")).to_have_text("중요 일정")
-    expect(preview.locator("h2")).to_have_text("준비 사항")
-    expect(preview.locator("script")).to_have_count(0)
+    detail = dialog.locator("#task-detail-content")
+    viewer = dialog.locator("#task-description-viewer")
+    expect(detail).to_be_visible()
+    expect(dialog.locator("#task-edit-content")).to_be_hidden()
+    expect(viewer.locator("strong")).to_have_text("중요 일정")
+    expect(viewer.locator("h2")).to_have_text("준비 사항")
+    expect(viewer.locator("script")).to_have_count(0)
     assert page.evaluate("window.__calendarMarkdownXss") is None
 
-    dialog.get_by_role("button", name="미리보기").click()
-    expect(dialog.locator("#task-description")).to_be_visible()
+    dialog.get_by_role("button", name="편집").click()
+    expect(dialog.locator("#task-edit-content")).to_be_visible()
+    expect(detail).to_be_hidden()
     dialog.locator("#task-description").press("End")
     dialog.locator("#task-description").type("\n\n수정됨")
     dialog.get_by_role("button", name="저장").click()
-    page.get_by_role("button", name="일정 열기: Markdown 일정").click()
-    expect(preview).to_contain_text("수정됨")
+    expect(detail).to_be_visible()
+    expect(viewer).to_contain_text("수정됨")
+    expect(dialog.get_by_role("button", name="편집")).to_be_focused()
+
+    dialog.get_by_role("button", name="편집").click()
+    dialog.locator("#task-title").fill("저장하지 않을 제목")
+    page.once("dialog", lambda prompt: prompt.accept())
+    dialog.get_by_role("button", name="취소").click()
+    expect(detail).to_be_visible()
+    expect(dialog.locator("#task-detail-title")).to_have_text("Markdown 일정")
     assert external_requests == []
     assert failed_requests == []
+    assert console_errors == []
+
+
+def test_calendar_oversized_markdown_uses_safe_detail_fallback(
+    page: Page,
+    live_server: str,
+) -> None:
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: (
+            console_errors.append(message.text) if message.type == "error" else None
+        ),
+    )
+    oversized = f"{'x' * 200_001}<script>window.__oversizedXss = true</script>"
+    response = page.request.post(
+        f"{live_server}/apps/calendar/api/tasks",
+        data={
+            "title": "대용량 Markdown 일정",
+            "description": oversized,
+            "status": "todo",
+            "all_day": False,
+            "start_at": "2026-07-28T11:00:00+09:00",
+            "due_at": "2026-07-28T12:00:00+09:00",
+            "topic_ids": [],
+        },
+    )
+    assert response.ok
+
+    page.goto(f"{live_server}/apps/calendar/")
+    page.get_by_role("button", name="일정 열기: 대용량 Markdown 일정").click()
+    viewer = page.locator("#task-description-viewer")
+    expect(viewer.locator(".markdown-source-fallback")).to_be_visible()
+    expect(viewer.locator("script")).to_have_count(0)
+    expect(viewer).to_contain_text(
+        "<script>window.__oversizedXss = true</script>"
+    )
+    assert page.evaluate("window.__oversizedXss") is None
     assert console_errors == []
 
 

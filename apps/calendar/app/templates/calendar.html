@@ -137,11 +137,53 @@
             <p class="eyebrow">SCHEDULE DETAILS</p>
             <h2 id="dialog-title">새 일정</h2>
           </div>
-          <button class="icon-button" id="close-dialog" type="button" aria-label="닫기">×</button>
+          <div class="dialog-header-actions">
+            <button class="button button-secondary" id="edit-task-button" type="button" hidden>편집</button>
+            <button class="icon-button" id="close-dialog" type="button" aria-label="닫기">×</button>
+          </div>
         </div>
 
         <input id="task-id" type="hidden">
-        <div class="task-book">
+        <div id="task-detail-content" class="task-book task-detail-book" hidden>
+          <section class="task-page task-page-primary" aria-labelledby="task-detail-title">
+            <p class="task-detail-label">일정</p>
+            <h3 id="task-detail-title" class="task-detail-title"></h3>
+            <div id="task-description-viewer" class="task-description-viewer"></div>
+          </section>
+
+          <section class="task-page task-page-schedule" aria-labelledby="task-detail-schedule-heading">
+            <h3 id="task-detail-schedule-heading" class="sr-only">일정 시간과 연결</h3>
+            <dl class="task-detail-metadata">
+              <div>
+                <dt>상태</dt>
+                <dd id="task-detail-status"></dd>
+              </div>
+              <div>
+                <dt>일정</dt>
+                <dd id="task-detail-schedule"></dd>
+              </div>
+              <div>
+                <dt>주제</dt>
+                <dd id="task-detail-topics"></dd>
+              </div>
+            </dl>
+
+            <section id="linked-notes-section" class="linked-notes-section" aria-labelledby="linked-notes-title" hidden>
+              <div class="linked-notes-header">
+                <h3 id="linked-notes-title">연결된 노트</h3>
+                <button id="attach-note-button" class="button button-secondary" type="button">기존 노트 연결</button>
+              </div>
+              <div class="linked-notes-actions">
+                <a id="create-meeting-note" class="button button-secondary">회의록 작성</a>
+                <a id="create-research-note" class="button button-secondary">연구 노트 작성</a>
+              </div>
+              <p id="linked-notes-status" class="linked-notes-status" role="status"></p>
+              <div id="linked-notes-list" class="linked-notes-list"></div>
+            </section>
+          </section>
+        </div>
+
+        <div id="task-edit-content" class="task-book">
           <section class="task-page task-page-primary" aria-labelledby="task-content-heading">
             <h3 id="task-content-heading" class="sr-only">일정 내용</h3>
             <label for="task-title">제목</label>
@@ -210,19 +252,6 @@
               <option value="doing">진행 중</option>
               <option value="done">완료</option>
             </select>
-
-            <section id="linked-notes-section" class="linked-notes-section" aria-labelledby="linked-notes-title" hidden>
-              <div class="linked-notes-header">
-                <h3 id="linked-notes-title">연결된 노트</h3>
-                <button id="attach-note-button" class="button button-secondary" type="button">기존 노트 연결</button>
-              </div>
-              <div class="linked-notes-actions">
-                <a id="create-meeting-note" class="button button-secondary">회의록 작성</a>
-                <a id="create-research-note" class="button button-secondary">연구 노트 작성</a>
-              </div>
-              <p id="linked-notes-status" class="linked-notes-status" role="status"></p>
-              <div id="linked-notes-list" class="linked-notes-list"></div>
-            </section>
           </section>
         </div>
 
@@ -230,7 +259,7 @@
           <button class="button delete-dialog-button" id="delete-task-button" type="button" hidden>삭제</button>
           <span class="action-spacer"></span>
           <button class="button button-secondary" id="cancel-dialog" type="button">취소</button>
-          <button class="button button-primary" type="submit">저장</button>
+          <button class="button button-primary" id="save-task-button" type="submit">저장</button>
         </footer>
       </form>
     </dialog>

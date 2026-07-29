@@ -22,6 +22,7 @@ import {
   collectInternalLinks,
   createMarkdownRenderer,
   createMarkdownToolbar,
+  mountMarkdownViewer,
   resolveInternalLinks,
 } from "./shared/markdown/index.js";
 
@@ -33,6 +34,16 @@ const titleInput = document.querySelector("#task-title");
 const descriptionInput = document.querySelector("#task-description");
 const taskMarkdownToolbar = document.querySelector("#task-markdown-toolbar");
 const taskMarkdownPreviewElement = document.querySelector("#task-markdown-preview");
+const taskDetailContent = document.querySelector("#task-detail-content");
+const taskEditContent = document.querySelector("#task-edit-content");
+const taskDetailTitle = document.querySelector("#task-detail-title");
+const taskDetailDescription = document.querySelector("#task-description-viewer");
+const taskDetailStatus = document.querySelector("#task-detail-status");
+const taskDetailSchedule = document.querySelector("#task-detail-schedule");
+const taskDetailTopics = document.querySelector("#task-detail-topics");
+const editTaskButton = document.querySelector("#edit-task-button");
+const cancelDialogButton = document.querySelector("#cancel-dialog");
+const saveTaskButton = document.querySelector("#save-task-button");
 const statusInput = document.querySelector("#task-status");
 const taskIdInput = document.querySelector("#task-id");
 const allDayInput = document.querySelector("#task-all-day");
@@ -95,7 +106,21 @@ let notificationTimer;
 let overdueRefreshTimer;
 let taskDialogGeneration = 0;
 let attachSearchGeneration = 0;
+let currentTask = null;
+let taskFormBaseline = "";
 const markdownRenderer = createMarkdownRenderer();
+const taskMarkdownViewer = mountMarkdownViewer(
+  taskDetailDescription,
+  "",
+  {
+    renderer: markdownRenderer,
+    ariaLabel: "일정 설명",
+    renderOptions: {
+      compact: true,
+      emptyMessage: "설명이 없습니다.",
+    },
+  },
+);
 const taskMarkdownPreview = attachMarkdownPreview(
   descriptionInput,
   taskMarkdownPreviewElement,
@@ -490,8 +515,86 @@ function setAllDayMode(enabled) {
   dueDateInput.required = enabled;
 }
 
+function taskFormSnapshot() {
+  return JSON.stringify({
+    title: titleInput.value,
+    description: descriptionInput.value,
+    status: statusInput.value,
+    allDay: allDayInput.checked,
+    startAt: startAtInput.value,
+    dueAt: dueAtInput.value,
+    startDate: startDateInput.value,
+    dueDate: dueDateInput.value,
+    topicIds: [...document.querySelectorAll("[data-task-topic]:checked")]
+      .map((input) => Number(input.value))
+      .sort((left, right) => left - right),
+  });
+}
+
+function taskFormIsDirty() {
+  return taskFormSnapshot() !== taskFormBaseline;
+}
+
+function formatTaskSchedule(task) {
+  const start = apiTimestampToLocalInput(task.start_at);
+  const due = apiTimestampToLocalInput(task.due_at);
+  if (task.all_day) {
+    const startDate = start.slice(0, 10);
+    const dueDate = due.slice(0, 10);
+    return startDate === dueDate
+      ? `${startDate} · 종일`
+      : `${startDate} – ${dueDate} · 종일`;
+  }
+  return `${start.replace("T", " ")} – ${due.replace("T", " ")}`;
+}
+
+function renderTaskDetail(task, internalLinkResolutions = new Map()) {
+  taskDetailTitle.textContent = task.title;
+  taskDetailStatus.textContent = STATUS_LABELS[task.status] ?? task.status;
+  taskDetailSchedule.textContent = formatTaskSchedule(task);
+  taskDetailTopics.textContent = task.topics?.length
+    ? task.topics.map((topic) => `#${topic.name}`).join(" ")
+    : "주제 없음";
+  taskMarkdownViewer.update(task.description, {
+    compact: true,
+    emptyMessage: "설명이 없습니다.",
+    internalLinkResolutions,
+  });
+}
+
+function setTaskDialogMode(mode, { focus = true } = {}) {
+  dialog.dataset.mode = mode;
+  const detailMode = mode === "detail";
+  const createMode = mode === "create";
+  taskDetailContent.hidden = !detailMode;
+  taskEditContent.hidden = detailMode;
+  editTaskButton.hidden = !detailMode;
+  saveTaskButton.hidden = detailMode;
+  deleteDialogButton.hidden = createMode;
+  cancelDialogButton.textContent = detailMode ? "닫기" : "취소";
+  document.querySelector("#dialog-title").textContent = createMode
+    ? "새 일정"
+    : detailMode
+      ? "일정 상세"
+      : "일정 수정";
+  if (!focus) return;
+  if (detailMode) {
+    editTaskButton.focus();
+  } else {
+    titleInput.focus();
+  }
+}
+
+function enterTaskEditMode() {
+  if (!currentTask) return;
+  taskFormBaseline = taskFormSnapshot();
+  taskMarkdownPreview.setMode("editor");
+  setTaskDialogMode("edit");
+}
+
 function openTaskDialog(task = null, date = null) {
   const dialogGeneration = ++taskDialogGeneration;
+  currentTask = task;
   form.reset();
   const defaults = roundedDefaultRange(date);
   taskIdInput.value = task?.id ?? "";
@@ -502,23 +605,23 @@ function openTaskDialog(task = null, date = null) {
     emptyMessage: "설명이 없습니다.",
     internalLinkResolutions: new Map(),
   });
-  taskMarkdownPreview.setMode(task ? "preview" : "editor");
+  taskMarkdownPreview.setMode("editor");
   statusInput.value = task?.status ?? "todo";
   allDayInput.checked = Boolean(task?.all_day);
   startAtInput.value = task ? apiTimestampToLocalInput(task.start_at) : defaults.start;
   dueAtInput.value = task ? apiTimestampToLocalInput(task.due_at) : defaults.due;
   startDateInput.value = task ? apiTimestampToLocalInput(task.start_at).slice(0, 10) : defaults.start.slice(0, 10);
   dueDateInput.value = task ? apiTimestampToLocalInput(task.due_at).slice(0, 10) : defaults.due.slice(0, 10);
-  document.querySelector("#dialog-title").textContent = task ? "일정 수정" : "새 일정";
-  deleteDialogButton.hidden = !task;
   setAllDayMode(allDayInput.checked);
   renderTaskTopicOptions(
     new Set((task?.topics ?? []).map((topic) => topic.id)),
   );
+  taskFormBaseline = taskFormSnapshot();
   linkedNotesSection.hidden = !task;
   linkedNotesList.replaceChildren();
   linkedNotesStatus.textContent = task ? "연결된 노트를 불러오는 중입니다." : "";
   if (task) {
+    renderTaskDetail(task);
     const context = new URLSearchParams({
       source_app: "calendar",
       source_type: "event",
@@ -541,13 +644,14 @@ function openTaskDialog(task = null, date = null) {
           emptyMessage: "설명이 없습니다.",
           internalLinkResolutions,
         });
+        renderTaskDetail(task, internalLinkResolutions);
       }).catch((error) => {
         if (dialogGeneration === taskDialogGeneration) showError(error.message);
       });
     }
   }
   dialog.showModal();
-  titleInput.focus();
+  setTaskDialogMode(task ? "detail" : "create");
 }
 
 function noteTypeLabel(noteType) {
@@ -673,7 +777,30 @@ function closeAttachNoteDialog() {
 function closeTaskDialog() {
   taskDialogGeneration += 1;
   attachSearchGeneration += 1;
+  currentTask = null;
   dialog.close();
+}
+
+function requestCloseTaskDialog() {
+  const mode = dialog.dataset.mode;
+  if (mode === "edit") {
+    if (
+      taskFormIsDirty()
+      && !window.confirm("저장하지 않은 변경사항을 취소할까요?")
+    ) return;
+    if (currentTask) {
+      const task = currentTask;
+      closeTaskDialog();
+      openTaskDialog(task);
+      return;
+    }
+  }
+  if (
+    mode === "create"
+    && taskFormIsDirty()
+    && !window.confirm("저장하지 않은 새 일정을 취소할까요?")
+  ) return;
+  closeTaskDialog();
 }
 
 async function saveTask(event) {
@@ -704,12 +831,18 @@ async function saveTask(event) {
   };
 
   try {
-    await request(id ? `api/tasks/${id}` : "api/tasks", {
+    const savedTask = await request(id ? `api/tasks/${id}` : "api/tasks", {
       method: id ? "PATCH" : "POST",
       body: JSON.stringify(payload),
     });
     closeTaskDialog();
     await loadTasks();
+    if (id) {
+      const updatedTask = tasks.find(
+        (task) => String(task.id) === String(savedTask.id),
+      ) ?? savedTask;
+      openTaskDialog(updatedTask);
+    }
   } catch (error) {
     showError(error.message);
   }
@@ -883,8 +1016,9 @@ document.querySelector("#today-button").addEventListener("click", () => {
   selectDate(currentKstDate());
   calendar.today();
 });
-document.querySelector("#close-dialog").addEventListener("click", closeTaskDialog);
-document.querySelector("#cancel-dialog").addEventListener("click", closeTaskDialog);
+document.querySelector("#close-dialog").addEventListener("click", requestCloseTaskDialog);
+document.querySelector("#cancel-dialog").addEventListener("click", requestCloseTaskDialog);
+editTaskButton.addEventListener("click", enterTaskEditMode);
 document.querySelector("#close-topic-dialog").addEventListener("click", closeTopicDialog);
 document.querySelector("#cancel-topic-dialog").addEventListener("click", closeTopicDialog);
 allDayInput.addEventListener("change", () => setAllDayMode(allDayInput.checked));
@@ -909,7 +1043,11 @@ attachNoteSearch.addEventListener("input", () => {
   }, 180);
 });
 dialog.addEventListener("click", (event) => {
-  if (event.target === dialog) closeTaskDialog();
+  if (event.target === dialog) requestCloseTaskDialog();
+});
+dialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  requestCloseTaskDialog();
 });
 topicDialog.addEventListener("click", (event) => {
   if (event.target === topicDialog) closeTopicDialog();

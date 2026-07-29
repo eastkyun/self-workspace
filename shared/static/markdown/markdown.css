@@ -138,6 +138,11 @@
   color: #f8fafc;
 }
 
+.markdown-source-fallback {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .markdown-viewer pre code {
   padding: 0;
   background: transparent;
@@ -198,4 +203,3 @@
     flex: 0 0 auto;
   }
 }
-
