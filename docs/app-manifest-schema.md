@@ -144,9 +144,12 @@ registry.categories()
 registry.search(query)
 registry.resolve_route(path)
 registry.get_default_pinned_ids()
+registry.to_json()
 ```
 
 Collection query는 immutable tuple을 반환합니다. App와 category model도 frozen입니다.
+`to_json()`은 category와 app을 Registry 정렬 규칙으로 canonicalize하고 model field 순서와
+UTF-8 text를 유지해 동일한 Registry snapshot에 대해 byte-identical JSON을 반환합니다.
 
 ## Future manifest and plugin sources
 

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from copy import deepcopy
-import json
 from pathlib import Path
 
 import pytest
@@ -87,9 +85,13 @@ def test_internal_routes_have_one_canonical_trailing_slash() -> None:
     assert normalize_internal_route("/apps/calendar/") == "/apps/calendar/"
 
 
-def test_rejects_unsupported_schema_version(tmp_path: Path) -> None:
+@pytest.mark.parametrize("schema_version", [2, True, 1.0, "1"])
+def test_rejects_unsupported_schema_version(
+    tmp_path: Path,
+    schema_version,
+) -> None:
     data = payload(app())
-    data["schema_version"] = 2
+    data["schema_version"] = schema_version
 
     with pytest.raises(RegistryValidationError) as caught:
         parse(data, tmp_path)
@@ -213,17 +215,6 @@ def test_json_source_reports_invalid_json(tmp_path: Path) -> None:
     assert issue_codes(caught.value) == {"source_error"}
 
 
-def test_registry_json_serialization_is_deterministic(tmp_path: Path) -> None:
-    data = payload(app())
-    registry_path = tmp_path / "apps.json"
-    first = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
-    second = json.dumps(deepcopy(data), ensure_ascii=False, indent=2) + "\n"
-
-    registry_path.write_text(first, encoding="utf-8")
-
-    assert registry_path.read_text(encoding="utf-8") == second
-
-
 def registry(data: dict, tmp_path: Path) -> AppRegistry:
     document = parse(data, tmp_path)
     return AppRegistry(document)
@@ -284,6 +275,27 @@ def test_category_then_app_order_is_deterministic(tmp_path: Path) -> None:
         "calendar",
         "notes",
     ]
+
+
+def test_registry_json_serialization_is_canonical(tmp_path: Path) -> None:
+    categories = [category("knowledge", order=20), category(order=10)]
+    apps = [
+        app("notes", route="/apps/notes/", category_id="knowledge", order=5),
+        app("calendar", order=20),
+    ]
+    first = registry(payload(*apps, categories=categories), tmp_path)
+    second = registry(
+        payload(*reversed(apps), categories=list(reversed(categories))),
+        tmp_path,
+    )
+
+    assert first.to_json() == second.to_json()
+    assert first.to_json().index('"id": "productivity"') < first.to_json().index(
+        '"id": "knowledge"'
+    )
+    assert first.to_json().index('"id": "calendar"') < first.to_json().index(
+        '"id": "notes"'
+    )
 
 
 def test_search_is_case_insensitive_and_normalizes_whitespace(
@@ -367,3 +379,24 @@ def test_source_merge_reports_cross_source_collisions(tmp_path: Path) -> None:
         )
 
     assert "duplicate_app_id" in issue_codes(caught.value)
+
+
+def test_source_merge_aggregates_errors_from_every_source(tmp_path: Path) -> None:
+    first_path = tmp_path / "first.json"
+    second_path = tmp_path / "second.json"
+    first_path.write_text("{", encoding="utf-8")
+    second_path.write_text("[]", encoding="utf-8")
+
+    with pytest.raises(RegistryValidationError) as caught:
+        AppRegistry.from_sources(
+            [
+                JsonRegistrySource(first_path, asset_root=tmp_path),
+                JsonRegistrySource(second_path, asset_root=tmp_path),
+            ]
+        )
+
+    assert {issue.source for issue in caught.value.issues} == {
+        str(first_path),
+        str(second_path),
+    }
+    assert issue_codes(caught.value) == {"document_type", "source_error"}

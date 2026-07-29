@@ -200,7 +200,10 @@ def parse_registry_payload(
         )
 
     schema_version = payload.get("schema_version")
-    if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
+    if (
+        type(schema_version) is not int
+        or schema_version not in SUPPORTED_SCHEMA_VERSIONS
+    ):
         issues.append(
             RegistryIssue(
                 code="unsupported_schema_version",
@@ -465,7 +468,7 @@ class AppRegistry:
 
     @classmethod
     def from_source(cls, source: RegistrySource) -> "AppRegistry":
-        return cls(source.load())
+        return cls.from_sources((source,))
 
     @classmethod
     def from_sources(cls, sources: Iterable[RegistrySource]) -> "AppRegistry":
@@ -481,57 +484,78 @@ class AppRegistry:
                 ]
             )
 
-        documents = tuple(source.load() for source in loaded_sources)
+        issues: list[RegistryIssue] = []
+        documents: list[tuple[str, RegistryDocument]] = []
+        for source in loaded_sources:
+            try:
+                documents.append((source.source_name, source.load()))
+            except RegistryValidationError as error:
+                issues.extend(error.issues)
+
         categories = tuple(
-            category
-            for document in documents
+            (source_name, category)
+            for source_name, document in documents
             for category in document.categories
         )
-        apps = tuple(app for document in documents for app in document.apps)
-        issues: list[RegistryIssue] = []
+        apps = tuple(
+            (source_name, app)
+            for source_name, document in documents
+            for app in document.apps
+        )
 
-        category_ids: dict[str, AppCategory] = {}
-        category_orders: dict[int, AppCategory] = {}
-        for category in categories:
+        category_ids: dict[str, tuple[str, AppCategory]] = {}
+        category_orders: dict[int, tuple[str, AppCategory]] = {}
+        for source_name, category in categories:
             if category.id in category_ids:
+                previous_source, _ = category_ids[category.id]
                 issues.append(
                     RegistryIssue(
                         code="duplicate_category_id",
-                        source="merged registry",
+                        source=source_name,
                         field="categories",
-                        message=f"category ID is duplicated: {category.id}",
+                        message=(
+                            f"category ID {category.id} is also declared by "
+                            f"{previous_source}"
+                        ),
                     )
                 )
             else:
-                category_ids[category.id] = category
+                category_ids[category.id] = (source_name, category)
             if category.order in category_orders:
+                previous_source, previous_category = category_orders[category.order]
                 issues.append(
                     RegistryIssue(
                         code="duplicate_category_order",
-                        source="merged registry",
+                        source=source_name,
                         field="categories",
-                        message=f"category order is duplicated: {category.order}",
+                        message=(
+                            f"category order {category.order} is shared with "
+                            f"{previous_category.id} from {previous_source}"
+                        ),
                     )
                 )
             else:
-                category_orders[category.order] = category
+                category_orders[category.order] = (source_name, category)
 
-        app_ids: dict[str, AppManifest] = {}
-        routes: dict[str, AppManifest] = {}
-        orders: dict[tuple[str, int], AppManifest] = {}
-        for app in apps:
+        app_ids: dict[str, tuple[str, AppManifest]] = {}
+        routes: dict[str, tuple[str, AppManifest]] = {}
+        orders: dict[tuple[str, int], tuple[str, AppManifest]] = {}
+        for source_name, app in apps:
             if app.id in app_ids:
+                previous_source, _ = app_ids[app.id]
                 issues.append(
                     RegistryIssue(
                         code="duplicate_app_id",
-                        source="merged registry",
+                        source=source_name,
                         app_id=app.id,
                         field="id",
-                        message=f"app ID is duplicated: {app.id}",
+                        message=(
+                            f"app ID {app.id} is also declared by {previous_source}"
+                        ),
                     )
                 )
             else:
-                app_ids[app.id] = app
+                app_ids[app.id] = (source_name, app)
 
             route_key = (
                 normalize_internal_route(app.route)
@@ -539,39 +563,45 @@ class AppRegistry:
                 else app.route
             )
             if route_key in routes:
+                previous_source, previous_app = routes[route_key]
                 issues.append(
                     RegistryIssue(
                         code="duplicate_route",
-                        source="merged registry",
+                        source=source_name,
                         app_id=app.id,
                         field="route",
-                        message=f"route is duplicated: {route_key}",
-                    )
-                )
-            else:
-                routes[route_key] = app
-
-            order_key = (app.category, app.order)
-            if order_key in orders:
-                issues.append(
-                    RegistryIssue(
-                        code="duplicate_app_order",
-                        source="merged registry",
-                        app_id=app.id,
-                        field="order",
                         message=(
-                            f"order {app.order} is duplicated in {app.category}"
+                            f"route {route_key} is shared with {previous_app.id} "
+                            f"from {previous_source}"
                         ),
                     )
                 )
             else:
-                orders[order_key] = app
+                routes[route_key] = (source_name, app)
+
+            order_key = (app.category, app.order)
+            if order_key in orders:
+                previous_source, previous_app = orders[order_key]
+                issues.append(
+                    RegistryIssue(
+                        code="duplicate_app_order",
+                        source=source_name,
+                        app_id=app.id,
+                        field="order",
+                        message=(
+                            f"order {app.order} in {app.category} is shared with "
+                            f"{previous_app.id} from {previous_source}"
+                        ),
+                    )
+                )
+            else:
+                orders[order_key] = (source_name, app)
 
             if app.category not in category_ids:
                 issues.append(
                     RegistryIssue(
                         code="unknown_category",
-                        source="merged registry",
+                        source=source_name,
                         app_id=app.id,
                         field="category",
                         message=f"category is not declared: {app.category}",
@@ -584,8 +614,8 @@ class AppRegistry:
         return cls(
             RegistryDocument(
                 schema_version=1,
-                categories=categories,
-                apps=apps,
+                categories=tuple(category for _, category in categories),
+                apps=tuple(app for _, app in apps),
             )
         )
 
@@ -665,4 +695,19 @@ class AppRegistry:
             app.id
             for app in self._apps
             if app.enabled and app.default_pinned
+        )
+
+    def to_json(self, *, indent: int = 2) -> str:
+        document = RegistryDocument(
+            schema_version=1,
+            categories=self.categories(),
+            apps=self.get_all(),
+        )
+        return (
+            json.dumps(
+                document.model_dump(mode="json"),
+                ensure_ascii=False,
+                indent=indent,
+            )
+            + "\n"
         )
