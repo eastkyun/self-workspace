@@ -1,16 +1,64 @@
 {
+  "schema_version": 1,
+  "categories": [
+    {
+      "id": "productivity",
+      "display_name": "Productivity",
+      "order": 10,
+      "description": "Planning, scheduling, and daily work."
+    },
+    {
+      "id": "knowledge",
+      "display_name": "Knowledge",
+      "order": 20,
+      "description": "Notes, documents, and knowledge tools."
+    },
+    {
+      "id": "plants",
+      "display_name": "Plants",
+      "order": 30,
+      "description": "Plant care and growing tools."
+    },
+    {
+      "id": "finance",
+      "display_name": "Finance",
+      "order": 40,
+      "description": "Personal finance and reporting tools."
+    },
+    {
+      "id": "development",
+      "display_name": "Development",
+      "order": 50,
+      "description": "Developer and workspace automation tools."
+    },
+    {
+      "id": "system",
+      "display_name": "System",
+      "order": 90,
+      "description": "Workspace settings and administration."
+    }
+  ],
   "apps": [
     {
       "id": "calendar",
-      "name": "Calendar",
-      "kind": "internal",
-      "url": "/apps/calendar/",
-      "icon": "/static/icons/calendar.svg",
+      "name": "calendar",
+      "display_name": "Calendar",
       "description": "월간 캘린더에서 일정과 주제를 관리합니다.",
+      "icon": "/static/icons/calendar.svg",
+      "route": "/apps/calendar/",
+      "category": "productivity",
       "enabled": true,
-      "navigationVisible": true,
-      "defaultPinned": true,
-      "order": 10
+      "default_pinned": true,
+      "navigation_visible": true,
+      "launcher_visible": true,
+      "order": 10,
+      "version": "1.0.0",
+      "kind": "internal",
+      "search_keywords": [
+        "schedule",
+        "tasks",
+        "일정"
+      ]
     }
   ]
 }
