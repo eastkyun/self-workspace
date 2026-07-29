@@ -12,6 +12,8 @@ export {
   searchCommands,
 } from "./commands.js";
 export { attachMarkdownEditor } from "./editor-controller.js";
+export { attachSlashPalette } from "./slash-palette.js";
+export { createMarkdownToolbar } from "./toolbar.js";
 export {
   EDITOR_PROFILES,
   getEditorProfile,
