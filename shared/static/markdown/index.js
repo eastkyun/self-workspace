@@ -6,6 +6,12 @@ export {
   normalizeRenderOptions,
 } from "./contracts.js";
 export {
+  COMMANDS,
+  applyCommand,
+  getCommand,
+  searchCommands,
+} from "./commands.js";
+export {
   EDITOR_PROFILES,
   getEditorProfile,
 } from "./profiles.js";
