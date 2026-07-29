@@ -47,6 +47,9 @@ function isSafeHref(value) {
   const normalized = String(value ?? "")
     .trim()
     .replace(/[\u0000-\u001F\u007F-\u009F\s]/g, "");
+  if (normalized.includes("\\")) {
+    return false;
+  }
   return SAFE_URI.test(normalized);
 }
 
@@ -93,4 +96,3 @@ export function createMarkdownSanitizer(windowLike = globalThis.window) {
     },
   });
 }
-

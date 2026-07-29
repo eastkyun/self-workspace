@@ -41,3 +41,13 @@ test("sanitizer removes unsafe elements and attributes from generated HTML", () 
   assert.doesNotMatch(html, /onerror/i);
   assert.match(html, /href="https:\/\/example.com"/);
 });
+
+test("backslash relative links cannot normalize into an external host", () => {
+  const html = render(String.raw`[unsafe](/\evil.example/path)`);
+  const dom = new JSDOM(`<main>${html}</main>`, {
+    url: "https://workspace.example/apps/notes/",
+  });
+
+  assert.equal(dom.window.document.querySelector("a"), null);
+  assert.match(dom.window.document.querySelector("main").textContent, /unsafe/);
+});

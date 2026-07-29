@@ -30,6 +30,9 @@ function isAllowedHref(href) {
   const normalized = String(href ?? "")
     .trim()
     .replace(/[\u0000-\u001F\u007F-\u009F\s]/g, "");
+  if (normalized.includes("\\")) {
+    return false;
+  }
   return /^(?:(?:https?|mailto):|[#/?](?!\/)|\.{1,2}\/)/i.test(normalized);
 }
 
