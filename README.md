@@ -32,6 +32,21 @@ python -m uvicorn portal.main:app --reload
 
 Calendar DB 기본 경로는 workspace 기준 `instance/calendar/tasks.db`입니다.
 
+## App Registry
+
+Workspace 앱 metadata의 유일한 진입점은 `shared.app_registry`입니다.
+`shared/apps.json`의 검증된 immutable snapshot 하나를 Portal과 내부 앱이 공유합니다.
+
+- Sidebar: `AppRegistry.get_navigation()`
+- Launcher: `AppRegistry.get_launcher()`
+- Home Cards/API: `AppRegistry.get_enabled()`
+- 기본 고정 앱: `AppRegistry.get_default_pinned_ids()`
+
+앱 manifest schema, validation, route 정규화와 향후 discovery 확장 계약은
+[App manifest schema](docs/app-manifest-schema.md)를 참고하세요. App metadata 등록과
+FastAPI sub-application mount는 별도 책임이며 현재 Calendar mount는 Portal composition에
+명시적으로 남아 있습니다.
+
 ```bash
 CALENDAR_DB_PATH=/absolute/path/tasks.db python -m uvicorn portal.main:app
 ```

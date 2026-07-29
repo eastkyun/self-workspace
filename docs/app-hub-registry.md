@@ -1,53 +1,49 @@
-# App Hub registry
+# Workspace App Registry
 
-앱은 `portal/apps.json`에 등록합니다. registry 변경은 Git review 대상이며 웹 UI 기반 관리 API는
-제공하지 않습니다.
+`shared.app_registry`는 Workspace app metadata의 유일한 public entry point입니다.
+Portal과 Calendar는 `shared/apps.json`을 직접 읽지 않고 시작 시 생성된 동일
+`AppRegistry` snapshot을 사용합니다.
 
-## 내부 앱
-
-```json
-{
-  "id": "calendar",
-  "name": "Calendar",
-  "kind": "internal",
-  "url": "/apps/calendar/",
-  "icon": "/static/icons/calendar.svg",
-  "description": "월간 캘린더에서 일정과 주제를 관리합니다.",
-  "enabled": true,
-  "navigationVisible": true,
-  "defaultPinned": true,
-  "order": 10
-}
+```text
+Portal / App Shell / Calendar
+             |
+      shared.app_registry
+             |
+       shared/apps.json
 ```
 
-- `id`: 소문자로 시작하는 영문 소문자·숫자·하이픈 조합, registry 내 고유값
-- `kind=internal`: URL은 `/apps/`로 시작
-- `icon`: `portal/static/icons/`에 실제로 존재하는 로컬 SVG
-- `enabled`: `false`이면 Hub, Sidebar, launcher와 기본 API 응답에서 제외
-- `navigationVisible`: `false`이면 Hub와 launcher에는 표시하지만 Sidebar에서는 제외
-- `defaultPinned`: 저장된 사용자 설정이 없을 때 기본 고정 여부
-- `order`: Sidebar, launcher와 Hub 목록에서 사용하는 공통 정렬 순서
+## Portal consumers
 
-## 외부 바로가기
+- Sidebar: `get_navigation()`
+- Launcher: `get_launcher()`
+- Home Cards와 `/api/hub/apps`: `get_enabled()`
+- active app: `get_app()` 또는 `resolve_route()`
+- 기본 pin: `get_default_pinned_ids()`
 
-```json
-{
-  "id": "example",
-  "name": "Example",
-  "kind": "external",
-  "url": "https://example.com/",
-  "icon": "/static/icons/example.svg",
-  "description": "외부 서비스",
-  "defaultPinned": false,
-  "order": 100
-}
+Sidebar, Launcher, Home 전용 app 배열은 없습니다. 각 surface는 같은 Registry snapshot에
+대해 자신의 visibility query만 실행합니다. Home은 app manifest가 아니라 Workspace의 고정
+navigation route입니다.
+
+## Pinned apps
+
+고정 앱은 기존 형식을 유지합니다.
+
+```text
+key: my-workspace:pinned-apps:v1
+value: ["calendar", "notes"]
 ```
 
-외부 URL은 `https://`만 허용합니다. 원격 favicon, OpenGraph, iframe, health check, prefetch를 사용하지
-않습니다. 링크는 `target="_blank" rel="noopener noreferrer"`로 렌더링됩니다.
+이름이나 URL이 아니라 app ID만 저장합니다. 손상된 값, 중복 ID, 삭제되거나 disabled 된 ID는
+제거하고 저장 값이 없으면 `default_pinned` app IDs를 사용합니다. 따라서 display name이나
+route가 바뀌어도 pin은 유지됩니다.
 
-고정 앱 ID는 `my-workspace:pinned-apps:v1` localStorage key에 저장합니다. 손상되거나 삭제된 앱 ID는
-무시하고 registry 기본값으로 복구합니다.
+## Runtime boundary
 
-Sidebar와 launcher는 서버가 같은 registry snapshot으로 렌더링합니다. Home은 App Registry 항목이
-아닌 고정 Workspace navigation이며, 현재 앱에는 `aria-current="page"`가 적용됩니다.
+Registry는 metadata와 Portal 표시 여부를 관리합니다. ASGI app factory import, mount path,
+lifespan은 runtime composition의 책임입니다. 현재 Calendar mount는 `portal/main.py`에
+명시적으로 남아 있으며 Registry metadata와 자동으로 결합하지 않습니다.
+
+향후 자동 등록을 도입하려면 manifest source 외에 trusted `RuntimeProvider` 정책을 별도로
+설계하고 승인해야 합니다.
+
+전체 schema와 validation 규칙은 [App manifest schema](app-manifest-schema.md)를 참고하세요.
