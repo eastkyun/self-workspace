@@ -85,3 +85,12 @@ def test_rejects_unknown_schema_version(tmp_path: Path) -> None:
         initialize_database(path)
     with pytest.raises(RuntimeError, match="unsupported Notes"):
         verify_database(path)
+
+
+def test_rejects_unversioned_existing_schema(tmp_path: Path) -> None:
+    path = tmp_path / "malformed.db"
+    with sqlite3.connect(path) as connection:
+        connection.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY)")
+
+    with pytest.raises(RuntimeError, match="explicit migration"):
+        initialize_database(path)

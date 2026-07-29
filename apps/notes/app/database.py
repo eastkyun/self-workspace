@@ -101,6 +101,18 @@ def initialize_database(database_path: str | Path) -> Path:
                 f"unsupported Notes database version: {version}; "
                 f"expected {NOTES_SCHEMA_VERSION}"
             )
+        existing_tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            )
+        }
+        if version == 0 and existing_tables:
+            raise RuntimeError(
+                "Notes database has an unversioned schema; "
+                "an explicit migration is required"
+            )
         try:
             connection.executescript(
                 "BEGIN IMMEDIATE;\n"
@@ -169,6 +181,58 @@ def verify_database(database_path: str | Path) -> None:
             raise RuntimeError(
                 f"Notes database is missing indexes: {sorted(missing_indexes)}"
             )
+        note_columns = {
+            row[1]: row
+            for row in connection.execute("PRAGMA table_info(notes)")
+        }
+        if (
+            note_columns["id"][5] != 1
+            or note_columns["title"][3] != 1
+            or note_columns["content"][3] != 1
+            or note_columns["note_type"][3] != 1
+            or note_columns["is_pinned"][3] != 1
+        ):
+            raise RuntimeError("Notes database has incompatible column constraints")
+        foreign_keys = connection.execute(
+            "PRAGMA foreign_key_list(note_links)"
+        ).fetchall()
+        if not any(
+            row[2] == "notes"
+            and row[3] == "note_id"
+            and row[4] == "id"
+            and row[6].upper() == "CASCADE"
+            for row in foreign_keys
+        ):
+            raise RuntimeError("Notes database is missing the internal link foreign key")
+        unique_links = any(
+            row[2]
+            and [
+                item[2]
+                for item in connection.execute(
+                    f"PRAGMA index_info({row[1]})"
+                )
+            ] == ["note_id", "source_app", "source_type", "source_id"]
+            for row in connection.execute("PRAGMA index_list(note_links)")
+        )
+        if not unique_links:
+            raise RuntimeError("Notes database is missing link uniqueness")
+        schema_sql = " ".join(
+            row[0].lower()
+            for row in connection.execute(
+                "SELECT sql FROM sqlite_master "
+                "WHERE type='table' AND name IN ('notes', 'note_links')"
+            )
+        )
+        for required_check in (
+            "check(length(trim(title)) between 1 and 120)",
+            "check(length(content) <= 100000)",
+            "check(note_type in ('general', 'meeting_minutes', 'research_note'))",
+            "check(is_pinned in (0, 1))",
+        ):
+            if required_check not in schema_sql:
+                raise RuntimeError(
+                    f"Notes database is missing constraint: {required_check}"
+                )
 
 
 @contextmanager
