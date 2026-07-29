@@ -102,6 +102,25 @@
   scroll-margin-top: 5rem;
 }
 
+.heading-permalink {
+  color: var(--text-muted, #667085);
+  font-size: 0.72em;
+  text-decoration: none;
+  opacity: 0;
+}
+
+.heading-permalink::before { content: "#"; }
+
+.markdown-viewer h1:hover .heading-permalink,
+.markdown-viewer h2:hover .heading-permalink,
+.markdown-viewer h3:hover .heading-permalink,
+.markdown-viewer h4:hover .heading-permalink,
+.markdown-viewer h5:hover .heading-permalink,
+.markdown-viewer h6:hover .heading-permalink,
+.heading-permalink:focus-visible {
+  opacity: 1;
+}
+
 .markdown-viewer p,
 .markdown-viewer ul,
 .markdown-viewer ol,

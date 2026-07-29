@@ -40,6 +40,8 @@ test("renderer HTML, metadata and TOC share the same heading IDs", () => {
   for (const heading of result.headings) {
     assert.ok(result.html.includes(`id="${heading.id}"`));
   }
+  assert.match(result.html, /class="heading-permalink"/);
+  assert.match(result.html, /aria-label="“설치 방법” 섹션 링크"/);
   assert.deepEqual(
     result.toc.map(({ id, children }) => [
       id,
@@ -50,6 +52,17 @@ test("renderer HTML, metadata and TOC share the same heading IDs", () => {
       ["설치-방법-2", []],
     ],
   );
+});
+
+test("internal links contribute their semantic label to heading metadata", () => {
+  const dom = new JSDOM("");
+  const result = createMarkdownRenderer({ window: dom.window })
+    .renderWithMetadata("## [[note:1|프로젝트]]");
+
+  assert.equal(result.headings[0].text, "프로젝트");
+  assert.equal(result.headings[0].id, "프로젝트");
+  assert.equal(result.toc[0].text, "프로젝트");
+  assert.match(result.html, /id="프로젝트"/);
 });
 
 test("TOC tolerates skipped levels and filters its configured range", () => {

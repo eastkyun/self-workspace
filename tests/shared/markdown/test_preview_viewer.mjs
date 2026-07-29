@@ -38,6 +38,16 @@ test("viewer uses renderer metadata to build an accessible TOC", () => {
   assert.match(preview.textContent, /<b>literal<\/b>/);
 });
 
+test("viewer hides TOC until at least two headings are in range", () => {
+  const { preview, renderer } = environment();
+  mountMarkdownViewer(preview, "## 하나", {
+    renderer,
+    renderOptions: { showToc: true },
+  });
+
+  assert.equal(preview.querySelector(".markdown-toc").hidden, true);
+});
+
 test("preview and viewer produce the exact same sanitized HTML", () => {
   const { textarea, preview, renderer } = environment();
   textarea.value = "## 제목\n\n<script>alert(1)</script>";
@@ -66,12 +76,24 @@ test("preview modes update visibility and compact profiles stay isolated", () =>
     debounceMs: 0,
     onModeChange: (mode) => modes.push(mode),
   });
+  const toggle = textarea.ownerDocument.createElement("button");
+  toggle.dataset.markdownCommand = "preview-toggle";
+  attached.setToggleButton(toggle);
   assert.equal(preview.hidden, true);
+  assert.equal(toggle.getAttribute("aria-pressed"), "false");
   assert.equal(attached.toggle(), "preview");
   assert.equal(textarea.hidden, true);
   assert.equal(preview.hidden, false);
+  assert.equal(toggle.getAttribute("aria-pressed"), "true");
+  assert.equal(toggle.getAttribute("aria-controls"), preview.id);
+  assert.match(
+    textarea.closest("[data-markdown-editor]")
+      .querySelector("[role=status]").textContent,
+    /미리보기 모드/,
+  );
   assert.ok(preview.querySelector("article").classList.contains("markdown-viewer--compact"));
   assert.equal(attached.toggle(), "editor");
+  assert.equal(toggle.getAttribute("aria-pressed"), "false");
   assert.deepEqual(modes, ["preview", "editor"]);
   attached.setRenderOptions({
     compact: true,

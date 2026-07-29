@@ -65,34 +65,47 @@ export function createMarkdownSanitizer(windowLike = globalThis.window) {
     }
   });
 
+  function sanitizeToFragment(html) {
+    return purifier.sanitize(String(html ?? ""), {
+      ALLOWED_TAGS,
+      ALLOWED_ATTR,
+      ALLOW_ARIA_ATTR: true,
+      ALLOW_DATA_ATTR: false,
+      ALLOW_UNKNOWN_PROTOCOLS: false,
+      FORBID_TAGS: [
+        "base",
+        "button",
+        "embed",
+        "form",
+        "iframe",
+        "img",
+        "input",
+        "link",
+        "math",
+        "meta",
+        "object",
+        "script",
+        "style",
+        "svg",
+      ],
+      FORBID_ATTR: ["style"],
+      KEEP_CONTENT: true,
+      RETURN_DOM_FRAGMENT: true,
+      RETURN_TRUSTED_TYPE: false,
+    });
+  }
+
+  function serialize(fragment) {
+    const container = windowLike.document.createElement("div");
+    container.replaceChildren(fragment.cloneNode(true));
+    return container.innerHTML;
+  }
+
   return Object.freeze({
     sanitize(html) {
-      return purifier.sanitize(String(html ?? ""), {
-        ALLOWED_TAGS,
-        ALLOWED_ATTR,
-        ALLOW_ARIA_ATTR: true,
-        ALLOW_DATA_ATTR: false,
-        ALLOW_UNKNOWN_PROTOCOLS: false,
-        FORBID_TAGS: [
-          "base",
-          "button",
-          "embed",
-          "form",
-          "iframe",
-          "img",
-          "input",
-          "link",
-          "math",
-          "meta",
-          "object",
-          "script",
-          "style",
-          "svg",
-        ],
-        FORBID_ATTR: ["style"],
-        KEEP_CONTENT: true,
-        RETURN_TRUSTED_TYPE: false,
-      });
+      return serialize(sanitizeToFragment(html));
     },
+    sanitizeToFragment,
+    serialize,
   });
 }

@@ -14,6 +14,13 @@ function appendTocList(document, parent, nodes) {
   parent.append(list);
 }
 
+function tocHeadingCount(nodes) {
+  return nodes.reduce(
+    (count, node) => count + 1 + tocHeadingCount(node.children),
+    0,
+  );
+}
+
 export function mountMarkdownViewer(container, markdown, {
   renderer,
   renderOptions = {},
@@ -42,9 +49,12 @@ export function mountMarkdownViewer(container, markdown, {
     }
     activeRenderOptions = nextRenderOptions;
     const result = renderer.renderWithMetadata(source, activeRenderOptions);
-    content.innerHTML = result.html;
+    content.replaceChildren(result.fragment.cloneNode(true));
     toc.replaceChildren();
-    if (activeRenderOptions.showToc && result.toc.length) {
+    if (
+      activeRenderOptions.showToc
+      && tocHeadingCount(result.toc) >= 2
+    ) {
       appendTocList(document, toc, result.toc);
       toc.hidden = false;
     } else {

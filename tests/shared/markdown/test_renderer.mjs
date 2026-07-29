@@ -28,11 +28,13 @@ test("renders the shared MVP Markdown dialect", () => {
     "```",
   ].join("\n"));
 
-  assert.match(html, /<h1 id="제목">제목<\/h1>/);
+  assert.match(html, /<h1 id="제목">제목 .*class="heading-permalink".*<\/h1>/);
   assert.match(html, /<strong>굵게<\/strong>/);
   assert.match(html, /<em>기울임<\/em>/);
   assert.match(html, /<del>취소<\/del>/);
   assert.match(html, /role="checkbox" aria-checked="true"/);
+  assert.match(html, /aria-checked="true" aria-label="완료"/);
+  assert.match(html, /aria-checked="false" aria-label="미완료"/);
   assert.doesNotMatch(html, /<input/i);
   assert.match(html, /<table>/);
   assert.match(html, /<code class="language-js">/);
@@ -80,6 +82,16 @@ test("renderer instances and options do not leak mutable state", () => {
   const second = renderer();
   assert.ok(first.render("a\nb", { breaks: false }).includes("a\nb"));
   assert.match(second.render("a\nb"), /a<br>b/);
+});
+
+test("render metadata carries a sanitized fragment equivalent to HTML", () => {
+  const shared = renderer();
+  const result = shared.renderWithMetadata("## 안전\n\n<script>alert(1)</script>");
+  const container = result.fragment.ownerDocument.createElement("div");
+  container.replaceChildren(result.fragment.cloneNode(true));
+
+  assert.equal(container.innerHTML, result.html);
+  assert.equal(container.querySelector("script"), null);
 });
 
 test("oversized source uses a safe plain-text fallback with a warning", () => {

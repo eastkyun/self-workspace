@@ -78,12 +78,16 @@ if (root) {
     profile: "full",
     onPreviewToggle: () => markdownPreview.toggle(),
   });
-  elements.markdownToolbar.append(createMarkdownToolbar({
+  const markdownToolbar = createMarkdownToolbar({
     document,
     profile: "full",
     execute: (commandId) => markdownEditor.execute(commandId),
     ariaLabel: "메모 Markdown 서식",
-  }));
+  });
+  elements.markdownToolbar.append(markdownToolbar);
+  markdownPreview.setToggleButton(
+    markdownToolbar.querySelector('[data-markdown-command="preview-toggle"]'),
+  );
   attachSlashPalette(elements.content, markdownEditor, { profile: "full" });
   let noteViewer = null;
   let viewerRequest = 0;

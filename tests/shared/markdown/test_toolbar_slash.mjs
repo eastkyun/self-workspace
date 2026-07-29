@@ -33,6 +33,11 @@ test("toolbar is generated from the profile command registry", () => {
   buttons[0].click();
   assert.deepEqual(executed, [buttons[0].dataset.markdownCommand]);
   assert.ok(buttons.every((button) => button.getAttribute("aria-label")));
+  assert.equal(
+    toolbar.querySelector('[data-markdown-command="preview-toggle"]')
+      .getAttribute("aria-pressed"),
+    "false",
+  );
 });
 
 test("slash palette filters Korean and English aliases and executes by keyboard", () => {
@@ -68,6 +73,7 @@ test("palette does not open inside URLs, words, inline code, fences or IME", () 
   for (const value of [
     "https://",
     "단어/",
+    "문장 /h2",
     "`code /",
     "```\n/",
   ]) {
@@ -84,6 +90,57 @@ test("palette does not open inside URLs, words, inline code, fences or IME", () 
   }));
   textarea.dispatchEvent(new dom.window.InputEvent("input", { bubbles: true }));
   assert.equal(slash.element.hidden, true);
+});
+
+test("palette opens after indentation and Tab closes without stealing focus traversal", () => {
+  const { dom, textarea, controller } = environment("  /h2");
+  const slash = attachSlashPalette(textarea, controller);
+  slash.update();
+  assert.equal(slash.element.hidden, false);
+
+  const tab = new dom.window.KeyboardEvent("keydown", {
+    key: "Tab",
+    bubbles: true,
+    cancelable: true,
+  });
+  textarea.dispatchEvent(tab);
+  assert.equal(tab.defaultPrevented, false);
+  assert.equal(slash.element.hidden, true);
+  assert.equal(textarea.value, "  /h2");
+});
+
+test("palette position follows the caret mirror and clamps to the viewport", () => {
+  const { dom, textarea, controller } = environment("/h2");
+  dom.window.innerWidth = 800;
+  dom.window.innerHeight = 600;
+  textarea.getBoundingClientRect = () => ({
+    left: 100,
+    top: 80,
+    right: 500,
+    bottom: 280,
+    width: 400,
+    height: 200,
+  });
+  const originalRect = dom.window.HTMLElement.prototype.getBoundingClientRect;
+  dom.window.HTMLElement.prototype.getBoundingClientRect = function rect() {
+    if (this.dataset?.markdownCaretMarker !== undefined) {
+      return {
+        left: 310,
+        top: 150,
+        right: 310,
+        bottom: 168,
+        width: 0,
+        height: 18,
+      };
+    }
+    return originalRect.call(this);
+  };
+
+  const slash = attachSlashPalette(textarea, controller);
+  slash.update();
+  assert.equal(slash.element.style.left, "310px");
+  assert.equal(slash.element.style.top, "174px");
+  assert.equal(dom.window.document.querySelector(".markdown-caret-mirror"), null);
 });
 
 test("Escape dismisses the current slash query until it changes", () => {
@@ -113,4 +170,3 @@ test("destroy removes palette DOM and textarea ARIA state", () => {
   assert.equal(element.isConnected, false);
   assert.equal(textarea.hasAttribute("aria-controls"), false);
 });
-

@@ -11,11 +11,11 @@ function slashContext(textarea) {
   const before = textarea.value.slice(0, cursor);
   const lineStart = before.lastIndexOf("\n") + 1;
   const currentLine = before.slice(lineStart);
-  const match = /(^|\s)\/([^\s/]*)$/u.exec(currentLine);
+  const match = /^([ \t]*)\/([^\s/]*)$/u.exec(currentLine);
   if (!match) {
     return null;
   }
-  const slashOffset = match.index + match[1].length;
+  const slashOffset = match[1].length;
   const slashStart = lineStart + slashOffset;
 
   const fences = before.match(/^```/gmu)?.length ?? 0;
@@ -35,13 +35,73 @@ function slashContext(textarea) {
   });
 }
 
+const MIRRORED_STYLE_PROPERTIES = Object.freeze([
+  "borderBottomWidth",
+  "borderLeftWidth",
+  "borderRightWidth",
+  "borderTopWidth",
+  "boxSizing",
+  "fontFamily",
+  "fontSize",
+  "fontStyle",
+  "fontWeight",
+  "letterSpacing",
+  "lineHeight",
+  "paddingBottom",
+  "paddingLeft",
+  "paddingRight",
+  "paddingTop",
+  "tabSize",
+  "textIndent",
+  "textTransform",
+  "wordSpacing",
+]);
+
+function caretRect(textarea) {
+  const document = textarea.ownerDocument;
+  const view = document.defaultView;
+  const textareaRect = textarea.getBoundingClientRect();
+  const computed = view.getComputedStyle(textarea);
+  const mirror = document.createElement("div");
+  mirror.className = "markdown-caret-mirror";
+  Object.assign(mirror.style, {
+    position: "fixed",
+    visibility: "hidden",
+    pointerEvents: "none",
+    overflow: "hidden",
+    whiteSpace: "pre-wrap",
+    overflowWrap: "break-word",
+    left: `${textareaRect.left}px`,
+    top: `${textareaRect.top}px`,
+    width: `${textareaRect.width}px`,
+    height: `${textareaRect.height}px`,
+  });
+  for (const property of MIRRORED_STYLE_PROPERTIES) {
+    mirror.style[property] = computed[property];
+  }
+  mirror.textContent = textarea.value.slice(0, textarea.selectionStart);
+  const marker = document.createElement("span");
+  marker.dataset.markdownCaretMarker = "";
+  marker.textContent = "\u200b";
+  mirror.append(marker);
+  document.body.append(mirror);
+  const markerRect = marker.getBoundingClientRect();
+  mirror.remove();
+  return Object.freeze({
+    left: markerRect.left - textarea.scrollLeft,
+    top: markerRect.bottom - textarea.scrollTop,
+  });
+}
+
 function placePalette(palette, textarea) {
   const view = textarea.ownerDocument.defaultView;
-  const rect = textarea.getBoundingClientRect();
-  const maxLeft = Math.max(8, view.innerWidth - 280);
-  const maxTop = Math.max(8, view.innerHeight - 260);
-  palette.style.left = `${Math.max(8, Math.min(rect.left + 12, maxLeft))}px`;
-  palette.style.top = `${Math.max(8, Math.min(rect.top + 44, maxTop))}px`;
+  const caret = caretRect(textarea);
+  const width = palette.offsetWidth || 272;
+  const height = palette.offsetHeight || 256;
+  const maxLeft = Math.max(8, view.innerWidth - width - 8);
+  const maxTop = Math.max(8, view.innerHeight - height - 8);
+  palette.style.left = `${Math.max(8, Math.min(caret.left, maxLeft))}px`;
+  palette.style.top = `${Math.max(8, Math.min(caret.top + 6, maxTop))}px`;
 }
 
 export function attachSlashPalette(textarea, controller, {
@@ -129,8 +189,8 @@ export function attachSlashPalette(textarea, controller, {
     activeIndex = Math.min(activeIndex, Math.max(0, matches.length - 1));
     palette.hidden = false;
     textarea.setAttribute("aria-expanded", "true");
-    placePalette(palette, textarea);
     renderOptions();
+    placePalette(palette, textarea);
   }
 
   function executeAt(index) {
@@ -163,9 +223,13 @@ export function attachSlashPalette(textarea, controller, {
       renderOptions();
       return;
     }
-    if ((event.key === "Enter" || event.key === "Tab") && matches.length) {
+    if (event.key === "Enter" && matches.length) {
       event.preventDefault();
       executeAt(activeIndex);
+      return;
+    }
+    if (event.key === "Tab") {
+      close({ dismiss: true });
       return;
     }
     if (event.key === "Escape") {
@@ -213,4 +277,3 @@ export function attachSlashPalette(textarea, controller, {
     update,
   });
 }
-

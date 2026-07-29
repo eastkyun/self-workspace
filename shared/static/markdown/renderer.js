@@ -36,9 +36,19 @@ function isAllowedHref(href) {
   return /^(?:(?:https?|mailto):|[#/?](?!\/)|\.{1,2}\/)/i.test(normalized);
 }
 
-function tokenText(token) {
+function tokenText(token, options) {
+  if (token?.type === "internal-link") {
+    const resolved = options.internalLinkResolutions?.get?.(
+      internalLinkKey(token.referenceType, token.target),
+    );
+    return String(
+      token.label
+        || resolved?.label
+        || `${token.referenceType}:${token.target}`,
+    );
+  }
   if (Array.isArray(token?.tokens)) {
-    return token.tokens.map(tokenText).join("");
+    return token.tokens.map((child) => tokenText(child, options)).join("");
   }
   return String(token?.text ?? "");
 }
@@ -57,7 +67,7 @@ function createMarked(options, state) {
         return escapeHtml(token.text);
       },
       heading(token) {
-        const text = normalizeHeadingText(tokenText(token));
+        const text = normalizeHeadingText(tokenText(token, options));
         const id = slugger.slug(text);
         state.headings.push(Object.freeze({
           level: token.depth,
@@ -67,12 +77,16 @@ function createMarked(options, state) {
         const anchor = options.headingAnchors
           ? ` id="${escapeHtml(id)}"`
           : "";
-        return `<h${token.depth}${anchor}>${this.parser.parseInline(token.tokens)}</h${token.depth}>\n`;
+        const permalink = options.headingAnchors
+          ? ` <a class="heading-permalink" href="#${escapeHtml(id)}" aria-label="${escapeHtml(`“${text}” 섹션 링크`)}"></a>`
+          : "";
+        return `<h${token.depth}${anchor}>${this.parser.parseInline(token.tokens)}${permalink}</h${token.depth}>\n`;
       },
       checkbox({ checked }) {
         const state = checked ? "true" : "false";
         const symbol = checked ? "✓" : "";
-        return `<span class="markdown-task-checkbox" role="checkbox" aria-checked="${state}">${symbol}</span> `;
+        const label = checked ? "완료" : "미완료";
+        return `<span class="markdown-task-checkbox" role="checkbox" aria-checked="${state}" aria-label="${label}">${symbol}</span> `;
       },
       link(token) {
         const label = this.parser.parseInline(token.tokens);
@@ -153,8 +167,10 @@ export function createMarkdownRenderer({
       const fallback = inline
         ? escapeHtml(source)
         : `<pre class="markdown-source-fallback">${escapeHtml(source)}</pre>`;
+      const fragment = sanitizer.sanitizeToFragment(fallback);
       return Object.freeze({
-        html: sanitizer.sanitize(fallback),
+        html: sanitizer.serialize(fragment),
+        fragment,
         headings: Object.freeze([]),
         toc: Object.freeze([]),
         internalLinks: Object.freeze([]),
@@ -169,10 +185,12 @@ export function createMarkdownRenderer({
     const state = { headings: [], internalLinks: [] };
     const marked = createMarked(options, state);
     const rawHtml = inline ? marked.parseInline(source) : marked.parse(source);
-    const html = sanitizer.sanitize(rawHtml);
+    const fragment = sanitizer.sanitizeToFragment(rawHtml);
+    const html = sanitizer.serialize(fragment);
     const headings = Object.freeze([...state.headings]);
     return Object.freeze({
       html,
+      fragment,
       headings,
       toc: Object.freeze(buildToc(headings, {
         minLevel: options.minTocLevel,

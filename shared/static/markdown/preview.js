@@ -1,6 +1,8 @@
 import { assertViewMode } from "./contracts.js";
 import { mountMarkdownViewer } from "./viewer.js";
 
+let previewSequence = 0;
+
 export function attachMarkdownPreview(textarea, container, {
   renderer,
   renderOptions = {},
@@ -16,6 +18,17 @@ export function attachMarkdownPreview(textarea, container, {
   let composing = false;
   let destroyed = false;
   let timer = null;
+  let toggleButton = null;
+  const host = textarea.closest("[data-markdown-editor]")
+    ?? textarea.parentElement;
+  if (!container.id) {
+    container.id = `markdown-preview-${++previewSequence}`;
+  }
+  const status = textarea.ownerDocument.createElement("span");
+  status.className = "sr-only markdown-preview-status";
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  host?.append(status);
   const viewer = mountMarkdownViewer(container, textarea.value, {
     renderer,
     renderOptions,
@@ -25,9 +38,15 @@ export function attachMarkdownPreview(textarea, container, {
   function applyMode() {
     textarea.hidden = mode === "preview";
     container.hidden = mode === "editor";
-    const host = textarea.closest("[data-markdown-editor]")
-      ?? textarea.parentElement;
     host?.setAttribute("data-markdown-view-mode", mode);
+    if (toggleButton) {
+      toggleButton.setAttribute("aria-pressed", String(mode !== "editor"));
+    }
+    status.textContent = {
+      editor: "Markdown 편집 모드",
+      split: "Markdown 편집 및 미리보기 모드",
+      preview: "Markdown 미리보기 모드",
+    }[mode];
   }
 
   function refresh() {
@@ -105,6 +124,7 @@ export function attachMarkdownPreview(textarea, container, {
       textarea.removeEventListener("compositionend", handleCompositionEnd);
       textarea.hidden = false;
       container.hidden = false;
+      status.remove();
       viewer.destroy();
     },
     getMode: () => mode,
@@ -117,6 +137,18 @@ export function attachMarkdownPreview(textarea, container, {
       return refresh();
     },
     setMode,
+    setToggleButton(button) {
+      if (destroyed) {
+        throw new Error("Markdown preview has been destroyed");
+      }
+      if (!button || button.dataset.markdownCommand !== "preview-toggle") {
+        throw new TypeError("preview toggle button is required");
+      }
+      toggleButton = button;
+      toggleButton.setAttribute("aria-controls", container.id);
+      toggleButton.setAttribute("aria-pressed", String(mode !== "editor"));
+      return toggleButton;
+    },
     toggle,
     viewer,
   });

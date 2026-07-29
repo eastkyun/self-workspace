@@ -138,12 +138,16 @@ const taskMarkdownEditor = attachMarkdownEditor(descriptionInput, {
   profile: "compact",
   onPreviewToggle: () => taskMarkdownPreview.toggle(),
 });
-taskMarkdownToolbar.append(createMarkdownToolbar({
+const taskToolbar = createMarkdownToolbar({
   document,
   profile: "compact",
   execute: (commandId) => taskMarkdownEditor.execute(commandId),
   ariaLabel: "일정 설명 Markdown 서식",
-}));
+});
+taskMarkdownToolbar.append(taskToolbar);
+taskMarkdownPreview.setToggleButton(
+  taskToolbar.querySelector('[data-markdown-command="preview-toggle"]'),
+);
 attachSlashPalette(descriptionInput, taskMarkdownEditor, {
   profile: "compact",
 });

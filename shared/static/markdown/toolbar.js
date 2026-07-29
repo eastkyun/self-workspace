@@ -23,6 +23,9 @@ export function createMarkdownToolbar({
     button.className = "markdown-toolbar__button";
     button.dataset.markdownCommand = command.id;
     button.setAttribute("aria-label", command.label);
+    if (command.kind === "view") {
+      button.setAttribute("aria-pressed", "false");
+    }
     button.title = command.shortcut
       ? `${command.label} (${command.shortcut})`
       : command.label;
@@ -33,4 +36,3 @@ export function createMarkdownToolbar({
 
   return toolbar;
 }
-
