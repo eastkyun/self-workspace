@@ -1,0 +1,173 @@
+{
+  "schema_version": 1,
+  "quotes": [
+    {
+      "id": "marcus-001",
+      "text": "당신의 마음은 당신이 자주 품는 생각의 빛깔로 물든다.",
+      "author": "마르쿠스 아우렐리우스",
+      "source": "명상록 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "marcus-002",
+      "text": "좋은 사람을 논하는 데 시간을 쓰지 말고, 좋은 사람이 되어라.",
+      "author": "마르쿠스 아우렐리우스",
+      "source": "명상록 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "seneca-001",
+      "text": "어려워서 시작하지 못하는 것이 아니라, 시작하지 않아서 어려운 것이다.",
+      "author": "세네카",
+      "source": "루킬리우스에게 보내는 도덕 편지 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "seneca-002",
+      "text": "어디로 향하는지 모르는 배에는 어떤 바람도 순풍이 아니다.",
+      "author": "세네카",
+      "source": "루킬리우스에게 보내는 도덕 편지 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "epictetus-001",
+      "text": "중요한 것은 일어난 일이 아니라, 그것을 받아들이는 우리의 태도다.",
+      "author": "에픽테토스",
+      "source": "엥케이리디온 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "epictetus-002",
+      "text": "먼저 어떤 사람이 되고 싶은지 정하고, 그다음 해야 할 일을 하라.",
+      "author": "에픽테토스",
+      "source": "담화록 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "confucius-001",
+      "text": "천천히 가는 것은 괜찮다. 멈추지만 않으면 된다.",
+      "author": "공자",
+      "source": "논어의 가르침 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "confucius-002",
+      "text": "아는 것을 안다고 하고 모르는 것을 모른다고 하는 것이 앎이다.",
+      "author": "공자",
+      "source": "논어 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "laozi-001",
+      "text": "천 리 길도 발밑의 한 걸음에서 시작된다.",
+      "author": "노자",
+      "source": "도덕경 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "laozi-002",
+      "text": "충분함을 아는 사람은 이미 풍요롭다.",
+      "author": "노자",
+      "source": "도덕경 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "aristotle-001",
+      "text": "우리는 반복해서 행하는 것이 된다. 탁월함은 한 번의 행동이 아니라 습관이다.",
+      "author": "아리스토텔레스의 윤리학을 요약한 윌 듀런트",
+      "source": "철학 이야기 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "franklin-001",
+      "text": "잘한 말보다 잘한 행동이 더 낫다.",
+      "author": "벤저민 프랭클린",
+      "source": "가난한 리처드의 달력 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "emerson-001",
+      "text": "길이 이끄는 곳만 따라가지 말고, 길이 없는 곳에 발자국을 남겨라.",
+      "author": "랄프 왈도 에머슨",
+      "source": "에머슨의 사상 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "thoreau-001",
+      "text": "꿈을 향해 자신 있게 나아가며 상상한 삶을 살아라.",
+      "author": "헨리 데이비드 소로",
+      "source": "월든 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "austen-001",
+      "text": "과거의 불쾌한 기억은 가능한 한 적게 붙들어 두자.",
+      "author": "제인 오스틴",
+      "source": "오만과 편견 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "wilde-001",
+      "text": "자기 자신이 되어라. 다른 사람의 자리는 이미 모두 차 있다.",
+      "author": "오스카 와일드",
+      "source": "와일드의 경구 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "douglass-001",
+      "text": "투쟁이 없으면 진보도 없다.",
+      "author": "프레더릭 더글러스",
+      "source": "서인도 제도 해방 연설 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "nightingale-001",
+      "text": "나는 성공을 어떤 변명에도 맡기지 않았다.",
+      "author": "플로렌스 나이팅게일",
+      "source": "나이팅게일의 기록 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "curie-001",
+      "text": "삶에서 두려워할 것은 없다. 이해해야 할 것이 있을 뿐이다.",
+      "author": "마리 퀴리",
+      "source": "퀴리의 회고 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "keller-001",
+      "text": "혼자서는 조금밖에 할 수 없지만, 함께라면 많은 일을 할 수 있다.",
+      "author": "헬렌 켈러",
+      "source": "켈러의 글과 연설 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "gandhi-001",
+      "text": "미래는 오늘 우리가 무엇을 하느냐에 달려 있다.",
+      "author": "마하트마 간디",
+      "source": "간디의 가르침 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "tagore-001",
+      "text": "해를 잃었다고 울고 있으면 별까지 보지 못한다.",
+      "author": "라빈드라나트 타고르",
+      "source": "길 잃은 새 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "lincoln-001",
+      "text": "나는 천천히 걷지만 결코 뒤로 걷지는 않는다.",
+      "author": "에이브러햄 링컨",
+      "source": "링컨의 태도 · 의역",
+      "enabled": true
+    },
+    {
+      "id": "roosevelt-001",
+      "text": "할 수 있다고 믿는 순간 이미 절반은 이룬 셈이다.",
+      "author": "시어도어 루스벨트",
+      "source": "루스벨트의 연설 · 의역",
+      "enabled": true
+    }
+  ]
+}
