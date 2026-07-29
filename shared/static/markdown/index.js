@@ -11,6 +11,7 @@ export {
   getCommand,
   searchCommands,
 } from "./commands.js";
+export { attachMarkdownEditor } from "./editor-controller.js";
 export {
   EDITOR_PROFILES,
   getEditorProfile,
