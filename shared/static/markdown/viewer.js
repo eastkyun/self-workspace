@@ -34,15 +34,17 @@ export function mountMarkdownViewer(container, markdown, {
   article.append(toc, content);
   container.replaceChildren(article);
   let destroyed = false;
+  let activeRenderOptions = renderOptions;
 
-  function update(source) {
+  function update(source, nextRenderOptions = activeRenderOptions) {
     if (destroyed) {
       throw new Error("Markdown viewer has been destroyed");
     }
-    const result = renderer.renderWithMetadata(source, renderOptions);
+    activeRenderOptions = nextRenderOptions;
+    const result = renderer.renderWithMetadata(source, activeRenderOptions);
     content.innerHTML = result.html;
     toc.replaceChildren();
-    if (renderOptions.showToc && result.toc.length) {
+    if (activeRenderOptions.showToc && result.toc.length) {
       appendTocList(document, toc, result.toc);
       toc.hidden = false;
     } else {
@@ -50,12 +52,12 @@ export function mountMarkdownViewer(container, markdown, {
     }
     article.classList.toggle(
       "markdown-viewer--compact",
-      Boolean(renderOptions.compact),
+      Boolean(activeRenderOptions.compact),
     );
-    if (!source && renderOptions.emptyMessage) {
+    if (!source && activeRenderOptions.emptyMessage) {
       const empty = document.createElement("p");
       empty.className = "markdown-viewer__empty";
-      empty.textContent = renderOptions.emptyMessage;
+      empty.textContent = activeRenderOptions.emptyMessage;
       content.replaceChildren(empty);
     }
     return result;
@@ -72,7 +74,9 @@ export function mountMarkdownViewer(container, markdown, {
       article.remove();
     },
     result,
+    setRenderOptions(nextRenderOptions) {
+      activeRenderOptions = nextRenderOptions;
+    },
     update,
   });
 }
-

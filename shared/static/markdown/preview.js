@@ -109,9 +109,15 @@ export function attachMarkdownPreview(textarea, container, {
     },
     getMode: () => mode,
     refresh,
+    setRenderOptions(nextRenderOptions) {
+      if (destroyed) {
+        throw new Error("Markdown preview has been destroyed");
+      }
+      viewer.setRenderOptions(nextRenderOptions);
+      return refresh();
+    },
     setMode,
     toggle,
     viewer,
   });
 }
-

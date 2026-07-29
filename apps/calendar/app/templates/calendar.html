@@ -5,6 +5,7 @@
     <link rel="stylesheet" href="./static/vendor/fullcalendar/7.0.2/skeleton.css">
     <link rel="stylesheet" href="./static/vendor/fullcalendar/7.0.2/themes/classic/theme.css">
     <link rel="stylesheet" href="./static/vendor/fullcalendar/7.0.2/themes/classic/palette.css">
+    <link rel="stylesheet" href="./static/shared/markdown/markdown.css">
     <link rel="stylesheet" href="./static/styles.css">
 {% endblock %}
 
@@ -12,6 +13,7 @@
   <div
     class="calendar-page"
     data-notes-route="{{ workspace_path(notes_route) }}"
+    data-internal-link-endpoint="{{ workspace_path('/api/internal-links/resolve') }}"
   >
     <header class="calendar-toolbar">
       <div class="calendar-identity">
@@ -145,8 +147,24 @@
             <label for="task-title">제목</label>
             <input id="task-title" name="title" type="text" maxlength="120" required autofocus>
 
-            <label for="task-description">설명 <span class="optional">(선택)</span></label>
-            <textarea id="task-description" name="description" rows="9"></textarea>
+            <div class="task-description-field" data-markdown-editor>
+              <label for="task-description">설명 <span class="optional">(선택)</span></label>
+              <div id="task-markdown-toolbar"></div>
+              <div class="markdown-editor__workspace">
+                <textarea
+                  id="task-description"
+                  class="markdown-editor__textarea"
+                  name="description"
+                  rows="9"
+                  aria-describedby="task-markdown-help"
+                  placeholder="Markdown으로 설명을 입력하세요."
+                ></textarea>
+                <div id="task-markdown-preview" class="task-markdown-preview"></div>
+              </div>
+              <p id="task-markdown-help" class="task-markdown-help">
+                Markdown과 / 명령을 사용할 수 있습니다.
+              </p>
+            </div>
 
             <fieldset class="topic-fieldset">
               <legend>주제 <span class="optional">(여러 개 선택 가능)</span></legend>

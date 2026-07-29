@@ -102,6 +102,15 @@ test("links Calendar details to Notes without a localhost HTTP bridge", () => {
   assert.match(appSource, /attachSearchGeneration/);
 });
 
+test("calendar description uses the shared compact Markdown editor", () => {
+  assert.match(indexSource, /static\/shared\/markdown\/markdown\.css/);
+  assert.match(indexSource, /id="task-markdown-toolbar"/);
+  assert.match(indexSource, /id="task-markdown-preview"/);
+  assert.match(appSource, /profile: "compact"/);
+  assert.match(appSource, /taskMarkdownPreview\.setMode\(task \? "preview" : "editor"\)/);
+  assert.match(appSource, /collectInternalLinks\(task\.description\)/);
+});
+
 test("keeps the calendar inside the viewport without page scrolling", () => {
   assert.match(appSource, /height:\s*"100%"/);
   assert.match(shellStylesSource, /height:\s*100dvh/);

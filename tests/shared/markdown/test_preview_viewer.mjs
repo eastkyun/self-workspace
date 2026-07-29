@@ -73,6 +73,13 @@ test("preview modes update visibility and compact profiles stay isolated", () =>
   assert.ok(preview.querySelector("article").classList.contains("markdown-viewer--compact"));
   assert.equal(attached.toggle(), "editor");
   assert.deepEqual(modes, ["preview", "editor"]);
+  attached.setRenderOptions({
+    compact: true,
+    emptyMessage: "비어 있음",
+  });
+  textarea.value = "";
+  attached.refresh();
+  assert.match(preview.textContent, /비어 있음/);
 });
 
 test("preview defers rendering during composition and cleans up on destroy", () => {
@@ -97,4 +104,3 @@ test("preview defers rendering during composition and cleans up on destroy", () 
   assert.equal(preview.children.length, 0);
   assert.equal(textarea.hidden, false);
 });
-

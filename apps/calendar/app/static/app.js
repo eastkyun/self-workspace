@@ -15,6 +15,15 @@ import {
   tasksForDate,
   topicCountsForTasks,
 } from "./calendar-adapter.js";
+import {
+  attachMarkdownEditor,
+  attachMarkdownPreview,
+  attachSlashPalette,
+  collectInternalLinks,
+  createMarkdownRenderer,
+  createMarkdownToolbar,
+  resolveInternalLinks,
+} from "./shared/markdown/index.js";
 
 const STATUS_LABELS = { todo: "할 일", doing: "진행 중", done: "완료" };
 const APP_BASE_URL = new URL("./", document.baseURI);
@@ -22,6 +31,8 @@ const dialog = document.querySelector("#task-dialog");
 const form = document.querySelector("#task-form");
 const titleInput = document.querySelector("#task-title");
 const descriptionInput = document.querySelector("#task-description");
+const taskMarkdownToolbar = document.querySelector("#task-markdown-toolbar");
+const taskMarkdownPreviewElement = document.querySelector("#task-markdown-preview");
 const statusInput = document.querySelector("#task-status");
 const taskIdInput = document.querySelector("#task-id");
 const allDayInput = document.querySelector("#task-all-day");
@@ -61,6 +72,7 @@ const topicOverflowList = document.querySelector("#topic-overflow-list");
 const activeTopicCount = document.querySelector("#active-topic-count");
 const calendarPage = document.querySelector(".calendar-page");
 const notesRoute = calendarPage.dataset.notesRoute;
+const internalLinkEndpoint = calendarPage.dataset.internalLinkEndpoint;
 const linkedNotesSection = document.querySelector("#linked-notes-section");
 const linkedNotesList = document.querySelector("#linked-notes-list");
 const linkedNotesStatus = document.querySelector("#linked-notes-status");
@@ -83,6 +95,33 @@ let notificationTimer;
 let overdueRefreshTimer;
 let taskDialogGeneration = 0;
 let attachSearchGeneration = 0;
+const markdownRenderer = createMarkdownRenderer();
+const taskMarkdownPreview = attachMarkdownPreview(
+  descriptionInput,
+  taskMarkdownPreviewElement,
+  {
+    renderer: markdownRenderer,
+    mode: "editor",
+    availableModes: ["editor", "preview"],
+    renderOptions: {
+      compact: true,
+      emptyMessage: "설명이 없습니다.",
+    },
+  },
+);
+const taskMarkdownEditor = attachMarkdownEditor(descriptionInput, {
+  profile: "compact",
+  onPreviewToggle: () => taskMarkdownPreview.toggle(),
+});
+taskMarkdownToolbar.append(createMarkdownToolbar({
+  document,
+  profile: "compact",
+  execute: (commandId) => taskMarkdownEditor.execute(commandId),
+  ariaLabel: "일정 설명 Markdown 서식",
+}));
+attachSlashPalette(descriptionInput, taskMarkdownEditor, {
+  profile: "compact",
+});
 
 function currentKstParts(date = new Date()) {
   const shifted = new Date(date.getTime() + 9 * 60 * 60 * 1000);
@@ -458,6 +497,12 @@ function openTaskDialog(task = null, date = null) {
   taskIdInput.value = task?.id ?? "";
   titleInput.value = task?.title ?? "";
   descriptionInput.value = task?.description ?? "";
+  taskMarkdownPreview.setRenderOptions({
+    compact: true,
+    emptyMessage: "설명이 없습니다.",
+    internalLinkResolutions: new Map(),
+  });
+  taskMarkdownPreview.setMode(task ? "preview" : "editor");
   statusInput.value = task?.status ?? "todo";
   allDayInput.checked = Boolean(task?.all_day);
   startAtInput.value = task ? apiTimestampToLocalInput(task.start_at) : defaults.start;
@@ -485,6 +530,21 @@ function openTaskDialog(task = null, date = null) {
       if (dialogGeneration !== taskDialogGeneration) return;
       linkedNotesStatus.textContent = error.message;
     });
+    const references = collectInternalLinks(task.description);
+    if (references.length) {
+      resolveInternalLinks(references, {
+        endpoint: internalLinkEndpoint,
+      }).then((internalLinkResolutions) => {
+        if (dialogGeneration !== taskDialogGeneration) return;
+        taskMarkdownPreview.setRenderOptions({
+          compact: true,
+          emptyMessage: "설명이 없습니다.",
+          internalLinkResolutions,
+        });
+      }).catch((error) => {
+        if (dialogGeneration === taskDialogGeneration) showError(error.message);
+      });
+    }
   }
   dialog.showModal();
   titleInput.focus();

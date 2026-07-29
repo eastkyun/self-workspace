@@ -520,6 +520,38 @@ button { color: inherit; }
 }
 .task-page-schedule { background: #fffefa; }
 .task-page-primary textarea { min-height: 190px; line-height: 1.55; }
+.task-description-field {
+  display: grid;
+  min-width: 0;
+  gap: 0;
+}
+.task-description-field > label { margin-bottom: 6px; }
+.task-description-field .markdown-toolbar {
+  border-color: var(--line);
+  background: #f8f7f2;
+}
+.task-description-field .markdown-toolbar__button {
+  color: var(--ink);
+}
+.task-description-field textarea {
+  min-height: 190px;
+  border-radius: 0 0 8px 8px;
+}
+.task-markdown-preview {
+  min-width: 0;
+  min-height: 190px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 0 0 8px 8px;
+  background: #fff;
+}
+.task-markdown-help {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
 .topic-fieldset {
   display: grid;
   gap: 7px;

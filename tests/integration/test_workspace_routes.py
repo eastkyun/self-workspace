@@ -35,6 +35,9 @@ def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) 
         )
         calendar_shell_script = client.get("/apps/calendar/static/shared/shell.js")
         stylesheet = client.get("/apps/calendar/static/styles.css")
+        calendar_markdown_stylesheet = client.get(
+            "/apps/calendar/static/shared/markdown/markdown.css"
+        )
         tasks = client.get("/apps/calendar/api/tasks")
         notes_redirect = client.get("/apps/notes", follow_redirects=False)
         notes = client.get("/apps/notes/")
@@ -82,6 +85,7 @@ def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) 
     assert calendar_shell_stylesheet.status_code == 200
     assert calendar_shell_script.status_code == 200
     assert stylesheet.status_code == 200
+    assert calendar_markdown_stylesheet.status_code == 200
     assert tasks.status_code == 200
     assert tasks.json() == []
     assert notes_redirect.status_code in {307, 308}

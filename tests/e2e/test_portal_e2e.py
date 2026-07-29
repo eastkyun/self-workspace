@@ -325,6 +325,66 @@ def test_calendar_event_opens_from_keyboard(page: Page, live_server: str) -> Non
     expect(page.locator("#task-dialog")).to_be_visible()
 
 
+def test_calendar_shared_markdown_compact_editor_and_viewer(
+    page: Page,
+    live_server: str,
+) -> None:
+    external_requests = assert_same_origin_requests(page, live_server)
+    failed_requests: list[str] = []
+    console_errors: list[str] = []
+    page.on(
+        "requestfailed",
+        lambda request: failed_requests.append(
+            f"{request.method} {request.failure} {request.url}"
+        ),
+    )
+    page.on(
+        "console",
+        lambda message: (
+            console_errors.append(message.text) if message.type == "error" else None
+        ),
+    )
+    page.goto(f"{live_server}/apps/calendar/")
+    page.locator("#create-menu-button").click()
+    page.locator("#new-task-button").click()
+    dialog = page.locator("#task-dialog")
+    dialog.locator("#task-title").fill("Markdown 일정")
+    source = (
+        "**중요 일정**\n"
+        "## 준비 사항\n"
+        "<script>window.__calendarMarkdownXss = true</script>"
+    )
+    dialog.locator("#task-description").fill(source)
+    dialog.get_by_role("button", name="미리보기").click()
+    preview = dialog.locator("#task-markdown-preview")
+    expect(preview.locator("strong")).to_have_text("중요 일정")
+    expect(preview.locator("h2")).to_have_text("준비 사항")
+    expect(preview.locator("script")).to_have_count(0)
+    expect(preview).to_contain_text(
+        "<script>window.__calendarMarkdownXss = true</script>"
+    )
+    assert page.evaluate("window.__calendarMarkdownXss") is None
+    dialog.get_by_role("button", name="저장").click()
+    expect(dialog).to_be_hidden()
+
+    page.get_by_role("button", name="일정 열기: Markdown 일정").click()
+    expect(dialog.locator("#task-description")).to_be_hidden()
+    expect(preview.locator("strong")).to_have_text("중요 일정")
+    expect(preview.locator("h2")).to_have_text("준비 사항")
+    expect(preview.locator("script")).to_have_count(0)
+    assert page.evaluate("window.__calendarMarkdownXss") is None
+
+    dialog.get_by_role("button", name="미리보기").click()
+    expect(dialog.locator("#task-description")).to_be_visible()
+    dialog.locator("#task-description").fill(f"{source}\n\n수정됨")
+    dialog.get_by_role("button", name="저장").click()
+    page.get_by_role("button", name="일정 열기: Markdown 일정").click()
+    expect(preview).to_contain_text("수정됨")
+    assert external_requests == []
+    assert failed_requests == []
+    assert console_errors == []
+
+
 def test_notes_registry_surfaces_and_crud(page: Page, live_server: str) -> None:
     external_requests = assert_same_origin_requests(page, live_server)
     failed_requests: list[str] = []
