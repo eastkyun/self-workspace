@@ -349,12 +349,22 @@ def test_calendar_shared_markdown_compact_editor_and_viewer(
     page.locator("#new-task-button").click()
     dialog = page.locator("#task-dialog")
     dialog.locator("#task-title").fill("Markdown 일정")
-    source = (
-        "**중요 일정**\n"
-        "## 준비 사항\n"
-        "<script>window.__calendarMarkdownXss = true</script>"
+    description = dialog.locator("#task-description")
+    description.fill("중요 일정")
+    description.evaluate(
+        "(element) => element.setSelectionRange(0, element.value.length)"
     )
-    dialog.locator("#task-description").fill(source)
+    dialog.get_by_role("button", name="굵게").click()
+    expect(description).to_have_value("**중요 일정**")
+    description.focus()
+    description.press("End")
+    description.press("Enter")
+    description.type("/h2")
+    expect(page.locator(".markdown-slash-palette")).to_be_visible()
+    description.press("Enter")
+    description.type("준비 사항")
+    description.press("Enter")
+    description.type("<script>window.__calendarMarkdownXss = true</script>")
     dialog.get_by_role("button", name="미리보기").click()
     preview = dialog.locator("#task-markdown-preview")
     expect(preview.locator("strong")).to_have_text("중요 일정")
@@ -376,7 +386,8 @@ def test_calendar_shared_markdown_compact_editor_and_viewer(
 
     dialog.get_by_role("button", name="미리보기").click()
     expect(dialog.locator("#task-description")).to_be_visible()
-    dialog.locator("#task-description").fill(f"{source}\n\n수정됨")
+    dialog.locator("#task-description").press("End")
+    dialog.locator("#task-description").type("\n\n수정됨")
     dialog.get_by_role("button", name="저장").click()
     page.get_by_role("button", name="일정 열기: Markdown 일정").click()
     expect(preview).to_contain_text("수정됨")
@@ -458,12 +469,22 @@ def test_notes_shared_markdown_editor_preview_and_viewer(
     page.goto(f"{live_server}/apps/notes/")
     page.get_by_role("button", name="새 메모", exact=True).click()
     page.locator("#note-title").fill("Markdown E2E")
-    source = (
-        "**굵게**\n"
-        "## 섹션\n"
-        "<script>window.__markdownXss = true</script>"
+    content = page.locator("#note-content")
+    content.fill("굵게")
+    content.evaluate(
+        "(element) => element.setSelectionRange(0, element.value.length)"
     )
-    page.locator("#note-content").fill(source)
+    page.get_by_role("button", name="굵게").click()
+    expect(content).to_have_value("**굵게**")
+    content.focus()
+    content.press("End")
+    content.press("Enter")
+    content.type("/h2")
+    expect(page.locator(".markdown-slash-palette")).to_be_visible()
+    content.press("Enter")
+    content.type("섹션")
+    content.press("Enter")
+    content.type("<script>window.__markdownXss = true</script>")
     page.get_by_role("button", name=re.compile(r"^미리보기")).click()
     preview = page.locator("#note-markdown-preview")
     expect(preview.locator("strong")).to_have_text("굵게")
