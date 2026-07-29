@@ -185,3 +185,15 @@ def delete_link(
         (link_id, note_id),
     )
     return cursor.rowcount > 0
+
+
+def get_link(
+    connection: sqlite3.Connection,
+    note_id: int,
+    link_id: int,
+) -> dict[str, Any] | None:
+    row = connection.execute(
+        "SELECT * FROM note_links WHERE id = ? AND note_id = ?",
+        (link_id, note_id),
+    ).fetchone()
+    return row_to_dict(row) if row else None

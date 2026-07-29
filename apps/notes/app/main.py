@@ -13,12 +13,21 @@ from apps.notes.app.database import (
 )
 from apps.notes.app.schemas import (
     NoteCreate,
+    NoteLinkResponse,
     NoteResponse,
     NoteType,
     NoteUpdate,
+    SourceReferenceInput,
 )
-from apps.notes.app.service import NoteNotFoundError, NotesService
+from apps.notes.app.service import (
+    DuplicateLinkError,
+    LinkNotFoundError,
+    NoteNotFoundError,
+    NotesService,
+    SourceNotFoundError,
+)
 from shared.app_registry import AppRegistry, PORTAL_STATIC_DIR
+from shared.source_references import SourceReferenceResolver
 from shared.templating import SHARED_STATIC_DIR, create_templates, shell_context
 
 APP_DIR = Path(__file__).resolve().parent
@@ -32,10 +41,14 @@ def create_app(
     *,
     initialize_on_startup: bool = True,
     app_registry: AppRegistry | None = None,
+    source_resolver: SourceReferenceResolver | None = None,
 ) -> FastAPI:
     resolved_database_path = resolve_database_path(database_path)
     registry = app_registry or AppRegistry.load_default()
-    service = NotesService(resolved_database_path)
+    service = NotesService(
+        resolved_database_path,
+        source_resolver=source_resolver,
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -118,7 +131,14 @@ def create_app(
         status_code=status.HTTP_201_CREATED,
     )
     def create_note(payload: NoteCreate) -> dict:
-        return service.create_note(payload)
+        try:
+            return service.create_note(payload)
+        except DuplicateLinkError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        except SourceNotFoundError as error:
+            raise HTTPException(status_code=404, detail="Source not found") from error
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
 
     @application.get("/api/notes/{note_id}", response_model=NoteResponse)
     def get_note(note_id: int) -> dict:
@@ -143,6 +163,47 @@ def create_app(
             service.delete_note(note_id)
         except NoteNotFoundError as error:
             raise HTTPException(status_code=404, detail="Note not found") from error
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @application.get(
+        "/api/notes/{note_id}/links",
+        response_model=list[NoteLinkResponse],
+    )
+    def list_note_links(note_id: int) -> list[dict]:
+        try:
+            return service.list_links(note_id)
+        except NoteNotFoundError as error:
+            raise HTTPException(status_code=404, detail="Note not found") from error
+
+    @application.post(
+        "/api/notes/{note_id}/links",
+        response_model=NoteLinkResponse,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def create_note_link(
+        note_id: int,
+        payload: SourceReferenceInput,
+    ) -> dict:
+        try:
+            return service.create_link(note_id, payload)
+        except NoteNotFoundError as error:
+            raise HTTPException(status_code=404, detail="Note not found") from error
+        except SourceNotFoundError as error:
+            raise HTTPException(status_code=404, detail="Source not found") from error
+        except DuplicateLinkError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @application.delete(
+        "/api/notes/{note_id}/links/{link_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
+    def delete_note_link(note_id: int, link_id: int) -> Response:
+        try:
+            service.delete_link(note_id, link_id)
+        except (NoteNotFoundError, LinkNotFoundError) as error:
+            raise HTTPException(status_code=404, detail="Link not found") from error
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     return application

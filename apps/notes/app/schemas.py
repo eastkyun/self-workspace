@@ -24,8 +24,24 @@ class NoteWrite(BaseModel):
         return normalized
 
 
+class SourceReferenceInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    source_app: str = Field(min_length=1, max_length=40, pattern=r"^[a-z][a-z0-9_-]*$")
+    source_type: str = Field(min_length=1, max_length=40, pattern=r"^[a-z][a-z0-9_-]*$")
+    source_id: str = Field(min_length=1, max_length=120)
+
+    @field_validator("source_id")
+    @classmethod
+    def normalize_source_id(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("source_id must not be empty")
+        return normalized
+
+
 class NoteCreate(NoteWrite):
-    pass
+    links: list[SourceReferenceInput] = Field(default_factory=list, max_length=20)
 
 
 class NoteUpdate(NoteWrite):
@@ -42,3 +58,16 @@ class NoteResponse(BaseModel):
     is_pinned: bool
     created_at: str
     updated_at: str
+
+
+class NoteLinkResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    note_id: int
+    source_app: str
+    source_type: str
+    source_id: str
+    source_title_snapshot: str
+    created_at: str
+    orphan: bool

@@ -102,6 +102,10 @@ def test_portal_calendar_and_notes_share_one_registry_snapshot(
 
     assert calendar_mount.app.state.app_registry is application.state.app_registry
     assert notes_mount.app.state.app_registry is application.state.app_registry
+    assert (
+        notes_mount.app.state.notes_service.source_resolver
+        is application.state.source_resolver
+    )
 
 
 def test_portal_verifies_existing_v2_database_without_mutation(tmp_path: Path) -> None:

@@ -12,6 +12,7 @@ from apps.calendar.app.main import (
     resolve_database_path,
     verify_database,
 )
+from apps.calendar.app.source_provider import CalendarEventSourceProvider
 from apps.notes.app.database import (
     initialize_database as initialize_notes_database,
     resolve_database_path as resolve_notes_database_path,
@@ -24,6 +25,7 @@ from shared.templating import (
     create_templates,
     shell_context,
 )
+from shared.source_references import SourceReferenceResolver
 
 PORTAL_DIR = Path(__file__).resolve().parent
 STATIC_DIR = PORTAL_DIR / "static"
@@ -40,6 +42,13 @@ def create_app(
     resolved_database_path = resolve_database_path(database_path)
     resolved_notes_database_path = resolve_notes_database_path(notes_database_path)
     registry = app_registry or AppRegistry.load_default()
+    source_resolver = SourceReferenceResolver(
+        {
+            ("calendar", "event"): CalendarEventSourceProvider(
+                resolved_database_path
+            )
+        }
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -63,6 +72,7 @@ def create_app(
     application.state.calendar_database_path = resolved_database_path
     application.state.notes_database_path = resolved_notes_database_path
     application.state.app_registry = registry
+    application.state.source_resolver = source_resolver
     application.mount(
         "/static/shared",
         StaticFiles(directory=SHARED_STATIC_DIR),
@@ -97,6 +107,7 @@ def create_app(
         resolved_notes_database_path,
         initialize_on_startup=False,
         app_registry=registry,
+        source_resolver=source_resolver,
     )
     application.mount("/apps/notes", notes_application, name="notes")
     return application
