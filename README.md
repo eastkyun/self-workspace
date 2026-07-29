@@ -9,7 +9,7 @@
 apps/calendar/   Calendar FastAPI sub-application, template, 로컬 vendor 자산
 apps/notes/      Notes CRUD, 검색, 논리적 source link, 전용 정적 자산
 portal/          App Hub composition root, Home template와 전용 자산
-shared/          공통 App Shell template, design token, navigation과 registry
+shared/          App Shell, Registry, Markdown Core와 cross-app 공통 계약
 instance/        Git에서 제외되는 실행 데이터
 tests/           Calendar 원본 회귀와 Portal 통합 테스트
 docs/            편입·DB·registry 운영 문서
@@ -66,6 +66,7 @@ PYTHONDONTWRITEBYTECODE=1 \
 python -m pytest -q -p no:cacheprovider tests
 
 node --test tests/calendar/*.mjs tests/portal/*.mjs tests/notes/*.mjs
+npm run test:markdown
 
 PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers \
   python -m pytest -q tests/e2e
@@ -78,6 +79,7 @@ Codex filesystem sandbox 안에서는 AnyIO cross-thread blocking portal 제한 
 ## 로컬 자산 및 외부 링크
 
 Calendar의 FullCalendar 7.0.2와 Pretendard 1.3.9는 기존 vendor 파일을 그대로 사용합니다.
+Marked 18.0.7과 DOMPurify 3.4.12도 lockfile과 hash가 고정된 로컬 ESM 자산을 사용합니다.
 Portal과 Calendar의 정상 로드/CRUD는 외부 host에 요청하지 않습니다. 외부 App Hub 항목은 로컬
 메타데이터와 아이콘만 렌더링하며 사용자가 링크를 클릭할 때만 새 탭으로 이동합니다.
 
@@ -100,5 +102,6 @@ shell을 상속합니다. 두 앱은 FastAPI sub-application으로 명시적으�
 - [App Hub registry](docs/app-hub-registry.md)
 - [Notes architecture](docs/notes-architecture.md)
 - [Cross-app linking](docs/cross-app-linking.md)
+- [Shared Markdown Core](docs/shared-markdown-core.md)
 - [내부 앱 추가](docs/adding-an-internal-app.md)
 - Calendar의 기존 기능·API·vendor 정보: [apps/calendar/README.md](apps/calendar/README.md)

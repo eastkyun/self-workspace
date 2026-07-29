@@ -14,3 +14,7 @@
 
 Registry 등록과 ASGI runtime mount는 서로 독립된 책임입니다. Registry import side effect나
 filesystem 자동 탐색으로 앱을 실행하지 않습니다.
+
+본문형 Markdown이 필요하면 renderer나 sanitizer를 앱에 복제하지 않고
+`/static/shared/markdown/index.js`의 public API와
+[`Shared Markdown Core`](shared-markdown-core.md)의 profile/extension 계약을 사용합니다.
