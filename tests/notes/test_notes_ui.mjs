@@ -107,6 +107,15 @@ test("UI contains accessible list, editor, statuses, and dirty guard", () => {
   assert.match(script, /request !== state\.selectionRequest/);
   assert.match(script, /request !== state\.listRequest/);
   assert.match(script, /requestAnimationFrame\(\(\) => elements\.editButton\.focus\(\)\)/);
+  assert.match(template, /static\/shared\/markdown\/markdown\.css/);
+  assert.match(template, /id="note-markdown-toolbar"/);
+  assert.match(template, /id="note-markdown-preview"/);
+  assert.match(script, /profile: "full"/);
+  assert.match(script, /mountMarkdownViewer/);
+  assert.doesNotMatch(script, /viewContent\.textContent = state\.selectedNote\.content/);
+  assert.match(script, /markdownRenderer\.extractExcerpt/);
+  assert.match(template, /id="new-note"[^>]*disabled/);
+  assert.match(script, /elements\.newButton\.disabled = false/);
 });
 
 test("mobile layout is single-column without horizontal overflow", () => {

@@ -10,6 +10,16 @@ import {
   requestedSource,
   sortNotes,
 } from "./notes-state.js";
+import {
+  attachMarkdownEditor,
+  attachMarkdownPreview,
+  attachSlashPalette,
+  collectInternalLinks,
+  createMarkdownRenderer,
+  createMarkdownToolbar,
+  mountMarkdownViewer,
+  resolveInternalLinks,
+} from "./shared/markdown/index.js";
 
 const root = document.querySelector("#notes-app");
 
@@ -38,6 +48,8 @@ if (root) {
     backButton: root.querySelector("#notes-back"),
     title: root.querySelector("#note-title"),
     content: root.querySelector("#note-content"),
+    markdownToolbar: root.querySelector("#note-markdown-toolbar"),
+    markdownPreview: root.querySelector("#note-markdown-preview"),
     noteType: root.querySelector("#note-type"),
     pin: root.querySelector("#note-pin"),
     delete: root.querySelector("#note-delete"),
@@ -49,6 +61,32 @@ if (root) {
     contextTitle: root.querySelector("#note-context-title"),
     links: root.querySelector("#note-links"),
   };
+  const markdownRenderer = createMarkdownRenderer();
+  const markdownPreview = attachMarkdownPreview(
+    elements.content,
+    elements.markdownPreview,
+    {
+      renderer: markdownRenderer,
+      mode: "editor",
+      renderOptions: {
+        showToc: true,
+        emptyMessage: "미리볼 내용이 없습니다.",
+      },
+    },
+  );
+  const markdownEditor = attachMarkdownEditor(elements.content, {
+    profile: "full",
+    onPreviewToggle: () => markdownPreview.toggle(),
+  });
+  elements.markdownToolbar.append(createMarkdownToolbar({
+    document,
+    profile: "full",
+    execute: (commandId) => markdownEditor.execute(commandId),
+    ariaLabel: "메모 Markdown 서식",
+  }));
+  attachSlashPalette(elements.content, markdownEditor, { profile: "full" });
+  let noteViewer = null;
+  let viewerRequest = 0;
   const state = {
     notes: [],
     selectedNote: null,
@@ -150,16 +188,40 @@ if (root) {
     elements.save.disabled = state.saving;
     elements.save.textContent = state.saving ? "저장 중…" : "저장";
     if (state.saving) elements.saveStatus.textContent = "저장 중…";
+    markdownPreview.refresh();
     renderLinks();
   }
 
-  function renderView() {
+  async function renderView() {
     if (!state.selectedNote) return;
+    const request = ++viewerRequest;
     elements.viewTitle.textContent = state.selectedNote.title;
     elements.viewType.textContent = noteTypeLabel(state.selectedNote.note_type);
     elements.viewUpdated.textContent = `${new Date(state.selectedNote.updated_at).toLocaleString("ko-KR")} 수정`;
     elements.viewUpdated.dateTime = state.selectedNote.updated_at;
-    elements.viewContent.textContent = state.selectedNote.content || "내용이 없습니다.";
+    const source = state.selectedNote.content;
+    const references = collectInternalLinks(source);
+    let internalLinkResolutions = new Map();
+    if (references.length) {
+      try {
+        internalLinkResolutions = await resolveInternalLinks(references, {
+          endpoint: root.dataset.internalLinkEndpoint,
+        });
+      } catch (error) {
+        if (request === viewerRequest) showError(error);
+      }
+    }
+    if (request !== viewerRequest || state.selectedNote?.content !== source) return;
+    noteViewer?.destroy();
+    noteViewer = mountMarkdownViewer(elements.viewContent, source, {
+      renderer: markdownRenderer,
+      renderOptions: {
+        showToc: true,
+        internalLinkResolutions,
+        emptyMessage: "내용이 없습니다.",
+      },
+      ariaLabel: `${state.selectedNote.title} 본문`,
+    });
     renderLinks();
   }
 
@@ -241,7 +303,9 @@ if (root) {
     }
     const preview = document.createElement("span");
     preview.className = "notes-list-preview";
-    preview.textContent = note.content || "내용 없음";
+    preview.textContent = note.content
+      ? markdownRenderer.extractExcerpt(note.content, 140)
+      : "내용 없음";
     button.append(title, metadata, preview);
     button.addEventListener("click", () => selectNote(note.id));
     return button;
@@ -501,6 +565,7 @@ if (root) {
     }
   });
 
+  elements.newButton.disabled = false;
   root.dataset.ready = "true";
   loadNotes({ selectRequested: true }).then(() => {
     if (root.dataset.mode === "new") {

@@ -40,6 +40,12 @@ def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) 
         notes = client.get("/apps/notes/")
         notes_new = client.get("/apps/notes/new")
         notes_stylesheet = client.get("/apps/notes/static/notes.css")
+        notes_markdown_stylesheet = client.get(
+            "/apps/notes/static/shared/markdown/markdown.css"
+        )
+        notes_markdown_module = client.get(
+            "/apps/notes/static/shared/markdown/index.js"
+        )
         notes_script = client.get("/apps/notes/static/notes.js")
         notes_api = client.get("/apps/notes/api/notes")
         internal_links = client.post(
@@ -85,6 +91,8 @@ def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) 
     assert 'data-current-app="notes"' in notes.text
     assert notes.text.count('aria-current="page"') == 1
     assert notes_stylesheet.status_code == 200
+    assert notes_markdown_stylesheet.status_code == 200
+    assert notes_markdown_module.status_code == 200
     assert notes_script.status_code == 200
     assert notes_api.status_code == 200
     assert notes_api.json() == []

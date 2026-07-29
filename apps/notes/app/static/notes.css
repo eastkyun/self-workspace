@@ -213,7 +213,6 @@
   color: #343638;
   font-size: 16px;
   line-height: 1.75;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .notes-field { display: grid; align-content: start; gap: 7px; font-size: 13px; font-weight: 700; }
@@ -235,7 +234,22 @@
 .note-links { display: grid; gap: 7px; margin-top: 9px; }
 .note-link-card { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--workspace-muted); }
 .note-link-card.is-orphan { color: var(--workspace-danger); }
-.notes-field textarea { min-height: 100%; resize: none; padding: 18px 4px; border: 0; border-top: 1px solid var(--workspace-border); border-radius: 0; font-size: 16px; font-weight: 400; line-height: 1.75; }
+.notes-field textarea { min-height: 100%; resize: none; padding: 18px 12px; border-color: var(--workspace-border); font-size: 16px; font-weight: 400; line-height: 1.75; }
+.notes-markdown-preview {
+  min-width: 0;
+  min-height: 320px;
+  overflow: auto;
+  padding: 18px;
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--workspace-radius-md);
+  background: #fff;
+}
+.notes-markdown-help {
+  margin: 0;
+  color: var(--workspace-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
 
 .notes-error {
   position: fixed;

@@ -375,6 +375,60 @@ def test_notes_registry_surfaces_and_crud(page: Page, live_server: str) -> None:
     assert console_errors == []
 
 
+def test_notes_shared_markdown_editor_preview_and_viewer(
+    page: Page,
+    live_server: str,
+) -> None:
+    external_requests = assert_same_origin_requests(page, live_server)
+    failed_requests: list[str] = []
+    console_errors: list[str] = []
+    page.on(
+        "requestfailed",
+        lambda request: failed_requests.append(
+            f"{request.method} {request.failure} {request.url}"
+        ),
+    )
+    page.on(
+        "console",
+        lambda message: (
+            console_errors.append(message.text) if message.type == "error" else None
+        ),
+    )
+
+    page.goto(f"{live_server}/apps/notes/")
+    page.get_by_role("button", name="새 메모", exact=True).click()
+    page.locator("#note-title").fill("Markdown E2E")
+    source = (
+        "**굵게**\n"
+        "## 섹션\n"
+        "<script>window.__markdownXss = true</script>"
+    )
+    page.locator("#note-content").fill(source)
+    page.get_by_role("button", name=re.compile(r"^미리보기")).click()
+    preview = page.locator("#note-markdown-preview")
+    expect(preview.locator("strong")).to_have_text("굵게")
+    expect(preview.locator("h2")).to_have_text("섹션")
+    expect(preview.locator("script")).to_have_count(0)
+    expect(preview).to_contain_text(
+        "<script>window.__markdownXss = true</script>"
+    )
+    assert page.evaluate("window.__markdownXss") is None
+
+    page.get_by_role("button", name="저장").click()
+    expect(page.locator("#notes-announcer")).to_contain_text("저장")
+    viewer = page.locator("#note-view-content")
+    expect(viewer.locator("strong")).to_have_text("굵게")
+    expect(viewer.locator("h2")).to_have_text("섹션")
+    expect(viewer.locator("script")).to_have_count(0)
+    expect(viewer).to_contain_text(
+        "<script>window.__markdownXss = true</script>"
+    )
+    assert page.evaluate("window.__markdownXss") is None
+    assert external_requests == []
+    assert failed_requests == []
+    assert console_errors == []
+
+
 def test_calendar_creates_linked_meeting_note(page: Page, live_server: str) -> None:
     task = page.request.post(
         f"{live_server}/apps/calendar/api/tasks",

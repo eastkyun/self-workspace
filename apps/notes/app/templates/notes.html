@@ -1,6 +1,7 @@
 {% extends "app_shell.html" %}
 
 {% block page_head %}
+    <link rel="stylesheet" href="./static/shared/markdown/markdown.css">
     <link rel="stylesheet" href="./static/notes.css">
 {% endblock %}
 
@@ -10,6 +11,7 @@
   class="notes-app"
   data-mode="{{ notes_mode }}"
   data-api-base="./api/notes"
+  data-internal-link-endpoint="{{ workspace_path('/api/internal-links/resolve') }}"
   aria-labelledby="notes-title"
 >
   <header class="notes-toolbar">
@@ -17,7 +19,7 @@
       <p class="workspace-eyebrow">KNOWLEDGE</p>
       <h2 id="notes-title">Notes</h2>
     </div>
-    <button id="new-note" class="notes-primary-button" type="button">새 메모</button>
+    <button id="new-note" class="notes-primary-button" type="button" disabled>새 메모</button>
   </header>
 
   <div class="notes-workspace">
@@ -102,10 +104,28 @@
               <option value="research_note">연구 노트</option>
             </select>
           </label>
-          <label class="notes-field notes-content-field">
-            <span class="sr-only">본문</span>
-            <textarea id="note-content" name="content" maxlength="100000" placeholder="내용을 입력하세요"></textarea>
-          </label>
+          <div
+            id="note-markdown-editor"
+            class="notes-field notes-content-field"
+            data-markdown-editor
+          >
+            <label class="sr-only" for="note-content">본문</label>
+            <div id="note-markdown-toolbar"></div>
+            <div class="markdown-editor__workspace">
+              <textarea
+                id="note-content"
+                class="markdown-editor__textarea"
+                name="content"
+                maxlength="100000"
+                placeholder="Markdown으로 내용을 입력하세요. / 를 입력하면 명령을 사용할 수 있습니다."
+                aria-describedby="note-markdown-help"
+              ></textarea>
+              <div id="note-markdown-preview" class="notes-markdown-preview"></div>
+            </div>
+            <p id="note-markdown-help" class="notes-markdown-help">
+              Markdown 문법과 / 명령을 사용할 수 있습니다.
+            </p>
+          </div>
         </div>
       </form>
     </section>
