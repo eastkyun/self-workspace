@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "package_lock_sha256": "ca98b695029b071d3bcf1382755d2fcf2e4e002dc02ebca1491a7b34e81999c6",
+  "packages": [
+    {
+      "name": "marked",
+      "version": "18.0.7",
+      "source": "node_modules/marked/lib/marked.esm.js",
+      "vendored_file": "marked.esm.js",
+      "sha256": "fd52a4d9a8eb652477ec1ddea2c48677bf46fcfc82e3801e46ca54359c57164f",
+      "license_file": "licenses/marked-LICENSE",
+      "license_sha256": "8e3a3f82f59a60958f56ca08f445647c32a4733dc7ca6c2c46f6eb898471ab9c"
+    },
+    {
+      "name": "dompurify",
+      "version": "3.4.12",
+      "source": "node_modules/dompurify/dist/purify.es.mjs",
+      "vendored_file": "purify.es.mjs",
+      "sha256": "b51207de097d14ff9af93bb923d1a245d196a474cbbfdcfeda5e2166734715e1",
+      "license_file": "licenses/dompurify-LICENSE",
+      "license_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    }
+  ]
+}

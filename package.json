@@ -1,0 +1,16 @@
+{
+  "name": "my-workspace",
+  "private": true,
+  "scripts": {
+    "vendor:markdown": "node scripts/vendor-markdown.mjs",
+    "verify:markdown-vendor": "node scripts/vendor-markdown.mjs --check",
+    "test:markdown": "node --test tests/shared/markdown/*.mjs"
+  },
+  "dependencies": {
+    "dompurify": "3.4.12",
+    "marked": "18.0.7"
+  },
+  "devDependencies": {
+    "jsdom": "30.0.1"
+  }
+}
