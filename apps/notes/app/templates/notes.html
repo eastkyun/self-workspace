@@ -21,62 +21,92 @@
   </header>
 
   <div class="notes-workspace">
-    <section id="notes-list-pane" class="notes-list-pane" aria-labelledby="notes-list-title">
+    <section id="notes-list-pane" class="notes-list-pane" aria-labelledby="notes-list-title" tabindex="-1">
       <h3 id="notes-list-title" class="sr-only">메모 목록</h3>
-      <label class="notes-search">
-        <span class="sr-only">메모 검색</span>
-        <input id="notes-search" type="search" placeholder="제목과 본문 검색" autocomplete="off">
-      </label>
-      <label class="notes-filter">
-        <span>유형</span>
-        <select id="notes-type-filter">
-          <option value="">전체</option>
-          <option value="general">일반 메모</option>
-          <option value="meeting_minutes">회의록</option>
-          <option value="research_note">연구 노트</option>
-        </select>
-      </label>
+      <div class="notes-list-controls">
+        <label class="notes-search">
+          <span class="sr-only">메모 검색</span>
+          <input id="notes-search" type="search" placeholder="제목과 본문 검색" autocomplete="off">
+        </label>
+        <label class="notes-filter">
+          <span class="sr-only">메모 유형</span>
+          <select id="notes-type-filter" aria-label="메모 유형 필터">
+            <option value="">모든 유형</option>
+            <option value="general">일반 메모</option>
+            <option value="meeting_minutes">회의록</option>
+            <option value="research_note">연구 노트</option>
+          </select>
+        </label>
+      </div>
       <div id="notes-list-status" class="notes-list-status" role="status">메모를 불러오는 중입니다.</div>
       <div id="notes-list" class="notes-list" role="listbox" aria-label="메모"></div>
     </section>
 
     <section id="notes-editor-pane" class="notes-editor-pane" aria-labelledby="editor-title">
       <div id="notes-empty" class="notes-empty">
-        <p>메모를 선택하거나 새 메모를 작성하세요.</p>
+        <span class="notes-empty-mark" aria-hidden="true"></span>
+        <h3>생각을 기록할 준비가 됐어요</h3>
+        <p>왼쪽에서 메모를 선택하거나 새 문서를 시작하세요.</p>
+        <button id="empty-new-note" class="notes-primary-button" type="button">새 메모 작성</button>
       </div>
+      <section id="note-view" class="note-view" aria-labelledby="note-view-title" hidden>
+        <header class="notes-editor-header">
+          <button id="view-notes-back" class="notes-secondary-button notes-back" type="button">목록으로</button>
+          <span class="note-view-spacer"></span>
+          <button id="edit-note" class="notes-primary-button" type="button">편집</button>
+        </header>
+        <article class="notes-document notes-view-document">
+          <div class="note-view-metadata">
+            <span id="note-view-type" class="notes-type-badge"></span>
+            <time id="note-view-updated"></time>
+          </div>
+          <h3 id="note-view-title"></h3>
+          <section id="view-note-context" class="note-context" aria-labelledby="view-note-context-title" hidden>
+            <div>
+              <span class="workspace-eyebrow">LINKED SOURCE</span>
+              <strong id="view-note-context-title">연결된 Calendar 일정</strong>
+            </div>
+            <div id="view-note-links" class="note-links"></div>
+          </section>
+          <div id="note-view-content" class="note-view-content"></div>
+        </article>
+      </section>
       <form id="note-form" class="note-form" hidden>
         <div class="notes-editor-header">
           <button id="notes-back" class="notes-secondary-button notes-back" type="button">목록으로</button>
+          <span id="note-save-status" class="note-save-status" role="status" aria-live="polite"></span>
           <div class="notes-editor-actions">
             <button id="note-pin" class="notes-secondary-button" type="button" aria-pressed="false">고정</button>
             <button id="note-delete" class="notes-danger-button" type="button">삭제</button>
             <button id="note-save" class="notes-primary-button" type="submit">저장</button>
           </div>
         </div>
-        <h3 id="editor-title" class="sr-only">메모 편집</h3>
-        <section id="note-context" class="note-context" aria-labelledby="note-context-title" hidden>
-          <div>
-            <span class="workspace-eyebrow">LINKED SOURCE</span>
-            <strong id="note-context-title">연결된 Calendar 일정</strong>
-          </div>
-          <div id="note-links" class="note-links"></div>
-        </section>
-        <label class="notes-field notes-title-field">
-          <span>제목</span>
-          <input id="note-title" name="title" maxlength="120" required placeholder="제목을 입력하세요">
-        </label>
-        <label class="notes-field notes-type-field">
-          <span>메모 유형</span>
-          <select id="note-type" name="note_type">
-            <option value="general">일반 메모</option>
-            <option value="meeting_minutes">회의록</option>
-            <option value="research_note">연구 노트</option>
-          </select>
-        </label>
-        <label class="notes-field notes-content-field">
-          <span>본문</span>
-          <textarea id="note-content" name="content" maxlength="100000" placeholder="내용을 입력하세요"></textarea>
-        </label>
+        <div class="notes-document">
+          <h3 id="editor-title" class="sr-only">메모 편집</h3>
+          <section id="note-context" class="note-context" aria-labelledby="note-context-title" hidden>
+            <div>
+              <span class="workspace-eyebrow">LINKED SOURCE</span>
+              <strong id="note-context-title">연결된 Calendar 일정</strong>
+            </div>
+            <div id="note-links" class="note-links"></div>
+          </section>
+          <label class="notes-field notes-title-field">
+            <span class="sr-only">제목</span>
+            <input id="note-title" name="title" maxlength="120" required placeholder="제목을 입력하세요">
+          </label>
+          <label class="notes-field notes-type-field">
+            <span>문서 유형</span>
+            <select id="note-type" name="note_type">
+              <option value="general">일반 메모</option>
+              <option value="meeting_minutes">회의록</option>
+              <option value="research_note">연구 노트</option>
+            </select>
+          </label>
+          <label class="notes-field notes-content-field">
+            <span class="sr-only">본문</span>
+            <textarea id="note-content" name="content" maxlength="100000" placeholder="내용을 입력하세요"></textarea>
+          </label>
+        </div>
       </form>
     </section>
   </div>

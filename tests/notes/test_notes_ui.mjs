@@ -95,12 +95,25 @@ test("UI contains accessible list, editor, statuses, and dirty guard", () => {
   assert.match(script, /ArrowDown/);
   assert.match(script, /payload\.links = \[state\.pendingSource\]/);
   assert.match(template, /id="note-context"/);
+  assert.match(template, /id="note-save-status"[^>]*aria-live="polite"/);
+  assert.match(template, /id="note-view"[^>]*hidden/);
+  assert.match(template, /id="edit-note"/);
+  assert.match(script, /const viewOpen = Boolean\(state\.selectedNote && !state\.editing\)/);
+  assert.match(script, /listRequest/);
+  assert.match(script, /selectionRequest/);
+  assert.match(script, /history\.go\(delta\)/);
+  assert.match(script, /updateLocation\(null, \{ mode: "new" \}\)/);
+  assert.match(script, /mutationRequest/);
+  assert.match(script, /request !== state\.selectionRequest/);
+  assert.match(script, /request !== state\.listRequest/);
+  assert.match(script, /requestAnimationFrame\(\(\) => elements\.editButton\.focus\(\)\)/);
 });
 
 test("mobile layout is single-column without horizontal overflow", () => {
+  assert.match(styles, /\.notes-app \[hidden\]\s*\{\s*display:\s*none !important/);
   assert.match(styles, /@media \(max-width: 760px\)/);
   assert.match(styles, /\.notes-app\.is-editing \.notes-list-pane\s*\{\s*display:\s*none/);
-  assert.match(styles, /\.note-form\s*\{[^}]*grid-template-columns:\s*1fr/s);
+  assert.match(styles, /\.notes-document\s*\{[^}]*grid-template-columns:\s*1fr/s);
   assert.match(styles, /\.notes-app\s*\{[^}]*min-width:\s*0/s);
   assert.match(styles, /\.notes-workspace\s*\{[^}]*min-width:\s*0/s);
 });

@@ -310,15 +310,19 @@ def test_notes_registry_surfaces_and_crud(page: Page, live_server: str) -> None:
     page.get_by_role("link", name="Notes").first.click()
     expect(page.locator('[data-app-id="notes"][aria-current="page"]')).to_be_attached()
 
-    page.get_by_role("button", name="새 메모").click()
+    page.get_by_role("button", name="새 메모", exact=True).click()
     page.locator("#note-title").fill("E2E 일반 메모")
     page.locator("#note-content").fill("검색 가능한 본문")
     page.get_by_role("button", name="고정").click()
     page.get_by_role("button", name="저장").click()
     expect(page.locator("#notes-announcer")).to_contain_text("저장")
     expect(page).to_have_url(re.compile(r"note_id=\d+"))
+    expect(page.locator("#note-view-title")).to_have_text("E2E 일반 메모")
+    expect(page.locator("#note-form")).to_be_hidden()
     page.wait_for_timeout(250)
     page.reload()
+    expect(page.locator("#note-view-title")).to_have_text("E2E 일반 메모")
+    page.get_by_role("button", name="편집", exact=True).click()
     expect(page.locator("#note-title")).to_have_value("E2E 일반 메모")
     expect(page.get_by_role("button", name="고정 해제")).to_be_visible()
 
@@ -353,7 +357,7 @@ def test_calendar_creates_linked_meeting_note(page: Page, live_server: str) -> N
     expect(page.locator("#note-context")).to_contain_text(f"일정 #{task['id']}")
     page.locator("#note-title").fill("Notes 연계 회의록")
     page.get_by_role("button", name="저장").click()
-    expect(page.locator("#note-context")).to_contain_text("Notes 연계 회의")
+    expect(page.locator("#view-note-context")).to_contain_text("Notes 연계 회의")
 
     linked = page.request.get(
         f"{live_server}/apps/notes/api/notes",
@@ -438,9 +442,95 @@ def test_deleted_calendar_event_leaves_orphaned_note(
     ).status == 204
 
     page.goto(f"{live_server}/apps/notes/?note_id={note['id']}")
-    expect(page.locator("#note-title")).to_have_value("보존되는 노트")
-    expect(page.locator("#note-context")).to_contain_text("삭제 후 snapshot 일정")
-    expect(page.locator("#note-context")).to_contain_text("삭제된 일정")
+    expect(page.locator("#note-view-title")).to_have_text("보존되는 노트")
+    expect(page.locator("#view-note-context")).to_contain_text("삭제 후 snapshot 일정")
+    expect(page.locator("#view-note-context")).to_contain_text("삭제된 일정")
+
+
+def test_notes_browser_back_restores_list_and_focus(
+    page: Page, live_server: str
+) -> None:
+    note = page.request.post(
+        f"{live_server}/apps/notes/api/notes",
+        data={"title": "Back 복원 노트", "content": "", "note_type": "general"},
+    ).json()
+    page.goto(f"{live_server}/apps/notes/")
+    expect(page.locator("#notes-empty")).to_be_visible()
+    expect(page.locator("#note-form")).to_be_hidden()
+    page.get_by_role("option", name=re.compile("Back 복원 노트")).click()
+    expect(page).to_have_url(re.compile(rf"note_id={note['id']}"))
+    expect(page.locator("#note-view-title")).to_have_text("Back 복원 노트")
+    expect(page.locator("#notes-empty")).to_be_hidden()
+    expect(page.locator("#note-view")).to_be_visible()
+    expect(page.locator("#note-form")).to_be_hidden()
+
+    page.go_back()
+    expect(page).to_have_url(re.compile(r"/apps/notes/$"))
+    expect(page.locator("#notes-empty")).to_be_visible()
+    expect(page.locator("#note-form")).to_be_hidden()
+    expect(page.locator("#notes-search")).to_be_focused()
+
+    page.locator("#new-note").click()
+    expect(page).to_have_url(re.compile(r"/apps/notes/new$"))
+    expect(page.locator("#note-form")).to_be_visible()
+    expect(page.locator("#note-view")).to_be_hidden()
+
+    page.go_back()
+    expect(page).to_have_url(re.compile(r"/apps/notes/$"))
+    expect(page.locator("#notes-empty")).to_be_visible()
+
+    page.go_forward()
+    expect(page).to_have_url(re.compile(r"/apps/notes/new$"))
+    expect(page.locator("#note-form")).to_be_visible()
+
+
+@pytest.mark.parametrize(
+    ("width", "height", "two_pages"),
+    [(1440, 900, True), (1024, 768, True), (768, 1024, False), (375, 667, False)],
+)
+def test_calendar_task_book_layout_and_link_action_alignment(
+    page: Page,
+    live_server: str,
+    width: int,
+    height: int,
+    two_pages: bool,
+) -> None:
+    title = f"Book layout {width}"
+    day = {1440: 20, 1024: 21, 768: 22, 375: 23}[width]
+    page.request.post(
+        f"{live_server}/apps/calendar/api/tasks",
+        data={
+            "title": title,
+            "description": "",
+            "status": "todo",
+            "all_day": False,
+            "start_at": f"2026-07-{day:02d}T15:00:00+09:00",
+            "due_at": f"2026-07-{day:02d}T16:00:00+09:00",
+            "topic_ids": [],
+        },
+    )
+    page.set_viewport_size({"width": width, "height": height})
+    page.goto(f"{live_server}/apps/calendar/")
+    page.get_by_role("button", name=f"일정 열기: {title}").click()
+    expect(page.locator("#task-dialog")).to_be_visible()
+    metrics = page.evaluate(
+        """() => {
+          const left = document.querySelector('.task-page-primary').getBoundingClientRect();
+          const right = document.querySelector('.task-page-schedule').getBoundingClientRect();
+          const action = getComputedStyle(document.querySelector('#create-meeting-note'));
+          return {
+            sameRow: Math.abs(left.top - right.top) < 2,
+            actionAlign: action.alignItems,
+            actionJustify: action.justifyContent,
+            documentWidth: document.documentElement.scrollWidth,
+            innerWidth: window.innerWidth,
+          };
+        }"""
+    )
+    assert metrics["sameRow"] is two_pages
+    assert metrics["actionAlign"] == "center"
+    assert metrics["actionJustify"] == "center"
+    assert metrics["documentWidth"] == metrics["innerWidth"]
 
 
 @pytest.mark.parametrize(("width", "height"), VIEWPORTS)

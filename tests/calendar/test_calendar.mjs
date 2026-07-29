@@ -87,6 +87,12 @@ test("links Calendar details to Notes without a localhost HTTP bridge", () => {
   assert.match(appSource, /source_app:\s*"calendar"/);
   assert.match(appSource, /source_type:\s*"event"/);
   assert.doesNotMatch(appSource, /http:\/\/localhost|http:\/\/127\.0\.0\.1/);
+  assert.match(indexSource, /class="task-book"/);
+  assert.match(indexSource, /class="task-page task-page-primary"/);
+  assert.match(indexSource, /class="task-page task-page-schedule"/);
+  assert.match(stylesSource, /\.linked-notes-actions \.button\s*\{[^}]*align-items:\s*center[^}]*justify-content:\s*center/s);
+  assert.match(appSource, /taskDialogGeneration/);
+  assert.match(appSource, /attachSearchGeneration/);
 });
 
 test("keeps the calendar inside the viewport without page scrolling", () => {

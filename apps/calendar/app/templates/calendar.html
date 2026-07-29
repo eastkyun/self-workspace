@@ -139,73 +139,81 @@
         </div>
 
         <input id="task-id" type="hidden">
-        <label for="task-title">제목</label>
-        <input id="task-title" name="title" type="text" maxlength="120" required autofocus>
+        <div class="task-book">
+          <section class="task-page task-page-primary" aria-labelledby="task-content-heading">
+            <h3 id="task-content-heading" class="sr-only">일정 내용</h3>
+            <label for="task-title">제목</label>
+            <input id="task-title" name="title" type="text" maxlength="120" required autofocus>
 
-        <label for="task-description">설명 <span class="optional">(선택)</span></label>
-        <textarea id="task-description" name="description" rows="4"></textarea>
+            <label for="task-description">설명 <span class="optional">(선택)</span></label>
+            <textarea id="task-description" name="description" rows="9"></textarea>
 
-        <fieldset class="topic-fieldset">
-          <legend>주제 <span class="optional">(여러 개 선택 가능)</span></legend>
-          <div class="task-topic-options" id="task-topic-options"></div>
-          <p class="topic-empty-message" id="task-topic-empty" hidden>
-            등록된 주제가 없습니다. 상단 ＋ 메뉴에서 주제를 추가할 수 있습니다.
-          </p>
-        </fieldset>
+            <fieldset class="topic-fieldset">
+              <legend>주제 <span class="optional">(여러 개 선택 가능)</span></legend>
+              <div class="task-topic-options" id="task-topic-options"></div>
+              <p class="topic-empty-message" id="task-topic-empty" hidden>
+                등록된 주제가 없습니다. 상단 ＋ 메뉴에서 주제를 추가할 수 있습니다.
+              </p>
+            </fieldset>
+          </section>
 
-        <label class="all-day-toggle" for="task-all-day">
-          <input id="task-all-day" name="all_day" type="checkbox">
-          <span>종일 일정</span>
-        </label>
+          <section class="task-page task-page-schedule" aria-labelledby="task-schedule-heading">
+            <h3 id="task-schedule-heading" class="sr-only">일정 시간과 연결</h3>
+            <label class="all-day-toggle" for="task-all-day">
+              <input id="task-all-day" name="all_day" type="checkbox">
+              <span>종일 일정</span>
+            </label>
 
-        <div class="date-fields timed-fields" id="timed-fields">
-          <div>
-            <label for="task-start-at">시작</label>
-            <input id="task-start-at" name="start_at" type="datetime-local" step="60">
-          </div>
-          <div>
-            <label for="task-due-at">마감</label>
-            <input id="task-due-at" name="due_at" type="datetime-local" step="60">
-          </div>
+            <div class="date-fields timed-fields" id="timed-fields">
+              <div>
+                <label for="task-start-at">시작</label>
+                <input id="task-start-at" name="start_at" type="datetime-local" step="60">
+              </div>
+              <div>
+                <label for="task-due-at">마감</label>
+                <input id="task-due-at" name="due_at" type="datetime-local" step="60">
+              </div>
+            </div>
+
+            <div class="date-fields all-day-fields" id="all-day-fields" hidden>
+              <div>
+                <label for="task-start-date">시작일</label>
+                <input id="task-start-date" type="date">
+              </div>
+              <div>
+                <label for="task-due-date">마감일</label>
+                <input id="task-due-date" type="date">
+              </div>
+            </div>
+
+            <label for="task-status">상태</label>
+            <select id="task-status" name="status">
+              <option value="todo">할 일</option>
+              <option value="doing">진행 중</option>
+              <option value="done">완료</option>
+            </select>
+
+            <section id="linked-notes-section" class="linked-notes-section" aria-labelledby="linked-notes-title" hidden>
+              <div class="linked-notes-header">
+                <h3 id="linked-notes-title">연결된 노트</h3>
+                <button id="attach-note-button" class="button button-secondary" type="button">기존 노트 연결</button>
+              </div>
+              <div class="linked-notes-actions">
+                <a id="create-meeting-note" class="button button-secondary">회의록 작성</a>
+                <a id="create-research-note" class="button button-secondary">연구 노트 작성</a>
+              </div>
+              <p id="linked-notes-status" class="linked-notes-status" role="status"></p>
+              <div id="linked-notes-list" class="linked-notes-list"></div>
+            </section>
+          </section>
         </div>
 
-        <div class="date-fields all-day-fields" id="all-day-fields" hidden>
-          <div>
-            <label for="task-start-date">시작일</label>
-            <input id="task-start-date" type="date">
-          </div>
-          <div>
-            <label for="task-due-date">마감일</label>
-            <input id="task-due-date" type="date">
-          </div>
-        </div>
-
-        <label for="task-status">상태</label>
-        <select id="task-status" name="status">
-          <option value="todo">할 일</option>
-          <option value="doing">진행 중</option>
-          <option value="done">완료</option>
-        </select>
-
-        <section id="linked-notes-section" class="linked-notes-section" aria-labelledby="linked-notes-title" hidden>
-          <div class="linked-notes-header">
-            <h3 id="linked-notes-title">연결된 노트</h3>
-            <button id="attach-note-button" class="button button-secondary" type="button">기존 노트 연결</button>
-          </div>
-          <div class="linked-notes-actions">
-            <a id="create-meeting-note" class="button button-secondary">회의록 작성</a>
-            <a id="create-research-note" class="button button-secondary">연구 노트 작성</a>
-          </div>
-          <p id="linked-notes-status" class="linked-notes-status" role="status"></p>
-          <div id="linked-notes-list" class="linked-notes-list"></div>
-        </section>
-
-        <div class="dialog-actions">
+        <footer class="dialog-actions">
           <button class="button delete-dialog-button" id="delete-task-button" type="button" hidden>삭제</button>
           <span class="action-spacer"></span>
           <button class="button button-secondary" id="cancel-dialog" type="button">취소</button>
           <button class="button button-primary" type="submit">저장</button>
-        </div>
+        </footer>
       </form>
     </dialog>
 
