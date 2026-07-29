@@ -4,7 +4,9 @@ import {
   RENDER_LIMITS,
   normalizeRenderOptions,
 } from "./contracts.js";
+import { createHeadingSlugger, normalizeHeadingText } from "./headings.js";
 import { createMarkdownSanitizer } from "./sanitizer.js";
+import { buildToc } from "./toc.js";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -26,7 +28,15 @@ function isAllowedHref(href) {
   return /^(?:(?:https?|mailto):|[#/?](?!\/)|\.{1,2}\/)/i.test(normalized);
 }
 
-function createMarked(options) {
+function tokenText(token) {
+  if (Array.isArray(token?.tokens)) {
+    return token.tokens.map(tokenText).join("");
+  }
+  return String(token?.text ?? "");
+}
+
+function createMarked(options, state) {
+  const slugger = createHeadingSlugger();
   const marked = new Marked({
     async: false,
     breaks: options.breaks,
@@ -37,6 +47,19 @@ function createMarked(options) {
         // Raw HTML is preserved as readable source text. It must never enter the
         // generated HTML tree before DOMPurify sees the complete render output.
         return escapeHtml(token.text);
+      },
+      heading(token) {
+        const text = normalizeHeadingText(tokenText(token));
+        const id = slugger.slug(text);
+        state.headings.push(Object.freeze({
+          level: token.depth,
+          text,
+          id,
+        }));
+        const anchor = options.headingAnchors
+          ? ` id="${escapeHtml(id)}"`
+          : "";
+        return `<h${token.depth}${anchor}>${this.parser.parseInline(token.tokens)}</h${token.depth}>\n`;
       },
       checkbox({ checked }) {
         const state = checked ? "true" : "false";
@@ -69,7 +92,7 @@ export function createMarkdownRenderer({
 } = {}) {
   const sanitizer = createMarkdownSanitizer(windowLike);
 
-  function render(markdown, renderOptions = {}) {
+  function parse(markdown, renderOptions = {}, inline = false) {
     const source = String(markdown ?? "");
     if (source.length > RENDER_LIMITS.maxSourceLength) {
       throw new RangeError(
@@ -77,26 +100,66 @@ export function createMarkdownRenderer({
       );
     }
     const options = normalizeRenderOptions(renderOptions);
-    const marked = createMarked(options);
-    const rawHtml = marked.parse(source);
-    return sanitizer.sanitize(rawHtml);
+    const state = { headings: [] };
+    const marked = createMarked(options, state);
+    const rawHtml = inline ? marked.parseInline(source) : marked.parse(source);
+    const html = sanitizer.sanitize(rawHtml);
+    const headings = Object.freeze([...state.headings]);
+    return Object.freeze({
+      html,
+      headings,
+      toc: Object.freeze(buildToc(headings, {
+        minLevel: options.minTocLevel,
+        maxLevel: options.maxTocLevel,
+      })),
+      internalLinks: Object.freeze([]),
+      warnings: Object.freeze([]),
+    });
+  }
+
+  function render(markdown, renderOptions = {}) {
+    return parse(markdown, renderOptions).html;
   }
 
   function renderInline(markdown, renderOptions = {}) {
-    const source = String(markdown ?? "");
-    if (source.length > RENDER_LIMITS.maxSourceLength) {
-      throw new RangeError(
-        `Markdown exceeds ${RENDER_LIMITS.maxSourceLength} characters`,
-      );
+    return parse(markdown, renderOptions, true).html;
+  }
+
+  function renderWithMetadata(markdown, renderOptions = {}) {
+    return parse(markdown, renderOptions);
+  }
+
+  function collectHeadings(markdown, renderOptions = {}) {
+    return renderWithMetadata(markdown, renderOptions).headings;
+  }
+
+  function extractPlainText(markdown) {
+    const html = render(markdown, { headingAnchors: false });
+    const container = windowLike.document.createElement("div");
+    container.innerHTML = html;
+    return (container.textContent ?? "")
+      .replace(/\s+/gu, " ")
+      .trim();
+  }
+
+  function extractExcerpt(markdown, maxLength = 160) {
+    if (!Number.isInteger(maxLength) || maxLength < 1) {
+      throw new TypeError("excerpt maxLength must be a positive integer");
     }
-    const options = normalizeRenderOptions(renderOptions);
-    const marked = createMarked(options);
-    return sanitizer.sanitize(marked.parseInline(source));
+    const text = extractPlainText(markdown);
+    const characters = Array.from(text);
+    if (characters.length <= maxLength) {
+      return text;
+    }
+    return `${characters.slice(0, maxLength).join("").trimEnd()}…`;
   }
 
   return Object.freeze({
+    collectHeadings,
+    extractExcerpt,
+    extractPlainText,
     render,
     renderInline,
+    renderWithMetadata,
   });
 }
-

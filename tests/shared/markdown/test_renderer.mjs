@@ -28,7 +28,7 @@ test("renders the shared MVP Markdown dialect", () => {
     "```",
   ].join("\n"));
 
-  assert.match(html, /<h1>제목<\/h1>/);
+  assert.match(html, /<h1 id="제목">제목<\/h1>/);
   assert.match(html, /<strong>굵게<\/strong>/);
   assert.match(html, /<em>기울임<\/em>/);
   assert.match(html, /<del>취소<\/del>/);
