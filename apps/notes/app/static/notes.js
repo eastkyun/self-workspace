@@ -7,6 +7,7 @@ import {
   noteTypeLabel,
   requestedNoteId,
   requestedNoteType,
+  requestedSource,
   sortNotes,
 } from "./notes-state.js";
 
@@ -33,6 +34,9 @@ if (root) {
     save: root.querySelector("#note-save"),
     error: root.querySelector("#notes-error"),
     announcer: root.querySelector("#notes-announcer"),
+    context: root.querySelector("#note-context"),
+    contextTitle: root.querySelector("#note-context-title"),
+    links: root.querySelector("#note-links"),
   };
   const state = {
     notes: [],
@@ -42,6 +46,8 @@ if (root) {
     creating: false,
     loading: false,
     saving: false,
+    pendingSource: requestedSource(window.location.search),
+    links: [],
   };
 
   function isDirty() {
@@ -100,6 +106,48 @@ if (root) {
     elements.delete.hidden = state.creating;
     elements.save.disabled = state.saving;
     elements.save.textContent = state.saving ? "저장 중…" : "저장";
+    renderLinks();
+  }
+
+  function renderLinks() {
+    const hasContext = Boolean(state.pendingSource || state.links.length);
+    elements.context.hidden = !hasContext;
+    elements.links.replaceChildren();
+    if (state.pendingSource) {
+      const pending = document.createElement("span");
+      pending.className = "note-link-card";
+      pending.textContent = `Calendar 일정 #${state.pendingSource.source_id} · 저장 시 연결`;
+      elements.links.append(pending);
+    }
+    for (const link of state.links) {
+      const card = document.createElement("div");
+      card.className = `note-link-card${link.orphan ? " is-orphan" : ""}`;
+      const label = document.createElement("span");
+      label.textContent = link.orphan
+        ? `${link.source_title_snapshot} · 삭제된 일정`
+        : link.source_title_snapshot;
+      const unlink = document.createElement("button");
+      unlink.type = "button";
+      unlink.className = "notes-secondary-button";
+      unlink.textContent = "연결 해제";
+      unlink.setAttribute("aria-label", `${link.source_title_snapshot} 연결 해제`);
+      unlink.addEventListener("click", async () => {
+        try {
+          await api.unlink(state.selectedNote.id, link.id);
+          await loadLinks(state.selectedNote.id);
+          announce("일정 연결을 해제했습니다.");
+        } catch (error) {
+          showError(error);
+        }
+      });
+      card.append(label, unlink);
+      elements.links.append(card);
+    }
+  }
+
+  async function loadLinks(noteId) {
+    state.links = await api.links(noteId);
+    renderLinks();
   }
 
   function noteItem(note) {
@@ -136,10 +184,15 @@ if (root) {
     renderEditor();
   }
 
-  function startNew(noteType = "general", { updateHistory = true } = {}) {
+  function startNew(
+    noteType = "general",
+    { updateHistory = true, preserveSource = false } = {},
+  ) {
     if (!confirmDiscard()) return;
     state.selectedNote = null;
     state.creating = true;
+    state.links = [];
+    if (!preserveSource) state.pendingSource = null;
     setDraft(emptyDraft(noteType));
     renderList();
     if (updateHistory) updateLocation();
@@ -153,6 +206,8 @@ if (root) {
       const note = await api.get(noteId);
       state.selectedNote = note;
       state.creating = false;
+      state.pendingSource = null;
+      await loadLinks(note.id);
       setDraft(note);
       renderList();
       if (updateHistory) updateLocation(note.id);
@@ -192,11 +247,16 @@ if (root) {
     renderEditor();
     try {
       const payload = normalizedDraft(state.draft);
+      if (state.creating && state.pendingSource) {
+        payload.links = [state.pendingSource];
+      }
       const note = state.creating
         ? await api.create(payload)
         : await api.update(state.selectedNote.id, payload);
       state.selectedNote = note;
       state.creating = false;
+      state.pendingSource = null;
+      await loadLinks(note.id);
       setDraft(note);
       updateLocation(note.id, { replace: true });
       await loadNotes();
@@ -216,6 +276,7 @@ if (root) {
       await api.remove(state.selectedNote.id);
       state.selectedNote = null;
       state.creating = false;
+      state.links = [];
       setDraft(emptyDraft());
       updateLocation();
       await loadNotes();
@@ -236,6 +297,8 @@ if (root) {
     if (!confirmDiscard()) return;
     state.selectedNote = null;
     state.creating = false;
+    state.pendingSource = null;
+    state.links = [];
     setDraft(emptyDraft());
     updateLocation();
     elements.listPane.focus({ preventScroll: true });
@@ -271,14 +334,21 @@ if (root) {
     const noteId = requestedNoteId(window.location.search);
     if (noteId) selectNote(noteId, { updateHistory: false });
     else if (window.location.pathname.endsWith("/new")) {
-      startNew(requestedNoteType(window.location.search), { updateHistory: false });
+      state.pendingSource = requestedSource(window.location.search);
+      startNew(requestedNoteType(window.location.search), {
+        updateHistory: false,
+        preserveSource: true,
+      });
     }
   });
 
   root.dataset.ready = "true";
   loadNotes({ selectRequested: true }).then(() => {
     if (root.dataset.mode === "new") {
-      startNew(requestedNoteType(window.location.search), { updateHistory: false });
+      startNew(requestedNoteType(window.location.search), {
+        updateHistory: false,
+        preserveSource: true,
+      });
     }
   });
 }

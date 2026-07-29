@@ -58,6 +58,18 @@ const topicOverflowButton = document.querySelector("#topic-overflow-button");
 const topicOverflowPopover = document.querySelector("#topic-overflow-popover");
 const topicOverflowList = document.querySelector("#topic-overflow-list");
 const activeTopicCount = document.querySelector("#active-topic-count");
+const calendarPage = document.querySelector(".calendar-page");
+const notesRoute = calendarPage.dataset.notesRoute;
+const linkedNotesSection = document.querySelector("#linked-notes-section");
+const linkedNotesList = document.querySelector("#linked-notes-list");
+const linkedNotesStatus = document.querySelector("#linked-notes-status");
+const attachNoteButton = document.querySelector("#attach-note-button");
+const attachNoteDialog = document.querySelector("#attach-note-dialog");
+const attachNoteSearch = document.querySelector("#attach-note-search");
+const attachNoteResults = document.querySelector("#attach-note-results");
+const attachNoteStatus = document.querySelector("#attach-note-status");
+const createMeetingNote = document.querySelector("#create-meeting-note");
+const createResearchNote = document.querySelector("#create-research-note");
 
 const SELECTED_PAGE_SIZE = 5;
 let tasks = [];
@@ -115,6 +127,24 @@ async function request(url, options = {}) {
       else if (Array.isArray(body.detail)) message = body.detail[0]?.msg ?? message;
     } catch {
       // Retain the friendly fallback for non-JSON responses.
+    }
+    throw new Error(message);
+  }
+  return response.status === 204 ? null : response.json();
+}
+
+async function notesRequest(path = "", options = {}) {
+  const response = await fetch(`${notesRoute}api/notes${path}`, {
+    ...options,
+    headers: { "Content-Type": "application/json", ...options.headers },
+  });
+  if (!response.ok) {
+    let message = "노트 요청을 처리하지 못했습니다.";
+    try {
+      const body = await response.json();
+      if (typeof body.detail === "string") message = body.detail;
+    } catch {
+      // Retain the stable message for non-JSON failures.
     }
     throw new Error(message);
   }
@@ -428,8 +458,119 @@ function openTaskDialog(task = null, date = null) {
   renderTaskTopicOptions(
     new Set((task?.topics ?? []).map((topic) => topic.id)),
   );
+  linkedNotesSection.hidden = !task;
+  linkedNotesList.replaceChildren();
+  linkedNotesStatus.textContent = task ? "연결된 노트를 불러오는 중입니다." : "";
+  if (task) {
+    const context = new URLSearchParams({
+      source_app: "calendar",
+      source_type: "event",
+      source_id: String(task.id),
+    });
+    createMeetingNote.href = `${notesRoute}new?type=meeting_minutes&${context}`;
+    createResearchNote.href = `${notesRoute}new?type=research_note&${context}`;
+    loadLinkedNotes(task).catch((error) => {
+      linkedNotesStatus.textContent = error.message;
+    });
+  }
   dialog.showModal();
   titleInput.focus();
+}
+
+function noteTypeLabel(noteType) {
+  return {
+    general: "일반 메모",
+    meeting_minutes: "회의록",
+    research_note: "연구 노트",
+  }[noteType] ?? "일반 메모";
+}
+
+async function loadLinkedNotes(task) {
+  const query = new URLSearchParams({
+    source_app: "calendar",
+    source_type: "event",
+    source_id: String(task.id),
+  });
+  const notes = await notesRequest(`?${query}`);
+  const linked = await Promise.all(notes.map(async (note) => {
+    const links = await notesRequest(`/${note.id}/links`);
+    const link = links.find((item) => (
+      item.source_app === "calendar"
+      && item.source_type === "event"
+      && item.source_id === String(task.id)
+    ));
+    return { note, link };
+  }));
+  linkedNotesList.replaceChildren(...linked.map(({ note, link }) => {
+    const row = document.createElement("div");
+    row.className = "linked-note-row";
+    const anchor = document.createElement("a");
+    anchor.href = `${notesRoute}?note_id=${note.id}`;
+    anchor.textContent = `${note.title} · ${noteTypeLabel(note.note_type)}`;
+    const unlink = document.createElement("button");
+    unlink.type = "button";
+    unlink.className = "button button-secondary";
+    unlink.textContent = "연결 해제";
+    unlink.setAttribute("aria-label", `${note.title} 연결 해제`);
+    unlink.addEventListener("click", async () => {
+      try {
+        await notesRequest(`/${note.id}/links/${link.id}`, { method: "DELETE" });
+        await loadLinkedNotes(task);
+      } catch (error) {
+        showError(error.message);
+      }
+    });
+    row.append(anchor, unlink);
+    return row;
+  }));
+  linkedNotesStatus.textContent = linked.length
+    ? `${linked.length}개의 노트가 연결되어 있습니다.`
+    : "연결된 노트가 없습니다.";
+}
+
+async function renderAttachNoteResults(task) {
+  attachNoteStatus.textContent = "노트를 불러오는 중입니다.";
+  const query = new URLSearchParams();
+  if (attachNoteSearch.value.trim()) query.set("q", attachNoteSearch.value.trim());
+  const notes = await notesRequest(query.size ? `?${query}` : "");
+  attachNoteResults.replaceChildren(...notes.map((note) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "attach-note-result";
+    button.textContent = `${note.title} · ${noteTypeLabel(note.note_type)}`;
+    button.addEventListener("click", async () => {
+      try {
+        await notesRequest(`/${note.id}/links`, {
+          method: "POST",
+          body: JSON.stringify({
+            source_app: "calendar",
+            source_type: "event",
+            source_id: String(task.id),
+          }),
+        });
+        attachNoteDialog.close();
+        await loadLinkedNotes(task);
+      } catch (error) {
+        showError(error.message);
+      }
+    });
+    return button;
+  }));
+  attachNoteStatus.textContent = notes.length
+    ? `${notes.length}개의 노트`
+    : "연결할 노트가 없습니다.";
+}
+
+function openAttachNoteDialog() {
+  const task = tasks.find((item) => String(item.id) === taskIdInput.value);
+  if (!task) return;
+  attachNoteSearch.value = "";
+  attachNoteResults.replaceChildren();
+  attachNoteDialog.showModal();
+  renderAttachNoteResults(task).catch((error) => {
+    attachNoteStatus.textContent = error.message;
+  });
+  attachNoteSearch.focus();
 }
 
 function closeTaskDialog() {
@@ -658,6 +799,18 @@ deleteDialogButton.addEventListener("click", () => {
 form.addEventListener("submit", saveTask);
 topicForm.addEventListener("submit", saveTopic);
 deleteTopicButton.addEventListener("click", deleteTopic);
+attachNoteButton.addEventListener("click", openAttachNoteDialog);
+document.querySelector("#close-attach-note").addEventListener("click", () => attachNoteDialog.close());
+let attachSearchTimer = null;
+attachNoteSearch.addEventListener("input", () => {
+  const task = tasks.find((item) => String(item.id) === taskIdInput.value);
+  window.clearTimeout(attachSearchTimer);
+  attachSearchTimer = window.setTimeout(() => {
+    if (task) renderAttachNoteResults(task).catch((error) => {
+      attachNoteStatus.textContent = error.message;
+    });
+  }, 180);
+});
 dialog.addEventListener("click", (event) => {
   if (event.target === dialog) closeTaskDialog();
 });

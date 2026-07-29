@@ -79,6 +79,16 @@ test("makes rendered calendar events keyboard accessible", () => {
   assert.match(appSource, /event\.key === " "/);
 });
 
+test("links Calendar details to Notes without a localhost HTTP bridge", () => {
+  assert.match(indexSource, /data-notes-route=/);
+  assert.match(indexSource, /id="linked-notes-section"/);
+  assert.match(indexSource, /id="attach-note-dialog"/);
+  assert.match(appSource, /notesRequest/);
+  assert.match(appSource, /source_app:\s*"calendar"/);
+  assert.match(appSource, /source_type:\s*"event"/);
+  assert.doesNotMatch(appSource, /http:\/\/localhost|http:\/\/127\.0\.0\.1/);
+});
+
 test("keeps the calendar inside the viewport without page scrolling", () => {
   assert.match(appSource, /height:\s*"100%"/);
   assert.match(shellStylesSource, /height:\s*100dvh/);

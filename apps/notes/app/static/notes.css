@@ -101,7 +101,7 @@
 
 .notes-editor-pane { position: relative; }
 .notes-empty { display: grid; min-height: 100%; place-items: center; padding: 32px; color: var(--workspace-muted); text-align: center; }
-.note-form { display: grid; min-height: 100%; grid-template-columns: minmax(0, 1fr) 180px; grid-template-rows: auto auto minmax(220px, 1fr); gap: var(--workspace-space-4); padding: clamp(16px, 3vw, 36px); }
+.note-form { display: grid; min-height: 100%; grid-template-columns: minmax(0, 1fr) 180px; grid-template-rows: auto auto auto minmax(220px, 1fr); gap: var(--workspace-space-4); padding: clamp(16px, 3vw, 36px); }
 .notes-editor-header { grid-column: 1 / -1; justify-content: space-between; gap: var(--workspace-space-3); }
 .notes-editor-actions { gap: var(--workspace-space-2); margin-left: auto; }
 .notes-back { display: none; }
@@ -110,6 +110,11 @@
 .notes-field input,
 .notes-field select { min-height: 46px; padding: 10px 12px; font-size: 16px; font-weight: 500; }
 .notes-content-field { grid-column: 1 / -1; min-height: 0; }
+.note-context { grid-column: 1 / -1; padding: 12px; border: 1px solid var(--workspace-border); border-radius: var(--workspace-radius-md); background: #f4faf8; }
+.note-context > div:first-child { display: grid; gap: 3px; }
+.note-links { display: grid; gap: 7px; margin-top: 9px; }
+.note-link-card { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--workspace-muted); }
+.note-link-card.is-orphan { color: var(--workspace-danger); }
 .notes-field textarea { min-height: 100%; resize: none; padding: 14px; font-size: 16px; font-weight: 400; line-height: 1.6; }
 
 .notes-error {

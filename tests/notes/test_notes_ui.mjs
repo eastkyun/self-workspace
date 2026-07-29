@@ -10,6 +10,7 @@ import {
   noteTypeLabel,
   requestedNoteId,
   requestedNoteType,
+  requestedSource,
   sortNotes,
 } from "../../apps/notes/app/static/notes-state.js";
 
@@ -52,6 +53,11 @@ test("parses supported route state only", () => {
   assert.equal(requestedNoteId("?note_id=12x"), null);
   assert.equal(requestedNoteType("?type=research_note"), "research_note");
   assert.equal(requestedNoteType("?type=other"), "general");
+  assert.deepEqual(
+    requestedSource("?source_app=calendar&source_type=event&source_id=13"),
+    { source_app: "calendar", source_type: "event", source_id: "13" },
+  );
+  assert.equal(requestedSource("?source_app=calendar"), null);
   assert.equal(noteTypeLabel("meeting_minutes"), "회의록");
 });
 
@@ -86,6 +92,8 @@ test("UI contains accessible list, editor, statuses, and dirty guard", () => {
   assert.match(script, /beforeunload/);
   assert.match(script, /window\.confirm\("저장하지 않은 변경사항/);
   assert.match(script, /ArrowDown/);
+  assert.match(script, /payload\.links = \[state\.pendingSource\]/);
+  assert.match(template, /id="note-context"/);
 });
 
 test("mobile layout is single-column without horizontal overflow", () => {

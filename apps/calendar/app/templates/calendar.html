@@ -9,7 +9,10 @@
 {% endblock %}
 
 {% block content %}
-  <div class="calendar-page">
+  <div
+    class="calendar-page"
+    data-notes-route="{{ workspace_path(notes_route) }}"
+  >
     <header class="calendar-toolbar">
       <div class="calendar-identity">
         <p class="eyebrow">MONTHLY DIARY</p>
@@ -184,6 +187,19 @@
           <option value="done">완료</option>
         </select>
 
+        <section id="linked-notes-section" class="linked-notes-section" aria-labelledby="linked-notes-title" hidden>
+          <div class="linked-notes-header">
+            <h3 id="linked-notes-title">연결된 노트</h3>
+            <button id="attach-note-button" class="button button-secondary" type="button">기존 노트 연결</button>
+          </div>
+          <div class="linked-notes-actions">
+            <a id="create-meeting-note" class="button button-secondary">회의록 작성</a>
+            <a id="create-research-note" class="button button-secondary">연구 노트 작성</a>
+          </div>
+          <p id="linked-notes-status" class="linked-notes-status" role="status"></p>
+          <div id="linked-notes-list" class="linked-notes-list"></div>
+        </section>
+
         <div class="dialog-actions">
           <button class="button delete-dialog-button" id="delete-task-button" type="button" hidden>삭제</button>
           <span class="action-spacer"></span>
@@ -191,6 +207,19 @@
           <button class="button button-primary" type="submit">저장</button>
         </div>
       </form>
+    </dialog>
+
+    <dialog class="task-dialog attach-note-dialog" id="attach-note-dialog" aria-labelledby="attach-note-title">
+      <div class="attach-note-content">
+        <div class="dialog-header">
+          <h2 id="attach-note-title">기존 노트 연결</h2>
+          <button id="close-attach-note" class="icon-button" type="button" aria-label="닫기">×</button>
+        </div>
+        <label for="attach-note-search">노트 검색</label>
+        <input id="attach-note-search" type="search" placeholder="제목과 본문 검색">
+        <p id="attach-note-status" role="status"></p>
+        <div id="attach-note-results" class="attach-note-results"></div>
+      </div>
     </dialog>
 
     <dialog class="task-dialog topic-dialog" id="topic-dialog" aria-labelledby="topic-dialog-title">

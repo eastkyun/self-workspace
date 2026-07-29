@@ -61,3 +61,14 @@ export function requestedNoteType(search) {
   const value = new URLSearchParams(search).get("type");
   return NOTE_TYPES.has(value) ? value : "general";
 }
+
+export function requestedSource(search) {
+  const params = new URLSearchParams(search);
+  const source = {
+    source_app: params.get("source_app"),
+    source_type: params.get("source_type"),
+    source_id: params.get("source_id"),
+  };
+  if (Object.values(source).every(Boolean)) return source;
+  return null;
+}

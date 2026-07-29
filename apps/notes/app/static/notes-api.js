@@ -47,5 +47,11 @@ export function createNotesApi(baseUrl, fetchImpl = fetch) {
     remove(noteId) {
       return request(`/${noteId}`, { method: "DELETE" });
     },
+    links(noteId) {
+      return request(`/${noteId}/links`);
+    },
+    unlink(noteId, linkId) {
+      return request(`/${noteId}/links/${linkId}`, { method: "DELETE" });
+    },
   };
 }

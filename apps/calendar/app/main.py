@@ -673,6 +673,9 @@ def create_app(
 
     @application.get("/", include_in_schema=False)
     def index(request: Request):
+        notes_app = registry.get_app("notes")
+        if notes_app is None:
+            raise RuntimeError("Notes app is missing from the shared Registry snapshot")
         return templates.TemplateResponse(
             request,
             "calendar.html",
@@ -681,7 +684,8 @@ def create_app(
                 registry,
                 current_app_id="calendar",
                 page_title="Calendar",
-            ),
+            )
+            | {"notes_route": notes_app.route},
         )
 
     @application.get("/api/topics", response_model=list[Topic])

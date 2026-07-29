@@ -54,6 +54,13 @@
           </div>
         </div>
         <h3 id="editor-title" class="sr-only">메모 편집</h3>
+        <section id="note-context" class="note-context" aria-labelledby="note-context-title" hidden>
+          <div>
+            <span class="workspace-eyebrow">LINKED SOURCE</span>
+            <strong id="note-context-title">연결된 Calendar 일정</strong>
+          </div>
+          <div id="note-links" class="note-links"></div>
+        </section>
         <label class="notes-field notes-title-field">
           <span>제목</span>
           <input id="note-title" name="title" maxlength="120" required placeholder="제목을 입력하세요">
