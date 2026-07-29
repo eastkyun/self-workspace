@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "script-token",
+      "markdown": "<script>alert(1)</script>",
+      "literal_text": "<script>alert(1)</script>",
+      "forbidden_html": [
+        "<script"
+      ]
+    },
+    {
+      "id": "event-handler",
+      "markdown": "<img src=x onerror=alert(1)>",
+      "literal_text": "<img src=x onerror=alert(1)>",
+      "forbidden_html": [
+        "<img",
+        "onerror"
+      ]
+    },
+    {
+      "id": "javascript-link",
+      "markdown": "[위험](javascript:alert(1))",
+      "forbidden_html": [
+        "javascript:"
+      ]
+    },
+    {
+      "id": "data-link",
+      "markdown": "[위험](data:text/html,<script>alert(1)</script>)",
+      "forbidden_html": [
+        "data:text/html",
+        "<script"
+      ]
+    },
+    {
+      "id": "svg-token",
+      "markdown": "<svg><a href=\"javascript:alert(1)\">x</a></svg>",
+      "literal_text": "<svg><a href=\"javascript:alert(1)\">x</a></svg>",
+      "forbidden_html": [
+        "<svg",
+        "javascript:"
+      ]
+    },
+    {
+      "id": "internal-traversal",
+      "markdown": "[[note:../secret]]",
+      "forbidden_html": [
+        "../secret"
+      ]
+    }
+  ]
+}
+

@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "plain-text-breaks",
+      "markdown": "첫 번째 줄\n두 번째 줄",
+      "expected_text": "첫 번째 줄 두 번째 줄"
+    },
+    {
+      "id": "korean-duplicate-headings",
+      "markdown": "## 설치 방법\n\n## 설치 방법",
+      "expected_heading_ids": [
+        "설치-방법",
+        "설치-방법-2"
+      ]
+    },
+    {
+      "id": "gfm-formatting",
+      "markdown": "**굵게** ~~취소~~\n\n- [x] 완료",
+      "expected_text_contains": [
+        "굵게",
+        "취소",
+        "완료"
+      ]
+    },
+    {
+      "id": "raw-html-literal",
+      "markdown": "<strong onclick=\"alert(1)\">문자 그대로</strong>",
+      "expected_text": "<strong onclick=\"alert(1)\">문자 그대로</strong>"
+    }
+  ]
+}
+
