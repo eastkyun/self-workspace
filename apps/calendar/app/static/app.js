@@ -2,6 +2,7 @@ import {
   activeTopicOptions,
   allDayInputToRange,
   apiTimestampToLocalInput,
+  calendarDeepLinkEventId,
   filterTasks,
   filterTasksByTopic,
   formatTaskTime,
@@ -859,4 +860,14 @@ topicDialog.addEventListener("click", (event) => {
 }));
 
 new ResizeObserver(updateTopicOverflowButton).observe(topicFilterViewport);
-loadData().catch((error) => showError(error.message));
+loadData()
+  .then(() => {
+    const eventId = calendarDeepLinkEventId(window.location.search);
+    const linkedTask = eventId
+      ? tasks.find((task) => String(task.id) === eventId)
+      : null;
+    if (linkedTask) {
+      openTaskDialog(linkedTask);
+    }
+  })
+  .catch((error) => showError(error.message));

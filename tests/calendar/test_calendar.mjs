@@ -32,6 +32,7 @@ const {
   allDayInputToRange,
   apiTimestampToLocalInput,
   calendarAllDayRangeToApi,
+  calendarDeepLinkEventId,
   filterTasks,
   filterTasksByTopic,
   isTaskOverdue,
@@ -61,6 +62,12 @@ function task(overrides = {}) {
 
 test("declares KST as the fixed +09:00 offset", () => {
   assert.equal(KST_OFFSET, "+09:00");
+});
+
+test("calendar deep links accept only positive decimal event IDs", () => {
+  assert.equal(calendarDeepLinkEventId("?event_id=13"), "13");
+  assert.equal(calendarDeepLinkEventId("?event_id=0"), null);
+  assert.equal(calendarDeepLinkEventId("?event_id=../13"), null);
 });
 
 test("uses FullCalendar v7 render and singular class APIs", () => {

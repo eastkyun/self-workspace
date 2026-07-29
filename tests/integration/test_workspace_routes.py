@@ -42,6 +42,10 @@ def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) 
         notes_stylesheet = client.get("/apps/notes/static/notes.css")
         notes_script = client.get("/apps/notes/static/notes.js")
         notes_api = client.get("/apps/notes/api/notes")
+        internal_links = client.post(
+            "/api/internal-links/resolve",
+            json={"links": [{"type": "note", "target": "1"}]},
+        )
 
     assert portal.status_code == 200
     assert 'id="sidebar"' in portal.text
@@ -84,6 +88,16 @@ def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) 
     assert notes_script.status_code == 200
     assert notes_api.status_code == 200
     assert notes_api.json() == []
+    assert internal_links.status_code == 200
+    assert internal_links.json() == [
+        {
+            "type": "note",
+            "target": "1",
+            "exists": False,
+            "href": None,
+            "label": "note:1",
+        }
+    ]
 
     with sqlite3.connect(database_path) as connection:
         assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
@@ -109,6 +123,61 @@ def test_portal_calendar_and_notes_share_one_registry_snapshot(
         notes_mount.app.state.notes_service.source_resolver
         is application.state.source_resolver
     )
+
+
+def test_internal_link_endpoint_resolves_notes_and_calendar_events(
+    tmp_path: Path,
+) -> None:
+    with TestClient(
+        create_app(
+            tmp_path / "calendar.db",
+            notes_database_path=tmp_path / "notes.db",
+        )
+    ) as client:
+        event = client.post(
+            "/apps/calendar/api/tasks",
+            json={
+                "title": "연결 일정",
+                "start_at": "2026-07-28T09:00:00+09:00",
+                "due_at": "2026-07-28T10:00:00+09:00",
+            },
+        ).json()
+        note = client.post(
+            "/apps/notes/api/notes",
+            json={
+                "title": "연결 노트",
+                "content": "",
+                "note_type": "general",
+                "is_pinned": False,
+            },
+        ).json()
+        response = client.post(
+            "/api/internal-links/resolve",
+            json={
+                "links": [
+                    {"type": "note", "target": str(note["id"])},
+                    {"type": "calendar", "target": str(event["id"])},
+                ]
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "type": "note",
+            "target": str(note["id"]),
+            "exists": True,
+            "href": f"/apps/notes/?note_id={note['id']}",
+            "label": "연결 노트",
+        },
+        {
+            "type": "calendar",
+            "target": str(event["id"]),
+            "exists": True,
+            "href": f"/apps/calendar/?event_id={event['id']}",
+            "label": "연결 일정",
+        },
+    ]
 
 
 def test_portal_verifies_existing_v2_database_without_mutation(tmp_path: Path) -> None:

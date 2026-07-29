@@ -5,6 +5,11 @@ import {
   normalizeRenderOptions,
 } from "./contracts.js";
 import { createHeadingSlugger, normalizeHeadingText } from "./headings.js";
+import {
+  internalLinkKey,
+  isSafeResolvedHref,
+  parseInternalLinkToken,
+} from "./internal-links.js";
 import { createMarkdownSanitizer } from "./sanitizer.js";
 import { buildToc } from "./toc.js";
 
@@ -83,6 +88,52 @@ function createMarked(options, state) {
         return `<a href="${href}"${title}${target}${rel}>${label}</a>`;
       },
     },
+    extensions: [
+      {
+        name: "internal-link",
+        level: "inline",
+        start(source) {
+          const index = source.indexOf("[[");
+          return index >= 0 ? index : undefined;
+        },
+        tokenizer(source) {
+          const match = /^\[\[[^\]\n]+\]\]/u.exec(source);
+          if (!match) {
+            return undefined;
+          }
+          const parsed = parseInternalLinkToken(match[0]);
+          if (!parsed) {
+            return undefined;
+          }
+          return {
+            type: "internal-link",
+            raw: parsed.raw,
+            referenceType: parsed.type,
+            target: parsed.target,
+            label: parsed.label,
+          };
+        },
+        renderer(token) {
+          const reference = Object.freeze({
+            type: token.referenceType,
+            target: token.target,
+          });
+          state.internalLinks.push(reference);
+          const resolved = options.internalLinkResolutions?.get?.(
+            internalLinkKey(reference.type, reference.target),
+          );
+          const label = escapeHtml(
+            token.label
+              || resolved?.label
+              || `${reference.type}:${reference.target}`,
+          );
+          if (resolved?.exists && isSafeResolvedHref(resolved.href)) {
+            return `<a class="internal-link" href="${escapeHtml(resolved.href)}">${label}</a>`;
+          }
+          return `<span class="internal-link broken" role="link" aria-disabled="true">${label}</span>`;
+        },
+      },
+    ],
   });
   return marked;
 }
@@ -100,7 +151,7 @@ export function createMarkdownRenderer({
       );
     }
     const options = normalizeRenderOptions(renderOptions);
-    const state = { headings: [] };
+    const state = { headings: [], internalLinks: [] };
     const marked = createMarked(options, state);
     const rawHtml = inline ? marked.parseInline(source) : marked.parse(source);
     const html = sanitizer.sanitize(rawHtml);
@@ -112,7 +163,7 @@ export function createMarkdownRenderer({
         minLevel: options.minTocLevel,
         maxLevel: options.maxTocLevel,
       })),
-      internalLinks: Object.freeze([]),
+      internalLinks: Object.freeze([...state.internalLinks]),
       warnings: Object.freeze([]),
     });
   }

@@ -13,6 +13,7 @@ from apps.calendar.app.main import (
     resolve_database_path,
     verify_database,
 )
+from apps.calendar.app.internal_link_provider import CalendarInternalLinkProvider
 from apps.calendar.app.source_provider import CalendarEventSourceProvider
 from apps.notes.app.database import (
     initialize_database as initialize_notes_database,
@@ -20,6 +21,7 @@ from apps.notes.app.database import (
     verify_database as verify_notes_database,
 )
 from apps.notes.app.main import create_app as create_notes_app
+from apps.notes.app.internal_link_provider import NotesInternalLinkProvider
 from portal.quotes import (
     DEFAULT_QUOTES,
     Quote,
@@ -33,6 +35,11 @@ from shared.templating import (
     shell_context,
 )
 from shared.source_references import SourceReferenceResolver
+from shared.internal_links import (
+    InternalLinkBatchRequest,
+    InternalLinkResolverRegistry,
+    InternalLinkResult,
+)
 
 PORTAL_DIR = Path(__file__).resolve().parent
 STATIC_DIR = PORTAL_DIR / "static"
@@ -59,6 +66,13 @@ def create_app(
             )
         }
     )
+    internal_link_resolver = InternalLinkResolverRegistry(
+        {
+            "note": NotesInternalLinkProvider(resolved_notes_database_path),
+            "calendar": CalendarInternalLinkProvider(resolved_database_path),
+        },
+        registry,
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -84,6 +98,7 @@ def create_app(
     application.state.app_registry = registry
     application.state.quote_corpus = quote_corpus
     application.state.source_resolver = source_resolver
+    application.state.internal_link_resolver = internal_link_resolver
     application.mount(
         "/static/shared",
         StaticFiles(directory=SHARED_STATIC_DIR),
@@ -112,6 +127,15 @@ def create_app(
     @application.get("/api/hub/apps", response_model=list[AppManifest])
     def list_apps() -> tuple[AppManifest, ...]:
         return registry.get_enabled()
+
+    @application.post(
+        "/api/internal-links/resolve",
+        response_model=list[InternalLinkResult],
+    )
+    def resolve_internal_links(
+        payload: InternalLinkBatchRequest,
+    ) -> tuple[InternalLinkResult, ...]:
+        return internal_link_resolver.resolve_batch(payload.links)
 
     calendar_application = create_calendar_app(
         resolved_database_path,

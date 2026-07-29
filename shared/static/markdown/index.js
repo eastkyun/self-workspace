@@ -25,6 +25,14 @@ export {
   headingSlugBase,
   normalizeHeadingText,
 } from "./headings.js";
+export {
+  collectInternalLinks,
+  internalLinkKey,
+  isSafeResolvedHref,
+  normalizeResolutionSnapshot,
+  parseInternalLinkToken,
+  resolveInternalLinks,
+} from "./internal-links.js";
 export { createMarkdownRenderer } from "./renderer.js";
 export { createMarkdownSanitizer } from "./sanitizer.js";
 export { buildToc } from "./toc.js";

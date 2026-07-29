@@ -4,6 +4,11 @@ const API_TIMESTAMP = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::(\d{2}))?(?:Z|[+-]\
 const LOCAL_DATETIME = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::(\d{2}))?$/;
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
+export function calendarDeepLinkEventId(search = "") {
+  const value = new URLSearchParams(search).get("event_id");
+  return value && /^[1-9][0-9]*$/.test(value) ? value : null;
+}
+
 function pad(value) {
   return String(value).padStart(2, "0");
 }
