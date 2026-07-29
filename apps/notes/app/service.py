@@ -66,6 +66,21 @@ class NotesService:
         limit: int = 50,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
+        source_values = (source_app, source_type, source_id)
+        if any(value is not None for value in source_values):
+            if not all(value is not None for value in source_values):
+                raise ValueError(
+                    "source_app, source_type, and source_id are required together"
+                )
+            source = SourceReferenceInput(
+                source_app=source_app,
+                source_type=source_type,
+                source_id=source_id,
+            )
+            # Resolution validates provider support and app-specific ID syntax.
+            # A well-formed source that no longer exists is still a valid filter
+            # and naturally produces an empty repository result.
+            self.source_resolver.resolve(self._reference(source))
         with database_connection(self.database_path) as connection:
             return repository.list_notes(
                 connection,

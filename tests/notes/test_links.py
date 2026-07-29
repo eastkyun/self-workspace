@@ -131,6 +131,31 @@ def test_source_validation_error_contract(linked_client, payload, status) -> Non
     assert response.status_code == status
 
 
+@pytest.mark.parametrize(
+    "query",
+    [
+        "source_app=Calendar&source_type=event&source_id=13",
+        "source_app=calendar&source_type=task&source_id=13",
+        "source_app=calendar&source_type=event&source_id=bad",
+    ],
+)
+def test_source_filter_rejects_malformed_or_unsupported_reference(
+    linked_client,
+    query: str,
+) -> None:
+    client, _, _ = linked_client
+    assert client.get(f"/api/notes?{query}").status_code == 422
+
+
+def test_source_filter_allows_missing_well_formed_reference(linked_client) -> None:
+    client, _, _ = linked_client
+    response = client.get(
+        "/api/notes?source_app=calendar&source_type=event&source_id=999"
+    )
+    assert response.status_code == 200
+    assert response.json() == []
+
+
 def test_event_deletion_preserves_link_snapshot_and_marks_orphan(
     linked_client,
 ) -> None:
