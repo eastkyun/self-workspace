@@ -33,9 +33,11 @@ def available_port() -> int:
 def live_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
     port = available_port()
     database_path = tmp_path_factory.mktemp("playwright") / "calendar.db"
+    notes_database_path = database_path.parent / "notes.db"
     environment = {
         **os.environ,
         "CALENDAR_DB_PATH": str(database_path),
+        "NOTES_DB_PATH": str(notes_database_path),
         "PYTHONDONTWRITEBYTECODE": "1",
     }
     process = subprocess.Popen(
@@ -72,6 +74,12 @@ def live_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
         ).json()
         if tasks != []:
             raise RuntimeError("Playwright test server did not use its empty temporary DB")
+        notes = httpx.get(
+            f"{base_url}/apps/notes/api/notes",
+            timeout=1,
+        ).json()
+        if notes != []:
+            raise RuntimeError("Playwright test server did not use its empty temporary Notes DB")
         yield base_url
     finally:
         process.terminate()
@@ -99,7 +107,12 @@ def test_desktop_launcher_and_pin_persistence(page: Page, live_server: str) -> N
     external_requests = assert_same_origin_requests(page, live_server)
     failed_requests: list[str] = []
     console_errors: list[str] = []
-    page.on("requestfailed", lambda request: failed_requests.append(request.url))
+    page.on(
+        "requestfailed",
+        lambda request: failed_requests.append(
+            f"{request.method} {request.failure} {request.url}"
+        ),
+    )
     page.on(
         "console",
         lambda message: (
@@ -111,6 +124,9 @@ def test_desktop_launcher_and_pin_persistence(page: Page, live_server: str) -> N
 
     expect(page.get_by_role("heading", name="고정한 앱")).to_be_visible()
     expect(page.locator("#pinned-apps").get_by_text("Calendar")).to_be_visible()
+    expect(
+        page.locator("#pinned-apps .hub-app-name").get_by_text("Notes", exact=True)
+    ).to_be_visible()
     page.get_by_role("button", name="앱 런처 열기").click()
     expect(page.get_by_role("dialog")).to_be_visible()
     page.get_by_role("button", name="앱 런처 닫기").click()
@@ -118,9 +134,13 @@ def test_desktop_launcher_and_pin_persistence(page: Page, live_server: str) -> N
     page.locator("#pinned-apps").get_by_role(
         "button", name="Calendar 고정 해제"
     ).click()
-    expect(page.locator("#pinned-empty")).to_be_visible()
+    expect(
+        page.locator("#pinned-apps .hub-app-name").get_by_text("Notes", exact=True)
+    ).to_be_visible()
     page.reload()
-    expect(page.locator("#pinned-empty")).to_be_visible()
+    expect(
+        page.locator("#pinned-apps .hub-app-name").get_by_text("Notes", exact=True)
+    ).to_be_visible()
     assert external_requests == []
     assert failed_requests == []
     assert console_errors == []
@@ -265,3 +285,197 @@ def test_calendar_event_opens_from_keyboard(page: Page, live_server: str) -> Non
     event.focus()
     page.keyboard.press("Enter")
     expect(page.locator("#task-dialog")).to_be_visible()
+
+
+def test_notes_registry_surfaces_and_crud(page: Page, live_server: str) -> None:
+    external_requests = assert_same_origin_requests(page, live_server)
+    failed_requests: list[str] = []
+    console_errors: list[str] = []
+    page.on(
+        "requestfailed",
+        lambda request: failed_requests.append(
+            f"{request.method} {request.failure} {request.url}"
+        ),
+    )
+    page.on(
+        "console",
+        lambda message: (
+            console_errors.append(message.text) if message.type == "error" else None
+        ),
+    )
+    page.goto(live_server)
+    expect(
+        page.locator("#all-apps .hub-app-name").get_by_text("Notes", exact=True)
+    ).to_be_visible()
+    page.get_by_role("link", name="Notes").first.click()
+    expect(page.locator('[data-app-id="notes"][aria-current="page"]')).to_be_attached()
+
+    page.get_by_role("button", name="새 메모").click()
+    page.locator("#note-title").fill("E2E 일반 메모")
+    page.locator("#note-content").fill("검색 가능한 본문")
+    page.get_by_role("button", name="고정").click()
+    page.get_by_role("button", name="저장").click()
+    expect(page.locator("#notes-announcer")).to_contain_text("저장")
+    expect(page).to_have_url(re.compile(r"note_id=\d+"))
+    page.wait_for_timeout(250)
+    page.reload()
+    expect(page.locator("#note-title")).to_have_value("E2E 일반 메모")
+    expect(page.get_by_role("button", name="고정 해제")).to_be_visible()
+
+    page.locator("#notes-search").fill("검색 가능한")
+    page.wait_for_timeout(250)
+    expect(page.get_by_role("option", name=re.compile("E2E 일반 메모"))).to_be_visible()
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.get_by_role("button", name="삭제").click()
+    expect(page.locator("#notes-announcer")).to_contain_text("삭제")
+    assert external_requests == []
+    assert failed_requests == []
+    assert console_errors == []
+
+
+def test_calendar_creates_linked_meeting_note(page: Page, live_server: str) -> None:
+    task = page.request.post(
+        f"{live_server}/apps/calendar/api/tasks",
+        data={
+            "title": "Notes 연계 회의",
+            "description": "",
+            "status": "todo",
+            "all_day": False,
+            "start_at": "2026-07-29T09:00:00+09:00",
+            "due_at": "2026-07-29T10:00:00+09:00",
+            "topic_ids": [],
+        },
+    ).json()
+    page.goto(f"{live_server}/apps/calendar/")
+    page.get_by_role("button", name="일정 열기: Notes 연계 회의").click()
+    page.get_by_role("link", name="회의록 작성").click()
+    expect(page).to_have_url(re.compile(r"/apps/notes/new\?.*type=meeting_minutes"))
+    expect(page.locator("#note-context")).to_contain_text(f"일정 #{task['id']}")
+    page.locator("#note-title").fill("Notes 연계 회의록")
+    page.get_by_role("button", name="저장").click()
+    expect(page.locator("#note-context")).to_contain_text("Notes 연계 회의")
+
+    linked = page.request.get(
+        f"{live_server}/apps/notes/api/notes",
+        params={
+            "source_app": "calendar",
+            "source_type": "event",
+            "source_id": str(task["id"]),
+        },
+    ).json()
+    assert [note["title"] for note in linked] == ["Notes 연계 회의록"]
+
+
+def test_calendar_attaches_and_unlinks_existing_note(
+    page: Page, live_server: str
+) -> None:
+    note = page.request.post(
+        f"{live_server}/apps/notes/api/notes",
+        data={"title": "기존 연결 노트", "content": "", "note_type": "general"},
+    ).json()
+    task = page.request.post(
+        f"{live_server}/apps/calendar/api/tasks",
+        data={
+            "title": "기존 노트 연결 일정",
+            "description": "",
+            "status": "todo",
+            "all_day": False,
+            "start_at": "2026-07-29T11:00:00+09:00",
+            "due_at": "2026-07-29T12:00:00+09:00",
+            "topic_ids": [],
+        },
+    ).json()
+    page.goto(f"{live_server}/apps/calendar/")
+    page.get_by_role("button", name="일정 열기: 기존 노트 연결 일정").click()
+    page.get_by_role("button", name="기존 노트 연결", exact=True).click()
+    expect(page.locator("#attach-note-dialog")).to_be_visible()
+    page.locator("#attach-note-search").fill("기존 연결 노트")
+    page.locator("#attach-note-results").get_by_role(
+        "button", name=re.compile("기존 연결 노트")
+    ).click()
+    expect(page.locator("#linked-notes-list")).to_contain_text("기존 연결 노트")
+    page.get_by_role("button", name="기존 연결 노트 연결 해제").click()
+    expect(page.locator("#linked-notes-status")).to_contain_text("없습니다")
+    assert page.request.get(
+        f"{live_server}/apps/notes/api/notes/{note['id']}/links"
+    ).json() == []
+    assert page.request.get(
+        f"{live_server}/apps/calendar/api/tasks"
+    ).json()
+    assert task["id"] > 0
+
+
+def test_deleted_calendar_event_leaves_orphaned_note(
+    page: Page, live_server: str
+) -> None:
+    task = page.request.post(
+        f"{live_server}/apps/calendar/api/tasks",
+        data={
+            "title": "삭제 후 snapshot 일정",
+            "description": "",
+            "status": "todo",
+            "all_day": False,
+            "start_at": "2026-07-29T13:00:00+09:00",
+            "due_at": "2026-07-29T14:00:00+09:00",
+            "topic_ids": [],
+        },
+    ).json()
+    note = page.request.post(
+        f"{live_server}/apps/notes/api/notes",
+        data={
+            "title": "보존되는 노트",
+            "content": "",
+            "note_type": "research_note",
+            "links": [{
+                "source_app": "calendar",
+                "source_type": "event",
+                "source_id": str(task["id"]),
+            }],
+        },
+    ).json()
+    assert page.request.delete(
+        f"{live_server}/apps/calendar/api/tasks/{task['id']}"
+    ).status == 204
+
+    page.goto(f"{live_server}/apps/notes/?note_id={note['id']}")
+    expect(page.locator("#note-title")).to_have_value("보존되는 노트")
+    expect(page.locator("#note-context")).to_contain_text("삭제 후 snapshot 일정")
+    expect(page.locator("#note-context")).to_contain_text("삭제된 일정")
+
+
+@pytest.mark.parametrize(("width", "height"), VIEWPORTS)
+def test_notes_viewport_layout_and_request_health(
+    page: Page,
+    live_server: str,
+    width: int,
+    height: int,
+) -> None:
+    external_requests = assert_same_origin_requests(page, live_server)
+    failed_requests: list[str] = []
+    console_errors: list[str] = []
+    page.on("requestfailed", lambda request: failed_requests.append(request.url))
+    page.on(
+        "console",
+        lambda message: (
+            console_errors.append(message.text) if message.type == "error" else None
+        ),
+    )
+    page.set_viewport_size({"width": width, "height": height})
+    page.goto(f"{live_server}/apps/notes/")
+    page.wait_for_timeout(250)
+    metrics = page.evaluate(
+        """() => ({
+          innerWidth: window.innerWidth,
+          documentWidth: document.documentElement.scrollWidth,
+          bodyHeight: document.body.scrollHeight,
+          viewportHeight: document.body.clientHeight,
+          workspaceWidth: document.querySelector('.notes-workspace').getBoundingClientRect().width,
+          mainWidth: document.querySelector('#workspace-main').getBoundingClientRect().width,
+        })"""
+    )
+    assert metrics["documentWidth"] == metrics["innerWidth"]
+    assert metrics["bodyHeight"] == metrics["viewportHeight"]
+    assert 0 < metrics["workspaceWidth"] <= metrics["mainWidth"]
+    assert external_requests == []
+    assert failed_requests == []
+    assert console_errors == []
