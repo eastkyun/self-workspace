@@ -48,3 +48,28 @@ Calendar checksum, row counts, and schema are stop conditions for this task.
 Tests must inject temporary Notes and Calendar database paths. They must not
 create the production Notes database or mutate the production Calendar
 database.
+
+## Final validation
+
+- Python non-browser: `125 passed`
+- Node: Calendar, Portal, Notes `3 suites passed`
+- Chromium: `20 passed`
+- Viewports: `320`, `375`, `768`, `1024`, `1440`
+- External runtime requests: `0`
+- Browser failed requests: `0`
+- Browser console errors: `0`
+
+Calendar production database remained unchanged:
+
+```text
+sha256:      376e033fe3679d50410067ad9507f1519bf26597097f5211649a07ca6f7f4e54
+rows:        tasks=3, topics=3, task_topics=2
+schema hash: 6bd76864c474cfbf7b39633db1b0bab739b8762a9504a2a6cf51d5fc423fe567
+quick_check: ok
+user_version: 2
+```
+
+Notes production DB는 구현 이후 정상 app startup 또는 사용자 실행으로 생성될 수 있으므로 Calendar
+불변 checksum 대상에서 제외했습니다. 최종 회귀의 pytest와 Chromium server는 각각 임시
+Calendar/Notes DB 경로를 명시적으로 주입했습니다. 최종 확인 시 운영 Notes DB quick check는
+`ok`, `user_version=1`이었으며 기존 사용자 row를 수정하거나 삭제하지 않았습니다.

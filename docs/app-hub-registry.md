@@ -1,11 +1,11 @@
 # Workspace App Registry
 
 `shared.app_registry`는 Workspace app metadata의 유일한 public entry point입니다.
-Portal과 Calendar는 `shared/apps.json`을 직접 읽지 않고 시작 시 생성된 동일
+Portal, Calendar, Notes는 `shared/apps.json`을 직접 읽지 않고 시작 시 생성된 동일
 `AppRegistry` snapshot을 사용합니다.
 
 ```text
-Portal / App Shell / Calendar
+Portal / App Shell / Calendar / Notes
              |
       shared.app_registry
              |
@@ -40,8 +40,8 @@ route가 바뀌어도 pin은 유지됩니다.
 ## Runtime boundary
 
 Registry는 metadata와 Portal 표시 여부를 관리합니다. ASGI app factory import, mount path,
-lifespan은 runtime composition의 책임입니다. 현재 Calendar mount는 `portal/main.py`에
-명시적으로 남아 있으며 Registry metadata와 자동으로 결합하지 않습니다.
+lifespan은 runtime composition의 책임입니다. 현재 Calendar와 Notes mount는
+`portal/main.py`에 명시적으로 남아 있으며 Registry metadata와 자동으로 결합하지 않습니다.
 
 향후 자동 등록을 도입하려면 manifest source 외에 trusted `RuntimeProvider` 정책을 별도로
 설계하고 승인해야 합니다.
