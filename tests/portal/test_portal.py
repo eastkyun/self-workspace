@@ -52,14 +52,18 @@ def registry(*apps: AppManifest) -> AppRegistry:
     )
 
 
-def test_default_registry_loads_internal_calendar_app() -> None:
+def test_default_registry_loads_calendar_and_notes_apps() -> None:
     app_registry = AppRegistry.load_default()
 
-    assert [app.id for app in app_registry.get_all()] == ["calendar"]
+    assert [app.id for app in app_registry.get_all()] == ["calendar", "notes"]
     assert app_registry.get_app("calendar").route == "/apps/calendar/"
     assert app_registry.get_app("calendar").navigation_visible is True
     assert app_registry.get_app("calendar").launcher_visible is True
-    assert app_registry.get_default_pinned_ids() == ("calendar",)
+    assert app_registry.get_app("notes").route == "/apps/notes/"
+    assert app_registry.get_app("notes").category == "knowledge"
+    assert app_registry.get_default_pinned_ids() == ("calendar", "notes")
+    assert app_registry.resolve_route("/apps/notes/new").id == "notes"
+    assert [app.id for app in app_registry.search("회의록")] == ["notes"]
 
 
 def test_portal_surfaces_use_the_same_registry_snapshot(tmp_path: Path) -> None:
@@ -68,7 +72,11 @@ def test_portal_surfaces_use_the_same_registry_snapshot(tmp_path: Path) -> None:
         manifest("launcher", order=20, navigation_visible=False),
         manifest("disabled", order=30, enabled=False),
     )
-    application = create_app(tmp_path / "calendar.db", app_registry=app_registry)
+    application = create_app(
+        tmp_path / "calendar.db",
+        notes_database_path=tmp_path / "notes.db",
+        app_registry=app_registry,
+    )
 
     with TestClient(application) as client:
         home = client.get("/")
@@ -83,7 +91,12 @@ def test_portal_surfaces_use_the_same_registry_snapshot(tmp_path: Path) -> None:
 
 
 def test_hub_api_uses_canonical_registry_fields(tmp_path: Path) -> None:
-    with TestClient(create_app(tmp_path / "calendar.db")) as client:
+    with TestClient(
+        create_app(
+            tmp_path / "calendar.db",
+            notes_database_path=tmp_path / "notes.db",
+        )
+    ) as client:
         payload = client.get("/api/hub/apps").json()[0]
 
     assert payload["id"] == "calendar"

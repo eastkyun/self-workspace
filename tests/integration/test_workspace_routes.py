@@ -15,8 +15,11 @@ def sha256(path: Path) -> str:
 
 def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) -> None:
     database_path = tmp_path / "calendar.db"
+    notes_database_path = tmp_path / "notes.db"
 
-    with TestClient(create_app(database_path)) as client:
+    with TestClient(
+        create_app(database_path, notes_database_path=notes_database_path)
+    ) as client:
         portal = client.get("/")
         shell_stylesheet = client.get("/static/shared/shell.css")
         shell_script = client.get("/static/shared/shell.js")
@@ -33,6 +36,12 @@ def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) 
         calendar_shell_script = client.get("/apps/calendar/static/shared/shell.js")
         stylesheet = client.get("/apps/calendar/static/styles.css")
         tasks = client.get("/apps/calendar/api/tasks")
+        notes_redirect = client.get("/apps/notes", follow_redirects=False)
+        notes = client.get("/apps/notes/")
+        notes_new = client.get("/apps/notes/new")
+        notes_stylesheet = client.get("/apps/notes/static/notes.css")
+        notes_script = client.get("/apps/notes/static/notes.js")
+        notes_api = client.get("/apps/notes/api/notes")
 
     assert portal.status_code == 200
     assert 'id="sidebar"' in portal.text
@@ -62,18 +71,37 @@ def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) 
     assert stylesheet.status_code == 200
     assert tasks.status_code == 200
     assert tasks.json() == []
+    assert notes_redirect.status_code in {307, 308}
+    assert notes_redirect.headers["location"].endswith("/apps/notes/")
+    assert notes.status_code == 200
+    assert notes_new.status_code == 200
+    assert 'data-current-app="notes"' in notes.text
+    assert notes.text.count('aria-current="page"') == 1
+    assert notes_stylesheet.status_code == 200
+    assert notes_script.status_code == 200
+    assert notes_api.status_code == 200
+    assert notes_api.json() == []
 
     with sqlite3.connect(database_path) as connection:
         assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
 
 
-def test_portal_and_calendar_share_one_registry_snapshot(tmp_path: Path) -> None:
-    application = create_app(tmp_path / "calendar.db")
+def test_portal_calendar_and_notes_share_one_registry_snapshot(
+    tmp_path: Path,
+) -> None:
+    application = create_app(
+        tmp_path / "calendar.db",
+        notes_database_path=tmp_path / "notes.db",
+    )
     calendar_mount = next(
         route for route in application.routes if route.path == "/apps/calendar"
     )
+    notes_mount = next(
+        route for route in application.routes if route.path == "/apps/notes"
+    )
 
     assert calendar_mount.app.state.app_registry is application.state.app_registry
+    assert notes_mount.app.state.app_registry is application.state.app_registry
 
 
 def test_portal_verifies_existing_v2_database_without_mutation(tmp_path: Path) -> None:
@@ -81,7 +109,12 @@ def test_portal_verifies_existing_v2_database_without_mutation(tmp_path: Path) -
     initialize_database(database_path)
     before = sha256(database_path)
 
-    with TestClient(create_app(database_path)) as client:
+    with TestClient(
+        create_app(
+            database_path,
+            notes_database_path=tmp_path / "notes.db",
+        )
+    ) as client:
         assert client.get("/api/hub/apps").status_code == 200
 
     assert sha256(database_path) == before
@@ -92,14 +125,18 @@ def test_portal_uses_calendar_database_environment(
     tmp_path: Path,
 ) -> None:
     database_path = tmp_path / "environment-calendar.db"
+    notes_database_path = tmp_path / "environment-notes.db"
     monkeypatch.setenv("CALENDAR_DB_PATH", str(database_path))
+    monkeypatch.setenv("NOTES_DB_PATH", str(notes_database_path))
 
     application = create_app()
 
     assert application.state.calendar_database_path == database_path
+    assert application.state.notes_database_path == notes_database_path
     with TestClient(application) as client:
         assert client.get("/apps/calendar/api/tasks").json() == []
     assert database_path.is_file()
+    assert notes_database_path.is_file()
 
 
 def test_portal_rejects_legacy_database_without_mutation(tmp_path: Path) -> None:
@@ -110,7 +147,12 @@ def test_portal_rejects_legacy_database_without_mutation(tmp_path: Path) -> None
     before = sha256(database_path)
 
     with pytest.raises(RuntimeError, match="offline migration"):
-        with TestClient(create_app(database_path)):
+        with TestClient(
+            create_app(
+                database_path,
+                notes_database_path=tmp_path / "notes.db",
+            )
+        ):
             pass
 
     assert sha256(database_path) == before
@@ -139,6 +181,9 @@ def test_portal_runtime_assets_do_not_reference_external_hosts() -> None:
         Path("shared/templates/app_shell.html"),
         Path("shared/static/shell.js"),
         Path("shared/static/shell.css"),
+        Path("apps/notes/app/templates/notes.html"),
+        Path("apps/notes/app/static/notes.js"),
+        Path("apps/notes/app/static/notes.css"),
     ]
 
     for path in paths:

@@ -1,0 +1,29 @@
+{% extends "app_shell.html" %}
+
+{% block page_head %}
+    <link rel="stylesheet" href="./static/notes.css">
+{% endblock %}
+
+{% block content %}
+<section
+  id="notes-app"
+  class="notes-app"
+  data-mode="{{ notes_mode }}"
+  aria-labelledby="notes-title"
+>
+  <header class="notes-toolbar">
+    <div>
+      <p class="workspace-eyebrow">KNOWLEDGE</p>
+      <h2 id="notes-title">Notes</h2>
+    </div>
+    <a class="notes-primary-button" href="{{ workspace_path('/apps/notes/new') }}">새 메모</a>
+  </header>
+  <div class="notes-placeholder" role="status">
+    Notes workspace가 준비되었습니다.
+  </div>
+</section>
+{% endblock %}
+
+{% block page_scripts %}
+    <script type="module" src="./static/notes.js"></script>
+{% endblock %}

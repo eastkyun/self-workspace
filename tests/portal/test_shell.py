@@ -33,8 +33,8 @@ def test_shell_context_selects_current_app() -> None:
 
     assert payload["current_app_id"] == "calendar"
     assert payload["current_app_name"] == "Calendar"
-    assert payload["navigation_app_ids"] == ["calendar"]
-    assert payload["launcher_app_ids"] == ["calendar"]
+    assert payload["navigation_app_ids"] == ["calendar", "notes"]
+    assert payload["launcher_app_ids"] == ["calendar", "notes"]
 
 
 def test_workspace_path_uses_external_root_path() -> None:

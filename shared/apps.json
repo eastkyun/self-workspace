@@ -59,6 +59,32 @@
         "tasks",
         "일정"
       ]
+    },
+    {
+      "id": "notes",
+      "name": "notes",
+      "display_name": "Notes",
+      "description": "Write and connect personal notes, meeting minutes, and research notes.",
+      "icon": "/static/icons/notes.svg",
+      "route": "/apps/notes/",
+      "category": "knowledge",
+      "enabled": true,
+      "default_pinned": true,
+      "navigation_visible": true,
+      "launcher_visible": true,
+      "order": 10,
+      "version": "0.1.0",
+      "kind": "internal",
+      "search_keywords": [
+        "memo",
+        "writing",
+        "meeting minutes",
+        "research note",
+        "메모",
+        "노트",
+        "회의록",
+        "연구 노트"
+      ]
     }
   ]
 }

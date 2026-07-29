@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="title">
+  <title id="title">Notes</title>
+  <rect x="8" y="5" width="32" height="38" rx="6" fill="#eef2ff" stroke="#4f46e5" stroke-width="2"/>
+  <path d="M15 16h18M15 23h18M15 30h12" fill="none" stroke="#4f46e5" stroke-width="3" stroke-linecap="round"/>
+</svg>

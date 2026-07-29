@@ -1,0 +1,30 @@
+.notes-app {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: var(--workspace-space-6);
+  color: var(--workspace-text);
+}
+
+.notes-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--workspace-space-4);
+}
+
+.notes-primary-button {
+  border-radius: var(--workspace-radius-md);
+  background: var(--workspace-accent);
+  color: #fff;
+  padding: var(--workspace-space-3) var(--workspace-space-4);
+  text-decoration: none;
+}
+
+.notes-placeholder {
+  margin-top: var(--workspace-space-6);
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--workspace-radius-lg);
+  background: var(--workspace-surface);
+  padding: var(--workspace-space-6);
+}

@@ -12,6 +12,12 @@ from apps.calendar.app.main import (
     resolve_database_path,
     verify_database,
 )
+from apps.notes.app.database import (
+    initialize_database as initialize_notes_database,
+    resolve_database_path as resolve_notes_database_path,
+    verify_database as verify_notes_database,
+)
+from apps.notes.app.main import create_app as create_notes_app
 from shared.app_registry import AppManifest, AppRegistry
 from shared.templating import (
     SHARED_STATIC_DIR,
@@ -28,9 +34,11 @@ templates = create_templates(PORTAL_TEMPLATES_DIR)
 def create_app(
     database_path: str | Path | None = None,
     *,
+    notes_database_path: str | Path | None = None,
     app_registry: AppRegistry | None = None,
 ) -> FastAPI:
     resolved_database_path = resolve_database_path(database_path)
+    resolved_notes_database_path = resolve_notes_database_path(notes_database_path)
     registry = app_registry or AppRegistry.load_default()
 
     @asynccontextmanager
@@ -40,6 +48,11 @@ def create_app(
         else:
             initialize_database(resolved_database_path)
             verify_database(resolved_database_path)
+        if resolved_notes_database_path.exists():
+            verify_notes_database(resolved_notes_database_path)
+        else:
+            initialize_notes_database(resolved_notes_database_path)
+            verify_notes_database(resolved_notes_database_path)
         yield
 
     application = FastAPI(
@@ -48,6 +61,7 @@ def create_app(
         lifespan=lifespan,
     )
     application.state.calendar_database_path = resolved_database_path
+    application.state.notes_database_path = resolved_notes_database_path
     application.state.app_registry = registry
     application.mount(
         "/static/shared",
@@ -79,6 +93,12 @@ def create_app(
         app_registry=registry,
     )
     application.mount("/apps/calendar", calendar_application, name="calendar")
+    notes_application = create_notes_app(
+        resolved_notes_database_path,
+        initialize_on_startup=False,
+        app_registry=registry,
+    )
+    application.mount("/apps/notes", notes_application, name="notes")
     return application
 
 
