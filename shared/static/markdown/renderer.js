@@ -145,12 +145,24 @@ export function createMarkdownRenderer({
 
   function parse(markdown, renderOptions = {}, inline = false) {
     const source = String(markdown ?? "");
-    if (source.length > RENDER_LIMITS.maxSourceLength) {
-      throw new RangeError(
-        `Markdown exceeds ${RENDER_LIMITS.maxSourceLength} characters`,
-      );
-    }
     const options = normalizeRenderOptions(renderOptions);
+    if (source.length > RENDER_LIMITS.maxSourceLength) {
+      const fallback = inline
+        ? escapeHtml(source)
+        : `<pre class="markdown-source-fallback">${escapeHtml(source)}</pre>`;
+      return Object.freeze({
+        html: sanitizer.sanitize(fallback),
+        headings: Object.freeze([]),
+        toc: Object.freeze([]),
+        internalLinks: Object.freeze([]),
+        warnings: Object.freeze([
+          Object.freeze({
+            code: "source-too-large",
+            message: `Markdown exceeds ${RENDER_LIMITS.maxSourceLength} characters and was shown as plain text.`,
+          }),
+        ]),
+      });
+    }
     const state = { headings: [], internalLinks: [] };
     const marked = createMarked(options, state);
     const rawHtml = inline ? marked.parseInline(source) : marked.parse(source);

@@ -82,9 +82,14 @@ test("renderer instances and options do not leak mutable state", () => {
   assert.match(second.render("a\nb"), /a<br>b/);
 });
 
-test("source size limit is enforced before parsing", () => {
-  assert.throws(
-    () => renderer().render("x".repeat(200_001)),
-    RangeError,
-  );
+test("oversized source uses a safe plain-text fallback with a warning", () => {
+  const source = `${"x".repeat(200_001)}<script>window.__xss = true</script>`;
+  const result = renderer().renderWithMetadata(source);
+
+  assert.match(result.html, /^<pre class="markdown-source-fallback">/);
+  assert.match(result.html, /&lt;script&gt;window\.__xss = true&lt;\/script&gt;/);
+  assert.doesNotMatch(result.html, /<script>/);
+  assert.deepEqual(result.headings, []);
+  assert.deepEqual(result.internalLinks, []);
+  assert.equal(result.warnings[0].code, "source-too-large");
 });
