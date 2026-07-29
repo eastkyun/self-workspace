@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from portal.main import create_app
+from portal.quotes import Quote
 from shared.app_registry import (
     AppCategory,
     AppManifest,
@@ -105,3 +106,56 @@ def test_hub_api_uses_canonical_registry_fields(tmp_path: Path) -> None:
     assert payload["default_pinned"] is True
     assert "url" not in payload
     assert "defaultPinned" not in payload
+
+
+def test_hub_renders_injected_quote_with_attribution(tmp_path: Path) -> None:
+    selected = Quote(
+        id="second",
+        text="작은 진전도 진전이다.",
+        author="Workspace",
+        source="작업 원칙",
+    )
+    application = create_app(
+        tmp_path / "calendar.db",
+        notes_database_path=tmp_path / "notes.db",
+        quotes=(
+            Quote("first", "첫 문장", "첫 저자"),
+            selected,
+        ),
+        quote_selector=lambda quotes: quotes[-1],
+    )
+
+    with TestClient(application) as client:
+        response = client.get("/")
+
+    assert response.status_code == 200
+    assert 'data-quote-id="second"' in response.text
+    assert "작은 진전도 진전이다." in response.text
+    assert "<cite>Workspace</cite>" in response.text
+    assert "작업 원칙" in response.text
+
+
+def test_hub_escapes_quote_content_and_falls_back_when_empty(
+    tmp_path: Path,
+) -> None:
+    escaped_application = create_app(
+        tmp_path / "calendar-escaped.db",
+        notes_database_path=tmp_path / "notes-escaped.db",
+        quotes=(Quote("safe", "<script>alert(1)</script>", "<Author>"),),
+    )
+    fallback_application = create_app(
+        tmp_path / "calendar-empty.db",
+        notes_database_path=tmp_path / "notes-empty.db",
+        quotes=(),
+    )
+
+    with TestClient(escaped_application) as client:
+        escaped = client.get("/")
+    with TestClient(fallback_application) as client:
+        fallback = client.get("/")
+
+    assert "<script>alert(1)</script>" not in escaped.text
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in escaped.text
+    assert "&lt;Author&gt;" in escaped.text
+    assert 'class="hub-quote"' not in fallback.text
+    assert "좋은 오후예요" in fallback.text

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from collections.abc import Sequence
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -19,6 +20,12 @@ from apps.notes.app.database import (
     verify_database as verify_notes_database,
 )
 from apps.notes.app.main import create_app as create_notes_app
+from portal.quotes import (
+    DEFAULT_QUOTES,
+    Quote,
+    QuoteSelector,
+    choose_quote,
+)
 from shared.app_registry import AppManifest, AppRegistry
 from shared.templating import (
     SHARED_STATIC_DIR,
@@ -38,10 +45,13 @@ def create_app(
     *,
     notes_database_path: str | Path | None = None,
     app_registry: AppRegistry | None = None,
+    quotes: Sequence[Quote] | None = None,
+    quote_selector: QuoteSelector | None = None,
 ) -> FastAPI:
     resolved_database_path = resolve_database_path(database_path)
     resolved_notes_database_path = resolve_notes_database_path(notes_database_path)
     registry = app_registry or AppRegistry.load_default()
+    quote_corpus = DEFAULT_QUOTES if quotes is None else tuple(quotes)
     source_resolver = SourceReferenceResolver(
         {
             ("calendar", "event"): CalendarEventSourceProvider(
@@ -72,6 +82,7 @@ def create_app(
     application.state.calendar_database_path = resolved_database_path
     application.state.notes_database_path = resolved_notes_database_path
     application.state.app_registry = registry
+    application.state.quote_corpus = quote_corpus
     application.state.source_resolver = source_resolver
     application.mount(
         "/static/shared",
@@ -82,15 +93,20 @@ def create_app(
 
     @application.get("/", include_in_schema=False)
     def index(request: Request):
+        context = shell_context(
+            request,
+            registry,
+            current_app_id="home",
+            page_title="Home",
+        )
+        context["hub_quote"] = choose_quote(
+            quote_corpus,
+            selector=quote_selector,
+        )
         return templates.TemplateResponse(
             request,
             "home.html",
-            shell_context(
-                request,
-                registry,
-                current_app_id="home",
-                page_title="Home",
-            ),
+            context,
         )
 
     @application.get("/api/hub/apps", response_model=list[AppManifest])

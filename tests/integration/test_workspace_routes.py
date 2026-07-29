@@ -47,6 +47,9 @@ def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) 
     assert 'id="sidebar"' in portal.text
     assert 'id="launcher"' in portal.text
     assert 'class="workspace-header"' in portal.text
+    assert 'class="hub-quote"' in portal.text
+    assert 'data-quote-id="' in portal.text
+    assert "<cite>" in portal.text
     assert portal.text.count('aria-current="page"') == 1
     assert ">Home</span>" in portal.text
     assert shell_stylesheet.status_code == 200

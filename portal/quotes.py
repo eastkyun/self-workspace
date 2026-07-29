@@ -25,6 +25,9 @@ class Quote:
     enabled: bool = True
 
 
+type QuoteSelector = Callable[[Sequence[Quote]], Quote]
+
+
 class QuoteCorpusError(ValueError):
     def __init__(self, errors: Sequence[str]) -> None:
         self.errors = tuple(errors)
@@ -172,12 +175,12 @@ def get_enabled_quotes(quotes: Sequence[Quote]) -> tuple[Quote, ...]:
 def choose_quote(
     quotes: Sequence[Quote],
     *,
-    selector: Callable[[Sequence[Quote]], Quote] = secrets.choice,
+    selector: QuoteSelector | None = None,
 ) -> Quote | None:
     enabled_quotes = get_enabled_quotes(quotes)
     if not enabled_quotes:
         return None
-    return selector(enabled_quotes)
+    return (selector or secrets.choice)(enabled_quotes)
 
 
 DEFAULT_QUOTES = load_default_quote_corpus()

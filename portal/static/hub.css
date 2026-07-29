@@ -6,6 +6,39 @@
 
 .hub-welcome { margin-bottom: 46px; }
 .hub-welcome h2 { margin: 0; font-size: clamp(30px, 4vw, 44px); letter-spacing: -.04em; }
+
+.hub-quote {
+  max-width: 960px;
+  margin: 0;
+}
+
+.hub-quote-text {
+  max-width: 24ch;
+  margin: 0;
+  font-size: clamp(28px, 4vw, 44px);
+  font-weight: 760;
+  line-height: 1.24;
+  letter-spacing: -.04em;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.hub-quote-attribution {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  color: var(--workspace-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.hub-quote-attribution cite {
+  color: var(--workspace-text);
+  font-style: normal;
+  font-weight: 700;
+}
 .hub-section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin: 34px 0 18px; }
 .hub-section-heading h2 { margin: 0; font-size: 24px; }
 .hub-section-heading > p { margin: 0; color: var(--workspace-muted); font-size: 14px; }
@@ -64,6 +97,7 @@
 @media (max-width: 760px) {
   .hub-page { padding: 22px 18px 48px; }
   .hub-welcome { margin-bottom: 32px; }
+  .hub-quote-text { max-width: none; font-size: clamp(26px, 8vw, 36px); }
   .hub-section-heading { align-items: flex-end; }
   .hub-section-heading > p { display: none; }
   .hub-card-grid { grid-template-columns: 1fr; }

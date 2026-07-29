@@ -8,7 +8,20 @@
 <div class="hub-page">
   <section class="hub-welcome" aria-labelledby="hub-welcome-title">
     <p class="workspace-eyebrow">APP HUB</p>
-    <h2 id="hub-welcome-title">좋은 오후예요</h2>
+    {% if hub_quote %}
+      <blockquote class="hub-quote" data-quote-id="{{ hub_quote.id }}">
+        <p id="hub-welcome-title" class="hub-quote-text">{{ hub_quote.text }}</p>
+        <footer class="hub-quote-attribution">
+          <cite>{{ hub_quote.author }}</cite>
+          {% if hub_quote.source %}
+            <span aria-hidden="true">·</span>
+            <span>{{ hub_quote.source }}</span>
+          {% endif %}
+        </footer>
+      </blockquote>
+    {% else %}
+      <h2 id="hub-welcome-title">좋은 오후예요</h2>
+    {% endif %}
   </section>
 
   <section aria-labelledby="pinned-title">
