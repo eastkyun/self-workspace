@@ -97,6 +97,15 @@ def assert_same_origin_requests(page: Page, base_url: str) -> list[str]:
 
 def test_desktop_launcher_and_pin_persistence(page: Page, live_server: str) -> None:
     external_requests = assert_same_origin_requests(page, live_server)
+    failed_requests: list[str] = []
+    console_errors: list[str] = []
+    page.on("requestfailed", lambda request: failed_requests.append(request.url))
+    page.on(
+        "console",
+        lambda message: (
+            console_errors.append(message.text) if message.type == "error" else None
+        ),
+    )
     page.set_viewport_size({"width": 1440, "height": 900})
     page.goto(live_server)
 
@@ -113,6 +122,8 @@ def test_desktop_launcher_and_pin_persistence(page: Page, live_server: str) -> N
     page.reload()
     expect(page.locator("#pinned-empty")).to_be_visible()
     assert external_requests == []
+    assert failed_requests == []
+    assert console_errors == []
 
 
 def test_mobile_sidebar_collapses_and_opens(page: Page, live_server: str) -> None:
