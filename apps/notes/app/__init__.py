@@ -1,0 +1,1 @@
+"""Notes FastAPI application package."""

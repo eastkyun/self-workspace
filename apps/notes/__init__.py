@@ -1,0 +1,1 @@
+"""Notes workspace application."""
