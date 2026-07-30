@@ -20,11 +20,21 @@ import {
   mountMarkdownViewer,
   resolveInternalLinks,
 } from "./shared/markdown/index.js";
+import {
+  createPublishingApi,
+  publicationIdFromTarget,
+  publicationTargetValue,
+  suggestPublicationSlug,
+} from "/static/publishing/publish-dialog.js";
 
 const root = document.querySelector("#notes-app");
 
 if (root) {
   const api = createNotesApi(root.dataset.apiBase);
+  const publishingApi = createPublishingApi({
+    publicationsUrl: root.dataset.publicationsEndpoint,
+    typesUrl: root.dataset.publicationTypesEndpoint,
+  });
   const elements = {
     listPane: root.querySelector("#notes-list-pane"),
     list: root.querySelector("#notes-list"),
@@ -35,6 +45,7 @@ if (root) {
     view: root.querySelector("#note-view"),
     viewBackButton: root.querySelector("#view-notes-back"),
     editButton: root.querySelector("#edit-note"),
+    publishButton: root.querySelector("#publish-note"),
     viewTitle: root.querySelector("#note-view-title"),
     viewType: root.querySelector("#note-view-type"),
     viewUpdated: root.querySelector("#note-view-updated"),
@@ -60,6 +71,18 @@ if (root) {
     context: root.querySelector("#note-context"),
     contextTitle: root.querySelector("#note-context-title"),
     links: root.querySelector("#note-links"),
+    publishDialog: document.querySelector("#publish-dialog"),
+    publishDialogClose: document.querySelector("#publish-dialog-close"),
+    publishForm: document.querySelector("#publish-form"),
+    publicationTarget: document.querySelector("#publication-target"),
+    publicationType: document.querySelector("#publication-type"),
+    publicationSlug: document.querySelector("#publication-slug"),
+    publicationSummary: document.querySelector("#publication-summary"),
+    publicationPreviewButton: document.querySelector("#publication-preview-button"),
+    publicationSaveDraft: document.querySelector("#publication-save-draft"),
+    publicationPublish: document.querySelector("#publication-publish"),
+    publicationStatus: document.querySelector("#publication-status"),
+    publicationPreview: document.querySelector("#publication-preview"),
   };
   const markdownRenderer = createMarkdownRenderer();
   const markdownPreview = attachMarkdownPreview(
@@ -90,6 +113,7 @@ if (root) {
   );
   attachSlashPalette(elements.content, markdownEditor, { profile: "full" });
   let noteViewer = null;
+  let publicationPreviewViewer = null;
   let viewerRequest = 0;
   const state = {
     notes: [],
@@ -108,6 +132,10 @@ if (root) {
     mutationRequest: 0,
     historyIndex: Number(window.history.state?.notesIndex ?? 0),
     restoringHistory: false,
+    publicationTypes: [],
+    publications: [],
+    activePublication: null,
+    publishing: false,
   };
   window.history.replaceState(
     { ...window.history.state, notesIndex: state.historyIndex },
@@ -227,6 +255,175 @@ if (root) {
       ariaLabel: `${state.selectedNote.title} 본문`,
     });
     renderLinks();
+  }
+
+  function publicationOption(publication) {
+    const option = document.createElement("option");
+    option.value = publicationTargetValue(publication.id);
+    option.textContent = `${publication.type_id.toUpperCase()} · ${publication.slug} · ${publication.status} v${publication.latest_version}`;
+    return option;
+  }
+
+  function setPublishingBusy(busy, message = "") {
+    state.publishing = busy;
+    elements.publicationTarget.disabled = busy;
+    elements.publicationPreviewButton.disabled = busy;
+    elements.publicationSaveDraft.disabled = busy;
+    elements.publicationPublish.disabled = (
+      busy || !state.activePublication?.draft_version
+    );
+    elements.publicationStatus.textContent = message;
+  }
+
+  function renderPublicationTypes() {
+    elements.publicationType.replaceChildren(
+      ...state.publicationTypes.map((type) => {
+        const option = document.createElement("option");
+        option.value = type.type_id;
+        option.textContent = type.display_name;
+        return option;
+      }),
+    );
+  }
+
+  function renderPublicationTargets(selectedId = null) {
+    const createOption = document.createElement("option");
+    createOption.value = publicationTargetValue(null);
+    createOption.textContent = "새 Publication 만들기";
+    elements.publicationTarget.replaceChildren(
+      createOption,
+      ...state.publications.map(publicationOption),
+    );
+    elements.publicationTarget.value = publicationTargetValue(selectedId);
+  }
+
+  function applyPublicationTarget() {
+    const publicationId = publicationIdFromTarget(elements.publicationTarget.value);
+    state.activePublication = publicationId
+      ? state.publications.find((item) => item.id === publicationId) || null
+      : null;
+    const existing = state.activePublication;
+    elements.publicationType.disabled = Boolean(existing);
+    elements.publicationSlug.disabled = Boolean(existing);
+    if (existing) {
+      elements.publicationType.value = existing.type_id;
+      elements.publicationSlug.value = existing.slug;
+      elements.publicationSummary.value = existing.summary;
+    } else {
+      elements.publicationType.value = state.publicationTypes[0]?.type_id || "";
+      elements.publicationSlug.value = suggestPublicationSlug(
+        state.selectedNote?.title,
+      );
+      elements.publicationSummary.value = "";
+    }
+    elements.publicationPublish.disabled = !existing?.draft_version;
+    elements.publicationPreview.hidden = true;
+    publicationPreviewViewer?.destroy();
+    publicationPreviewViewer = null;
+  }
+
+  async function openPublishDialog() {
+    if (
+      !state.selectedNote
+      || state.creating
+      || state.editing
+      || isDirty()
+    ) {
+      announce("발행하려면 먼저 메모를 저장하고 읽기 화면으로 돌아오세요.");
+      return;
+    }
+    clearError();
+    elements.publishDialog.showModal();
+    setPublishingBusy(true, "발행 정보를 불러오는 중…");
+    try {
+      const [types, publications] = await Promise.all([
+        publishingApi.types(),
+        publishingApi.listForNote(state.selectedNote.id),
+      ]);
+      state.publicationTypes = types;
+      state.publications = publications;
+      renderPublicationTypes();
+      renderPublicationTargets();
+      applyPublicationTarget();
+      setPublishingBusy(false);
+      elements.publicationTarget.focus();
+    } catch (error) {
+      setPublishingBusy(false);
+      showError(error);
+      elements.publishDialog.close();
+    }
+  }
+
+  async function previewPublication() {
+    if (!state.selectedNote || !elements.publishForm.reportValidity()) return;
+    setPublishingBusy(true, "미리보기를 만드는 중…");
+    try {
+      const preview = await publishingApi.preview({
+        note_id: state.selectedNote.id,
+        type_id: elements.publicationType.value,
+        title: state.selectedNote.title,
+        summary: elements.publicationSummary.value,
+      });
+      publicationPreviewViewer?.destroy();
+      publicationPreviewViewer = mountMarkdownViewer(
+        elements.publicationPreview,
+        preview.markdown,
+        {
+          renderer: markdownRenderer,
+          renderOptions: preview.render_options,
+          ariaLabel: `${preview.title} 발행 미리보기`,
+        },
+      );
+      elements.publicationPreview.hidden = false;
+      setPublishingBusy(false, "저장된 메모 기준 미리보기입니다.");
+    } catch (error) {
+      setPublishingBusy(false);
+      showError(error);
+    }
+  }
+
+  async function savePublicationDraft(event) {
+    event.preventDefault();
+    if (!state.selectedNote || !elements.publishForm.reportValidity()) return;
+    setPublishingBusy(true, "Draft 저장 중…");
+    try {
+      const summary = elements.publicationSummary.value;
+      const saved = state.activePublication
+        ? await publishingApi.saveDraft(state.activePublication.id, { summary })
+        : await publishingApi.create({
+          note_id: state.selectedNote.id,
+          type_id: elements.publicationType.value,
+          slug: elements.publicationSlug.value,
+          summary,
+        });
+      const index = state.publications.findIndex((item) => item.id === saved.id);
+      if (index >= 0) state.publications[index] = saved;
+      else state.publications.push(saved);
+      renderPublicationTargets(saved.id);
+      applyPublicationTarget();
+      setPublishingBusy(false, `Draft v${saved.draft_version}을 저장했습니다.`);
+      announce("Publication draft를 저장했습니다.");
+    } catch (error) {
+      setPublishingBusy(false);
+      showError(error);
+    }
+  }
+
+  async function publishPublication() {
+    if (!state.activePublication?.draft_version) {
+      elements.publicationStatus.textContent = "먼저 Draft를 저장하세요.";
+      return;
+    }
+    setPublishingBusy(true, "발행 중…");
+    try {
+      const published = await publishingApi.publish(state.activePublication.id);
+      state.activePublication = published;
+      elements.publishDialog.close();
+      announce(`${published.type_id.toUpperCase()} v${published.published_version}을 발행했습니다.`);
+    } catch (error) {
+      setPublishingBusy(false);
+      showError(error);
+    }
   }
 
   function createLinkCard(link, { editable }) {
@@ -504,6 +701,19 @@ if (root) {
     setDraft(state.selectedNote);
     window.requestAnimationFrame(() => elements.title.focus());
   });
+  elements.publishButton.addEventListener("click", openPublishDialog);
+  elements.publishDialogClose.addEventListener("click", () => {
+    elements.publishDialog.close();
+  });
+  elements.publishDialog.addEventListener("close", () => {
+    publicationPreviewViewer?.destroy();
+    publicationPreviewViewer = null;
+    elements.publishButton.focus();
+  });
+  elements.publicationTarget.addEventListener("change", applyPublicationTarget);
+  elements.publicationPreviewButton.addEventListener("click", previewPublication);
+  elements.publishForm.addEventListener("submit", savePublicationDraft);
+  elements.publicationPublish.addEventListener("click", publishPublication);
   elements.form.addEventListener("input", readDraft);
   elements.form.addEventListener("submit", saveNote);
   elements.delete.addEventListener("click", deleteNote);

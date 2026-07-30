@@ -12,6 +12,8 @@
   data-mode="{{ notes_mode }}"
   data-api-base="./api/notes"
   data-internal-link-endpoint="{{ workspace_path('/api/internal-links/resolve') }}"
+  data-publications-endpoint="{{ workspace_path('/api/publications') }}"
+  data-publication-types-endpoint="{{ workspace_path('/api/publication-types') }}"
   aria-labelledby="notes-title"
 >
   <header class="notes-toolbar">
@@ -55,6 +57,7 @@
         <header class="notes-editor-header">
           <button id="view-notes-back" class="notes-secondary-button notes-back" type="button">목록으로</button>
           <span class="note-view-spacer"></span>
+          <button id="publish-note" class="notes-secondary-button" type="button">발행</button>
           <button id="edit-note" class="notes-primary-button" type="button">편집</button>
         </header>
         <article class="notes-document notes-view-document">
@@ -133,6 +136,44 @@
   <div id="notes-announcer" class="sr-only" aria-live="polite"></div>
   <div id="notes-error" class="notes-error" role="alert" hidden></div>
 </section>
+
+<dialog id="publish-dialog" class="publish-dialog" aria-labelledby="publish-dialog-title">
+  <form id="publish-form" class="publish-dialog-form">
+    <header class="publish-dialog-header">
+      <div>
+        <p class="workspace-eyebrow">PUBLISH</p>
+        <h2 id="publish-dialog-title">메모 발행</h2>
+      </div>
+      <button id="publish-dialog-close" class="notes-secondary-button" type="button" aria-label="발행 대화상자 닫기">×</button>
+    </header>
+    <p>저장된 메모를 immutable Publication version으로 복사합니다.</p>
+    <label class="notes-field">
+      <span>발행 대상</span>
+      <select id="publication-target" name="publication_target"></select>
+    </label>
+    <div class="publish-dialog-fields">
+      <label class="notes-field">
+        <span>유형</span>
+        <select id="publication-type" name="type_id" required></select>
+      </label>
+      <label class="notes-field">
+        <span>Slug</span>
+        <input id="publication-slug" name="slug" maxlength="80" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required autocomplete="off">
+      </label>
+    </div>
+    <label class="notes-field">
+      <span>요약</span>
+      <textarea id="publication-summary" name="summary" maxlength="2000" rows="3"></textarea>
+    </label>
+    <div class="publish-dialog-actions">
+      <button id="publication-preview-button" class="notes-secondary-button" type="button">미리보기</button>
+      <span id="publication-status" class="publish-dialog-status" role="status" aria-live="polite"></span>
+      <button id="publication-save-draft" class="notes-secondary-button" type="submit">Draft 저장</button>
+      <button id="publication-publish" class="notes-primary-button" type="button" disabled>Publish</button>
+    </div>
+    <section id="publication-preview" class="publish-dialog-preview" aria-label="발행 미리보기" hidden></section>
+  </form>
+</dialog>
 {% endblock %}
 
 {% block page_scripts %}
