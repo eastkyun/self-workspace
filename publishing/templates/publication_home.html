@@ -6,27 +6,68 @@
 
 {% block content %}
 <section class="publication-home" aria-labelledby="publication-home-title">
-  <header class="publication-home-header">
-    <p class="workspace-eyebrow">KNOWLEDGE</p>
-    <h2 id="publication-home-title">Publications</h2>
-    <p>Notes에서 발행한 Manual과 Wiki를 읽습니다.</p>
-    <a class="publication-manage-link" href="{{ workspace_path('/publications/types/') }}">유형 관리</a>
+  <header class="publication-home-hero">
+    <div class="publication-home-intro">
+      <p class="workspace-eyebrow">KNOWLEDGE LIBRARY</p>
+      <h2 id="publication-home-title">발행된 지식을 한곳에서 읽으세요</h2>
+      <p>Notes에서 완성한 기록을 독립적인 버전으로 발행하고, Manual·Wiki와 확장 유형별로 관리합니다.</p>
+      <div class="publication-home-actions" aria-label="발행물 작업">
+        <a class="publication-primary-action" href="{{ workspace_path('/apps/notes/') }}">Notes에서 작성</a>
+        <a class="publication-secondary-action" href="{{ workspace_path('/publications/types/') }}">유형 관리</a>
+      </div>
+    </div>
+    <dl class="publication-home-stats" aria-label="발행 현황">
+      <div>
+        <dt>Published</dt>
+        <dd>{{ publication_count }}</dd>
+      </div>
+      <div>
+        <dt>Active types</dt>
+        <dd>{{ publication_type_count }}</dd>
+      </div>
+      <div>
+        <dt>Storage</dt>
+        <dd>Local</dd>
+      </div>
+    </dl>
   </header>
-  <div class="publication-grid">
+
+  <section class="publication-library" aria-labelledby="publication-library-title">
+    <header class="publication-library-header">
+      <div>
+        <p class="workspace-eyebrow">LIBRARY</p>
+        <h3 id="publication-library-title">발행된 문서</h3>
+      </div>
+      {% if publications %}<p>{{ publication_count }}개의 최신 공개 버전</p>{% endif %}
+    </header>
+    <div class="publication-grid">
     {% for publication in publications %}
       <article class="publication-card">
-        <p class="publication-card-type">{{ publication.type_id }}</p>
+        <div class="publication-card-topline">
+          <span class="publication-card-type">
+            <img src="{{ workspace_path(publication.type_icon) }}" alt="">
+            {{ publication.type_display_name }}
+          </span>
+          <span class="publication-card-version">v{{ publication.published_version }}</span>
+        </div>
         <h3>
-          <a href="{{ workspace_path(publication.href) }}">
-            {{ publication.title }}
-          </a>
+          <a class="publication-card-link" href="{{ workspace_path(publication.href) }}">{{ publication.title }}</a>
         </h3>
-        {% if publication.summary %}<p>{{ publication.summary }}</p>{% endif %}
-        <p class="publication-card-meta">v{{ publication.published_version }}</p>
+        <p class="publication-card-summary">{{ publication.summary or "요약 없이 발행된 문서입니다." }}</p>
+        <footer class="publication-card-footer">
+          <span>{{ publication.published_at }}</span>
+          <span aria-hidden="true">읽기 →</span>
+        </footer>
       </article>
     {% else %}
-      <p class="publication-empty">아직 발행된 문서가 없습니다.</p>
+      <div class="publication-empty">
+        <span class="publication-empty-icon" aria-hidden="true">¶</span>
+        <h3>아직 발행된 문서가 없습니다</h3>
+        <p>Notes에서 문서를 작성한 뒤 발행하면 이곳에 안전한 snapshot으로 보관됩니다.</p>
+        <a class="publication-primary-action" href="{{ workspace_path('/apps/notes/') }}">첫 문서 작성하기</a>
+      </div>
     {% endfor %}
-  </div>
+    </div>
+  </section>
 </section>
 {% endblock %}

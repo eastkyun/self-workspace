@@ -11,31 +11,81 @@
   data-api-endpoint="{{ workspace_path('/api/publication-type-manifests') }}"
   aria-labelledby="publication-types-title"
 >
-  <header class="publication-home-header">
-    <p class="workspace-eyebrow">PUBLISHING</p>
+  <header class="publication-types-hero">
+    <a class="publication-back-link" href="{{ workspace_path('/publications/') }}">← Publications</a>
+    <p class="workspace-eyebrow">PUBLISHING SETTINGS</p>
     <h2 id="publication-types-title">Publication Type 관리</h2>
-    <p>기본 Provider는 보호되며, 선언형 유형은 CRUD 후 Workspace 재시작 시 활성화됩니다.</p>
+    <p>문서의 목적에 맞는 발행 유형을 구성합니다. 기본 Provider는 보호되며 사용자 유형은 안전한 선언형 설정으로 관리됩니다.</p>
+    <div class="publication-types-notice" role="note">
+      <span aria-hidden="true">✓</span>
+      <div>
+        <strong>검증을 통과한 변경 사항은 즉시 적용됩니다</strong>
+        <p>저장할 때 전체 provider 구성을 다시 검증한 뒤 Registry snapshot을 한 번에 교체합니다.</p>
+      </div>
+    </div>
   </header>
   <div class="publication-type-layout">
-    <section aria-labelledby="registered-types-title">
-      <h3 id="registered-types-title">등록된 유형</h3>
+    <section class="publication-type-catalog" aria-labelledby="registered-types-title">
+      <header class="publication-type-section-header">
+        <div>
+          <p class="workspace-eyebrow">TYPE CATALOG</p>
+          <h3 id="registered-types-title">등록된 유형</h3>
+        </div>
+        <span id="publication-type-count" class="publication-type-count" aria-live="polite"></span>
+      </header>
       <div id="publication-type-list" class="publication-type-list" aria-live="polite"></div>
     </section>
-    <form id="publication-type-form" class="publication-type-form">
-      <h3 id="publication-type-form-title">새 유형 등록</h3>
-      <label>Type ID <input id="type-id" required pattern="[a-z][a-z0-9-]*" maxlength="40"></label>
-      <label>표시 이름 <input id="type-display-name" required maxlength="80"></label>
-      <label>표시 순서 <input id="type-order" type="number" min="0" max="10000" required></label>
-      <label><input id="type-enabled" type="checkbox" checked> 활성화</label>
-      <label><input id="type-toc" type="checkbox"> 목차 표시</label>
-      <label><input id="type-related" type="checkbox"> 관련 문서 영역</label>
-      <div class="publication-type-actions">
-        <button id="type-reset" type="button">새 유형</button>
-        <button id="type-delete" type="button" class="notes-danger-button" hidden>삭제</button>
-        <button type="submit">저장</button>
-      </div>
-      <p id="publication-type-status" role="status" aria-live="polite"></p>
-    </form>
+    <aside class="publication-type-editor" aria-label="Publication Type 편집">
+      <form id="publication-type-form" class="publication-type-form">
+        <header class="publication-type-form-header">
+          <div>
+            <p class="workspace-eyebrow">TYPE EDITOR</p>
+            <h3 id="publication-type-form-title">새 유형 등록</h3>
+          </div>
+          <button id="type-reset" class="publication-type-ghost-button" type="button">초기화</button>
+        </header>
+
+        <fieldset class="publication-type-fieldset">
+          <legend>기본 정보</legend>
+          <label>
+            <span>Type ID</span>
+            <input id="type-id" required pattern="[a-z][a-z0-9\-]*" maxlength="40" autocomplete="off" aria-describedby="type-id-help">
+            <small id="type-id-help">URL 경로에 사용되는 영문 소문자 ID입니다.</small>
+          </label>
+          <label>
+            <span>표시 이름</span>
+            <input id="type-display-name" required maxlength="80" autocomplete="off">
+          </label>
+          <label>
+            <span>표시 순서</span>
+            <input id="type-order" type="number" min="0" max="10000" required>
+            <small>다른 유형과 겹치지 않는 숫자를 사용하세요.</small>
+          </label>
+        </fieldset>
+
+        <fieldset class="publication-type-fieldset publication-type-options">
+          <legend>표시 옵션</legend>
+          <label class="publication-type-toggle">
+            <span><strong>활성화</strong><small>새 발행 대상으로 노출합니다.</small></span>
+            <input id="type-enabled" type="checkbox" checked>
+          </label>
+          <label class="publication-type-toggle">
+            <span><strong>목차 표시</strong><small>문서 heading으로 목차를 구성합니다.</small></span>
+            <input id="type-toc" type="checkbox">
+          </label>
+          <label class="publication-type-toggle">
+            <span><strong>관련 문서 영역</strong><small>향후 관련 콘텐츠 확장 지점을 엽니다.</small></span>
+            <input id="type-related" type="checkbox">
+          </label>
+        </fieldset>
+
+        <p id="publication-type-status" class="publication-type-form-status" role="status" aria-live="polite"></p>
+        <div class="publication-type-actions">
+          <button id="type-delete" class="publication-type-danger-button" type="button" hidden>유형 삭제</button>
+          <button id="type-submit" class="publication-primary-action" type="submit">유형 저장</button>
+        </div>
+      </form>
+    </aside>
   </div>
 </section>
 {% endblock %}

@@ -13,6 +13,7 @@ from publishing.registry import (
 )
 from publishing.types.manual import ManualPublicationType
 from publishing.types.wiki import WikiPublicationType
+from publishing.type_manifests import DeclarativePublicationType
 
 
 def roots(tmp_path: Path) -> tuple[Path, Path]:
@@ -22,6 +23,7 @@ def roots(tmp_path: Path) -> tuple[Path, Path]:
     templates.mkdir()
     for name in ("manual", "wiki"):
         (static / "icons" / f"{name}.svg").write_text("<svg/>", encoding="utf-8")
+    (static / "icons" / "publication.svg").write_text("<svg/>", encoding="utf-8")
     (templates / "publication_viewer.html").write_text("viewer", encoding="utf-8")
     return static, templates
 
@@ -144,3 +146,41 @@ def test_unknown_stored_types_fail_startup_validation(tmp_path: Path) -> None:
         result.validate_stored_type_ids(["manual", "removed-type"])
 
     assert issue_codes(caught.value) == {"unknown_stored_type"}
+
+
+def test_runtime_replacement_is_atomic_and_preserves_registry_identity(
+    tmp_path: Path,
+) -> None:
+    result = registry(tmp_path)
+    original_snapshot = result.get_all()
+    custom = DeclarativePublicationType(
+        type_id="faq",
+        display_name="FAQ",
+        order=30,
+    )
+
+    result.replace_providers(
+        [ManualPublicationType(), WikiPublicationType(), custom]
+    )
+
+    assert [provider.type_id for provider in result.get_all()] == [
+        "manual",
+        "wiki",
+        "faq",
+    ]
+    assert result.resolve_route("/publications/view/faq/page") is custom
+
+    with pytest.raises(PublicationRegistryValidationError):
+        result.replace_providers(
+            [
+                ManualPublicationType(),
+                replace(WikiPublicationType(), order=10),
+            ]
+        )
+
+    assert result.get_all() != original_snapshot
+    assert [provider.type_id for provider in result.get_all()] == [
+        "manual",
+        "wiki",
+        "faq",
+    ]

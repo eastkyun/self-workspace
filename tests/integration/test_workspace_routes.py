@@ -214,13 +214,24 @@ def test_portal_uses_calendar_database_environment(
 ) -> None:
     database_path = tmp_path / "environment-calendar.db"
     notes_database_path = tmp_path / "environment-notes.db"
+    publishing_database_path = tmp_path / "environment-publishing.db"
+    asset_database_path = tmp_path / "environment-assets.db"
+    publication_types_path = tmp_path / "environment-publication-types.json"
     monkeypatch.setenv("CALENDAR_DB_PATH", str(database_path))
     monkeypatch.setenv("NOTES_DB_PATH", str(notes_database_path))
+    monkeypatch.setenv("PUBLISHING_DB_PATH", str(publishing_database_path))
+    monkeypatch.setenv("ASSET_DB_PATH", str(asset_database_path))
+    monkeypatch.setenv("PUBLICATION_TYPES_PATH", str(publication_types_path))
 
     application = create_app()
 
     assert application.state.calendar_database_path == database_path
     assert application.state.notes_database_path == notes_database_path
+    assert application.state.publishing_database_path == publishing_database_path
+    assert application.state.asset_database_path == asset_database_path
+    assert application.state.publication_type_manifest_store.path == (
+        publication_types_path
+    )
     with TestClient(application) as client:
         assert client.get("/apps/calendar/api/tasks").json() == []
     assert database_path.is_file()

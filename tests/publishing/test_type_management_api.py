@@ -55,12 +55,14 @@ async def test_type_management_crud_protects_builtins_and_requires_restart(
     async with app.router.lifespan_context(app):
         async with await client_for(app) as client:
             page = await client.get("/publications/types/")
+            empty_home = await client.get("/publications/")
             initial = await client.get("/api/publication-type-manifests")
             created = await client.post(
                 "/api/publication-type-manifests",
                 json=faq_payload(),
             )
             listed = await client.get("/api/publication-type-manifests")
+            active_types = await client.get("/api/publication-types")
             duplicate = await client.post(
                 "/api/publication-type-manifests",
                 json=faq_payload(),
@@ -82,29 +84,42 @@ async def test_type_management_crud_protects_builtins_and_requires_restart(
             after_remove = await client.get("/api/publication-type-manifests")
 
     assert page.status_code == 200
+    assert empty_home.status_code == 200
+    assert "아직 발행된 문서가 없습니다" in empty_home.text
+    assert 'href="/apps/notes/"' in empty_home.text
     assert "Publication Type 관리" in page.text
     assert "/static/publishing/publication-types.js" in page.text
     assert [item["type_id"] for item in initial.json()] == ["manual", "wiki"]
     assert all(item["builtin"] for item in initial.json())
     assert created.status_code == 201
-    assert created.json()["restart_required"] is True
+    assert created.json()["restart_required"] is False
     assert [item["type_id"] for item in listed.json()] == [
         "manual",
         "wiki",
         "faq",
     ]
     assert listed.json()[-1]["builtin"] is False
-    assert listed.json()[-1]["restart_required"] is True
+    assert listed.json()[-1]["restart_required"] is False
+    assert [item["type_id"] for item in active_types.json()] == [
+        "manual",
+        "wiki",
+        "faq",
+    ]
     assert duplicate.status_code == 409
     assert order_collision.status_code == 409
     assert protected.status_code == 409
     assert updated.status_code == 200
     assert updated.json()["display_name"] == "Frequently Asked Questions"
-    assert removed.status_code == 204
+    assert removed.status_code == 200
+    assert removed.json() == {
+        "type_id": "faq",
+        "deleted": True,
+        "restart_required": False,
+    }
     assert [item["type_id"] for item in after_remove.json()] == ["manual", "wiki"]
 
 
-async def test_custom_type_activates_on_restart_and_cannot_delete_in_use(
+async def test_custom_type_applies_immediately_persists_and_cannot_delete_in_use(
     tmp_path: Path,
 ) -> None:
     app_paths = paths(tmp_path)
@@ -116,6 +131,10 @@ async def test_custom_type_activates_on_restart_and_cannot_delete_in_use(
                 json=faq_payload(),
             )
             assert response.status_code == 201
+            assert [
+                item["type_id"]
+                for item in (await client.get("/api/publication-types")).json()
+            ] == ["manual", "wiki", "faq"]
 
     restarted = create_app(**app_paths)
     async with restarted.router.lifespan_context(restarted):
@@ -143,7 +162,9 @@ async def test_custom_type_activates_on_restart_and_cannot_delete_in_use(
             published = await client.post(
                 f"/api/publications/{publication.json()['id']}/publish"
             )
-            viewer = await client.get("/faq/immutable-snapshots")
+            viewer = await client.get(
+                "/publications/view/faq/immutable-snapshots"
+            )
             blocked = await client.delete(
                 "/api/publication-type-manifests/faq"
             )

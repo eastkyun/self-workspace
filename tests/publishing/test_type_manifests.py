@@ -35,6 +35,16 @@ def test_missing_manifest_is_an_empty_immutable_snapshot(tmp_path: Path) -> None
     assert store.providers() == ()
 
 
+def test_manifest_path_can_be_isolated_by_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    isolated = tmp_path / "isolated-types.json"
+    monkeypatch.setenv("PUBLICATION_TYPES_PATH", str(isolated))
+
+    assert PublicationTypeManifestStore().path == isolated
+
+
 def test_manifest_crud_is_deterministic_and_atomic(tmp_path: Path) -> None:
     path = tmp_path / "nested" / "types.json"
     store = PublicationTypeManifestStore(path)
@@ -85,6 +95,6 @@ def test_definition_and_provider_enforce_declarative_contract() -> None:
 
     item = definition()
     runtime_provider = DeclarativePublicationType(**item.model_dump())
-    assert runtime_provider.route_prefix == "/faq"
+    assert runtime_provider.route_prefix == "/publications/view/faq"
     assert runtime_provider.render_options().related_enabled is True
     assert runtime_provider.render_options().toc_enabled is False

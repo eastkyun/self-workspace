@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 from publishing.contracts import PublicationType, RenderOptions, SlugPolicy
 
 _TYPE_ID_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
-_ROUTE_PATTERN = re.compile(r"^/[a-z][a-z0-9-]*$")
+_ROUTE_PATTERN = re.compile(r"^/[a-z][a-z0-9-]*(?:/[a-z][a-z0-9-]*)*$")
 _LOCAL_ICON_PREFIX = "/static/icons/"
 _REQUIRED_HOOKS = (
     "render_options",
@@ -218,22 +218,39 @@ class PublicationTypeRegistry:
         if issues:
             raise PublicationRegistryValidationError(issues)
 
-        self._providers = tuple(
+        providers = tuple(
             sorted(provider_snapshot, key=lambda item: (item.order, item.type_id))
         )
-        self._by_id = {provider.type_id: provider for provider in self._providers}
+        self._snapshot = (
+            providers,
+            {provider.type_id: provider for provider in providers},
+        )
+        self._icon_root = icon_root
+        self._template_root = template_root
+
+    def replace_providers(
+        self,
+        providers: tuple[PublicationType, ...] | list[PublicationType],
+    ) -> None:
+        """Validate a complete replacement before atomically publishing it."""
+        replacement = PublicationTypeRegistry(
+            providers,
+            icon_root=self._icon_root,
+            template_root=self._template_root,
+        )
+        self._snapshot = replacement._snapshot
 
     def get_all(self) -> tuple[PublicationType, ...]:
-        return self._providers
+        return self._snapshot[0]
 
     def get_enabled(self) -> tuple[PublicationType, ...]:
-        return tuple(provider for provider in self._providers if provider.enabled)
+        return tuple(provider for provider in self.get_all() if provider.enabled)
 
     def get_creation_types(self) -> tuple[PublicationType, ...]:
         return self.get_enabled()
 
     def get(self, type_id: str) -> PublicationType | None:
-        return self._by_id.get(type_id)
+        return self._snapshot[1].get(type_id)
 
     def require(self, type_id: str) -> PublicationType:
         provider = self.get(type_id)
@@ -242,21 +259,21 @@ class PublicationTypeRegistry:
         return provider
 
     def exists(self, type_id: str) -> bool:
-        return type_id in self._by_id
+        return type_id in self._snapshot[1]
 
     def resolve_route(self, path: str) -> PublicationType | None:
         parsed = urlsplit(path)
         if parsed.scheme or parsed.netloc:
             return None
         candidate = parsed.path
-        for provider in self._providers:
+        for provider in self.get_all():
             prefix = provider.route_prefix
             if candidate == prefix or candidate.startswith(f"{prefix}/"):
                 return provider
         return None
 
     def validate_stored_type_ids(self, type_ids: tuple[str, ...] | list[str]) -> None:
-        unknown = sorted(set(type_ids) - self._by_id.keys())
+        unknown = sorted(set(type_ids) - self._snapshot[1].keys())
         if unknown:
             raise PublicationRegistryValidationError(
                 [

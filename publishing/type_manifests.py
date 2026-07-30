@@ -25,6 +25,11 @@ DEFAULT_TYPE_MANIFEST_PATH = (
     WORKSPACE_ROOT / "instance" / "publishing" / "types.json"
 )
 _TYPE_ID = re.compile(r"^[a-z][a-z0-9-]*$")
+DECLARATIVE_ROUTE_BASE = "/publications/view"
+
+
+def declarative_route_prefix(type_id: str) -> str:
+    return f"{DECLARATIVE_ROUTE_BASE}/{type_id}"
 
 
 class PublicationTypeDefinition(BaseModel):
@@ -69,7 +74,7 @@ class DeclarativePublicationType:
 
     @property
     def route_prefix(self) -> str:
-        return f"/{self.type_id}"
+        return declarative_route_prefix(self.type_id)
 
     def render_options(self) -> RenderOptions:
         return RenderOptions(
@@ -104,7 +109,10 @@ class PublicationTypeManifestStore:
     """Explicit declarative provider config; never scans application folders."""
 
     def __init__(self, path: str | Path | None = None) -> None:
-        self.path = Path(path or DEFAULT_TYPE_MANIFEST_PATH).expanduser().resolve()
+        configured = path or os.getenv("PUBLICATION_TYPES_PATH")
+        self.path = Path(
+            configured or DEFAULT_TYPE_MANIFEST_PATH
+        ).expanduser().resolve()
 
     def get_all(self) -> tuple[PublicationTypeDefinition, ...]:
         if not self.path.is_file():
@@ -190,7 +198,9 @@ class PublicationTypeManifestStore:
 
 __all__ = (
     "DEFAULT_TYPE_MANIFEST_PATH",
+    "DECLARATIVE_ROUTE_BASE",
     "DeclarativePublicationType",
     "PublicationTypeDefinition",
     "PublicationTypeManifestStore",
+    "declarative_route_prefix",
 )

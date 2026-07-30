@@ -34,10 +34,16 @@ def live_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
     port = available_port()
     database_path = tmp_path_factory.mktemp("playwright") / "calendar.db"
     notes_database_path = database_path.parent / "notes.db"
+    publishing_database_path = database_path.parent / "publishing.db"
+    asset_database_path = database_path.parent / "assets.db"
+    publication_types_path = database_path.parent / "publication-types.json"
     environment = {
         **os.environ,
         "CALENDAR_DB_PATH": str(database_path),
         "NOTES_DB_PATH": str(notes_database_path),
+        "PUBLISHING_DB_PATH": str(publishing_database_path),
+        "ASSET_DB_PATH": str(asset_database_path),
+        "PUBLICATION_TYPES_PATH": str(publication_types_path),
         "PYTHONDONTWRITEBYTECODE": "1",
     }
     process = subprocess.Popen(
@@ -80,6 +86,14 @@ def live_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
         ).json()
         if notes != []:
             raise RuntimeError("Playwright test server did not use its empty temporary Notes DB")
+        publications = httpx.get(
+            f"{base_url}/api/publications",
+            timeout=1,
+        ).json()
+        if publications != []:
+            raise RuntimeError(
+                "Playwright test server did not use its empty temporary Publishing DB"
+            )
         yield base_url
     finally:
         process.terminate()
@@ -172,7 +186,12 @@ def test_hub_quote_viewport_layout_and_request_health(
     external_requests = assert_same_origin_requests(page, live_server)
     failed_requests: list[str] = []
     console_errors: list[str] = []
-    page.on("requestfailed", lambda request: failed_requests.append(request.url))
+    page.on(
+        "requestfailed",
+        lambda request: failed_requests.append(
+            f"{request.method} {request.failure} {request.url}"
+        ),
+    )
     page.on(
         "console",
         lambda message: (
@@ -203,7 +222,12 @@ def test_hub_quote_viewport_layout_and_request_health(
 def test_calendar_nested_route_uses_only_local_assets(page: Page, live_server: str) -> None:
     external_requests = assert_same_origin_requests(page, live_server)
     failed_requests: list[str] = []
-    page.on("requestfailed", lambda request: failed_requests.append(request.url))
+    page.on(
+        "requestfailed",
+        lambda request: failed_requests.append(
+            f"{request.method} {request.failure} {request.url}"
+        ),
+    )
 
     page.goto(f"{live_server}/apps/calendar/")
     expect(page.locator("#sidebar")).to_be_attached()
@@ -555,6 +579,262 @@ def test_notes_shared_markdown_editor_preview_and_viewer(
         "<script>window.__markdownXss = true</script>"
     )
     assert page.evaluate("window.__markdownXss") is None
+    assert external_requests == []
+    assert failed_requests == []
+    assert console_errors == []
+
+
+def test_notes_clipboard_image_with_korean_name_round_trips(
+    page: Page,
+    live_server: str,
+) -> None:
+    external_requests = assert_same_origin_requests(page, live_server)
+    failed_requests: list[str] = []
+    console_errors: list[str] = []
+    page.on("requestfailed", lambda request: failed_requests.append(request.url))
+    page.on(
+        "console",
+        lambda message: (
+            console_errors.append(message.text) if message.type == "error" else None
+        ),
+    )
+    page.goto(f"{live_server}/apps/notes/")
+    page.get_by_role("button", name="새 메모", exact=True).click()
+    page.locator("#note-title").fill("클립보드 이미지")
+    content = page.locator("#note-content")
+    content.focus()
+    content.evaluate(
+        """(textarea) => {
+          const encoded = "iVBORw0KGgoAAAANSUhEUgAAAAMAAAACCAIAAAASFvFNAAAAFUlEQVR4nGMU0bBhYGBgYGBgYoABAAiEAHxweBEFAAAAAElFTkSuQmCC";
+          const bytes = Uint8Array.from(atob(encoded), (value) => value.charCodeAt(0));
+          const file = new File([bytes], "복사한 이미지.png", { type: "image/png" });
+          const transfer = new DataTransfer();
+          transfer.items.add(file);
+          const event = new ClipboardEvent("paste", {
+            bubbles: true,
+            cancelable: true,
+          });
+          Object.defineProperty(event, "clipboardData", { value: transfer });
+          textarea.dispatchEvent(event);
+        }"""
+    )
+    expect(content).to_have_value(re.compile(r"!\[복사한 이미지\]\(image://\d+\)"))
+    page.get_by_role("button", name="저장").click()
+    expect(page.locator("#notes-announcer")).to_contain_text("저장")
+    image = page.locator("#note-view-content img")
+    expect(image).to_have_attribute("alt", "복사한 이미지")
+    expect(image).to_have_attribute("src", re.compile(r"/api/assets/\d+/content"))
+    assert external_requests == []
+    assert failed_requests == []
+    assert console_errors == []
+
+
+def test_note_publish_flow_creates_public_manual_snapshot(
+    page: Page,
+    live_server: str,
+) -> None:
+    external_requests = assert_same_origin_requests(page, live_server)
+    failed_requests: list[str] = []
+    console_errors: list[str] = []
+    page.on("requestfailed", lambda request: failed_requests.append(request.url))
+    page.on(
+        "console",
+        lambda message: (
+            console_errors.append(message.text) if message.type == "error" else None
+        ),
+    )
+    note = page.request.post(
+        f"{live_server}/apps/notes/api/notes",
+        data={
+            "title": "Publishing E2E",
+            "content": "## Immutable\n\nPublished snapshot",
+            "note_type": "general",
+        },
+    ).json()
+    page.goto(f"{live_server}/apps/notes/?note_id={note['id']}")
+    page.get_by_role("button", name="발행").click()
+    dialog = page.locator("#publish-dialog")
+    expect(dialog).to_be_visible()
+    dialog.locator("#publication-type").select_option("manual")
+    dialog.locator("#publication-slug").fill("publishing-e2e")
+    dialog.locator("#publication-summary").fill("E2E publication")
+    dialog.get_by_role("button", name="미리보기").click()
+    expect(dialog.locator("#publication-preview h2")).to_have_text("Immutable")
+    dialog.get_by_role("button", name="Draft 저장").click()
+    expect(dialog.locator("#publication-status")).to_contain_text("Draft v1")
+    expect(dialog.get_by_role("button", name="Publish")).to_be_enabled()
+    dialog.get_by_role("button", name="Publish").click()
+    expect(dialog).to_be_hidden()
+
+    page.goto(f"{live_server}/manual/publishing-e2e")
+    expect(page.get_by_role("heading", name="Publishing E2E")).to_be_visible()
+    expect(page.locator("#publication-markdown h2")).to_have_text("Immutable")
+    expect(page.locator("#publication-markdown")).to_contain_text(
+        "Published snapshot"
+    )
+    page.once("dialog", lambda prompt: prompt.accept())
+    page.get_by_role("button", name="발행물 삭제").click()
+    expect(page).to_have_url(re.compile(r"/publications/$"))
+    expect(page.locator(".publication-card").filter(has_text="Publishing E2E")).to_have_count(0)
+    archived = page.request.get(
+        f"{live_server}/api/publications",
+        params={"status": "archived"},
+    ).json()
+    assert [item["slug"] for item in archived] == ["publishing-e2e"]
+    assert page.request.get(
+        f"{live_server}/manual/publishing-e2e"
+    ).status == 404
+    assert external_requests == []
+    assert failed_requests == []
+    assert console_errors == []
+
+
+def test_long_publication_scrolls_inside_workspace_main(
+    page: Page,
+    live_server: str,
+) -> None:
+    markdown = "\n\n".join(
+        f"## Section {index}\n\n"
+        + "Long publication content " * 20
+        for index in range(1, 31)
+    )
+    note = page.request.post(
+        f"{live_server}/apps/notes/api/notes",
+        data={
+            "title": "Long Publication",
+            "content": markdown,
+            "note_type": "general",
+        },
+    ).json()
+    publication = page.request.post(
+        f"{live_server}/api/publications",
+        data={
+            "note_id": note["id"],
+            "type_id": "manual",
+            "slug": "long-publication",
+            "summary": "Scroll ownership regression",
+        },
+    ).json()
+    assert page.request.post(
+        f"{live_server}/api/publications/{publication['id']}/publish"
+    ).ok
+
+    page.set_viewport_size({"width": 375, "height": 667})
+    page.goto(f"{live_server}/manual/long-publication")
+    main = page.locator("#workspace-main")
+    expect(page.get_by_role("heading", name="Long Publication")).to_be_visible()
+    before = main.evaluate(
+        """(element) => ({
+          clientHeight: element.clientHeight,
+          scrollHeight: element.scrollHeight,
+          overflowY: getComputedStyle(element).overflowY,
+          bodyHeight: document.body.scrollHeight,
+          viewportHeight: document.body.clientHeight,
+          canvasBackground: getComputedStyle(element).backgroundColor,
+          readingBackground: getComputedStyle(
+            document.querySelector('.publication-markdown')
+          ).backgroundColor,
+        })"""
+    )
+    assert before["overflowY"] == "auto"
+    assert before["scrollHeight"] > before["clientHeight"] * 2
+    assert before["bodyHeight"] == before["viewportHeight"]
+    assert before["readingBackground"] != before["canvasBackground"]
+
+    main.evaluate("(element) => element.scrollTo({ top: element.scrollHeight })")
+    page.wait_for_timeout(100)
+    assert main.evaluate("(element) => element.scrollTop") > 0
+    expect(page.get_by_role("heading", name="Section 30")).to_be_visible()
+
+
+def test_publication_type_management_ui_crud(
+    page: Page,
+    live_server: str,
+) -> None:
+    external_requests = assert_same_origin_requests(page, live_server)
+    failed_requests: list[str] = []
+    console_errors: list[str] = []
+    page.on(
+        "requestfailed",
+        lambda request: failed_requests.append(
+            f"{request.method} {request.failure} {request.url}"
+        ),
+    )
+    page.on(
+        "console",
+        lambda message: (
+            console_errors.append(message.text) if message.type == "error" else None
+        ),
+    )
+    page.goto(f"{live_server}/publications/types/")
+    expect(page.get_by_role("heading", name="Publication Type 관리")).to_be_visible()
+    expect(page.locator("#publication-type-list")).to_contain_text("Manual")
+    expect(page.locator("#publication-type-list")).to_contain_text("Wiki")
+    page.locator("#type-id").fill("faq")
+    page.locator("#type-display-name").fill("FAQ")
+    page.locator("#type-order").fill("30")
+    page.locator("#type-related").check()
+    page.get_by_role("button", name="저장").click()
+    expect(page.locator("#publication-type-status")).to_contain_text(
+        "즉시 적용"
+    )
+    faq_card = page.locator(".publication-type-card").filter(has_text="FAQ")
+    expect(faq_card).to_contain_text("Enabled")
+    faq_card.get_by_role("button", name="수정").click()
+    page.once("dialog", lambda prompt: prompt.accept())
+    page.get_by_role("button", name="삭제").click()
+    expect(page.locator("#publication-type-status")).to_contain_text("삭제")
+    expect(page.locator(".publication-type-card").filter(has_text="FAQ")).to_have_count(0)
+    assert external_requests == []
+    assert failed_requests == []
+    assert console_errors == []
+
+
+@pytest.mark.parametrize(("width", "height"), VIEWPORTS)
+def test_publication_surfaces_viewport_layout_and_request_health(
+    page: Page,
+    live_server: str,
+    width: int,
+    height: int,
+) -> None:
+    external_requests = assert_same_origin_requests(page, live_server)
+    failed_requests: list[str] = []
+    console_errors: list[str] = []
+    page.on("requestfailed", lambda request: failed_requests.append(request.url))
+    page.on(
+        "console",
+        lambda message: (
+            console_errors.append(message.text) if message.type == "error" else None
+        ),
+    )
+    page.set_viewport_size({"width": width, "height": height})
+    page.goto(f"{live_server}/publications/")
+    expect(
+        page.get_by_role("heading", name="발행된 지식을 한곳에서 읽으세요")
+    ).to_be_visible()
+    home_metrics = page.evaluate(
+        """() => ({
+          innerWidth: window.innerWidth,
+          documentWidth: document.documentElement.scrollWidth,
+          pageWidth: document.querySelector('.publication-home').getBoundingClientRect().width,
+          mainWidth: document.querySelector('#workspace-main').getBoundingClientRect().width,
+        })"""
+    )
+    assert home_metrics["documentWidth"] == home_metrics["innerWidth"]
+    assert 0 < home_metrics["pageWidth"] <= home_metrics["mainWidth"]
+
+    page.goto(f"{live_server}/publications/types/")
+    page.wait_for_timeout(150)
+    metrics = page.evaluate(
+        """() => ({
+          innerWidth: window.innerWidth,
+          documentWidth: document.documentElement.scrollWidth,
+          pageWidth: document.querySelector('.publication-types-page').getBoundingClientRect().width,
+          mainWidth: document.querySelector('#workspace-main').getBoundingClientRect().width,
+        })"""
+    )
+    assert metrics["documentWidth"] == metrics["innerWidth"]
+    assert 0 < metrics["pageWidth"] <= metrics["mainWidth"]
     assert external_requests == []
     assert failed_requests == []
     assert console_errors == []

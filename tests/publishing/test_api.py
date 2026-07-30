@@ -135,6 +135,11 @@ async def test_publication_lifecycle_versions_and_public_visibility(
     assert 'src="/static/shared/shell.js"' in public.text
     assert "/manual/static/" not in public.text
     assert "/static/publishing/publication-viewer.js" in public.text
+    assert 'id="publication-delete"' in public.text
+    assert (
+        f"/api/publications/{publication_id}/archive"
+        in public.text
+    )
     assert Path("publishing/static/publication-viewer.js").is_file()
     assert "install-guide" in (await client.get("/publications/")).text
 
@@ -238,6 +243,7 @@ async def test_public_search_and_home_projection_use_published_snapshot(
 
     search = await client.get("/api/publications/search", params={"q": "Install"})
     home = await client.get("/")
+    library = await client.get("/publications/")
 
     assert search.status_code == 200
     assert [(item["slug"], item["version"]) for item in search.json()] == [
@@ -247,6 +253,11 @@ async def test_public_search_and_home_projection_use_published_snapshot(
     assert "지식 발행물" in home.text
     assert 'href="/manual/install-guide"' in home.text
     assert "Install guide" in home.text
+    assert library.status_code == 200
+    assert "발행된 지식을 한곳에서 읽으세요" in library.text
+    assert 'class="publication-home-stats"' in library.text
+    assert "Manual" in library.text
+    assert "v1" in library.text
 
     links = await client.post(
         "/api/internal-links/resolve",

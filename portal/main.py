@@ -128,8 +128,20 @@ def create_app(
         else (resolved_asset_database_path.parent / "blobs").resolve()
     )
     registry = app_registry or AppRegistry.load_default()
+    resolved_publication_types_path = publication_types_path
+    if (
+        resolved_publication_types_path is None
+        and (
+            database_path is not None
+            or notes_database_path is not None
+            or publishing_database_path is not None
+        )
+    ):
+        resolved_publication_types_path = (
+            resolved_publishing_database_path.parent / "publication-types.json"
+        )
     publication_type_manifest_store = PublicationTypeManifestStore(
-        publication_types_path
+        resolved_publication_types_path
     )
     quote_corpus = DEFAULT_QUOTES if quotes is None else tuple(quotes)
     source_resolver = SourceReferenceResolver(
