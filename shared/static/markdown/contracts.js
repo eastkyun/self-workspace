@@ -1,6 +1,7 @@
 export const RENDER_LIMITS = Object.freeze({
   maxSourceLength: 200_000,
   maxInternalLinks: 50,
+  maxAssetImages: 50,
   minTocLevel: 2,
   maxTocLevel: 4,
 });
@@ -43,4 +44,3 @@ export function assertViewMode(mode, availableModes = VIEW_MODES) {
   }
   return mode;
 }
-

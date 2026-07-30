@@ -24,7 +24,6 @@ class UnsafeStorageKeyError(ValueError):
 class LocalFileStorage:
     def __init__(self, root: str | Path) -> None:
         self.root = Path(root).expanduser().resolve()
-        self.root.mkdir(parents=True, exist_ok=True)
 
     def _path(self, storage_key: str) -> Path:
         if not _STORAGE_KEY.fullmatch(storage_key):

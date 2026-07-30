@@ -14,6 +14,7 @@ const ALLOWED_TAGS = Object.freeze([
   "h5",
   "h6",
   "hr",
+  "img",
   "li",
   "ol",
   "p",
@@ -34,6 +35,10 @@ const ALLOWED_ATTR = Object.freeze([
   "aria-label",
   "class",
   "href",
+  "src",
+  "alt",
+  "loading",
+  "decoding",
   "id",
   "rel",
   "role",
@@ -53,6 +58,13 @@ function isSafeHref(value) {
   return SAFE_URI.test(normalized);
 }
 
+function isSafeImageSource(value) {
+  const normalized = String(value ?? "").trim();
+  return /^\/(?:[a-z0-9._~-]+\/)*api\/assets\/[1-9][0-9]*\/content$/iu.test(
+    normalized,
+  );
+}
+
 export function createMarkdownSanitizer(windowLike = globalThis.window) {
   if (!windowLike?.document) {
     throw new TypeError("a DOM window is required to sanitize Markdown");
@@ -61,6 +73,9 @@ export function createMarkdownSanitizer(windowLike = globalThis.window) {
   const purifier = createDOMPurify(windowLike);
   purifier.addHook("uponSanitizeAttribute", (_node, data) => {
     if (data.attrName === "href" && !isSafeHref(data.attrValue)) {
+      data.keepAttr = false;
+    }
+    if (data.attrName === "src" && !isSafeImageSource(data.attrValue)) {
       data.keepAttr = false;
     }
   });
@@ -78,7 +93,6 @@ export function createMarkdownSanitizer(windowLike = globalThis.window) {
         "embed",
         "form",
         "iframe",
-        "img",
         "input",
         "link",
         "math",

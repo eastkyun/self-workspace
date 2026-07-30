@@ -36,3 +36,11 @@ export {
 export { createMarkdownRenderer } from "./renderer.js";
 export { createMarkdownSanitizer } from "./sanitizer.js";
 export { buildToc } from "./toc.js";
+export {
+  assetImageKey,
+  collectAssetImages,
+  isSafeAssetHref,
+  normalizeAssetResolutionSnapshot,
+  resolveAssetImages,
+} from "./images.js";
+export { attachImagePaste, createAssetApi } from "./image-paste.js";

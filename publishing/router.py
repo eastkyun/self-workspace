@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
@@ -32,6 +34,7 @@ PUBLISHING_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = PUBLISHING_DIR / "templates"
 STATIC_DIR = PUBLISHING_DIR / "static"
 templates = create_templates(TEMPLATES_DIR)
+logger = logging.getLogger(__name__)
 
 
 class CreatePublicationRequest(BaseModel):
@@ -142,8 +145,24 @@ def create_publishing_router(
     app_registry: AppRegistry,
     database_path: Path,
     search_provider: SqliteLikePublicationSearchProvider,
+    publication_version_reconciler: Callable[[int, int], None] | None = None,
 ) -> APIRouter:
     router = APIRouter()
+
+    def reconcile_version(publication: dict[str, Any]) -> None:
+        version = publication.get("draft_version")
+        if publication_version_reconciler is None or version is None:
+            return
+        try:
+            publication_version_reconciler(publication["id"], version)
+        except Exception:
+            logger.exception(
+                "Publication asset reference reconcile failed",
+                extra={
+                    "publication_id": publication["id"],
+                    "version": version,
+                },
+            )
 
     @router.get("/api/publication-types")
     async def list_publication_types() -> list[dict[str, Any]]:
@@ -217,12 +236,14 @@ def create_publishing_router(
     )
     async def create_publication(payload: CreatePublicationRequest) -> dict[str, Any]:
         try:
-            return service.create_draft_from_note(
+            publication = service.create_draft_from_note(
                 note_id=payload.note_id,
                 type_id=payload.type_id,
                 slug=payload.slug,
                 summary=payload.summary,
             )
+            reconcile_version(publication)
+            return publication
         except Exception as error:
             if isinstance(error, (
                 DuplicateSlugError,
@@ -241,10 +262,12 @@ def create_publishing_router(
         payload: SaveDraftRequest | None = None,
     ) -> dict[str, Any]:
         try:
-            return service.save_draft_from_note(
+            publication = service.save_draft_from_note(
                 publication_id,
                 summary=payload.summary if payload else None,
             )
+            reconcile_version(publication)
+            return publication
         except Exception as error:
             if isinstance(error, (
                 InvalidPublicationTransitionError,
@@ -292,7 +315,9 @@ def create_publishing_router(
     @router.post("/api/publications/{publication_id}/restore")
     async def restore(publication_id: int) -> dict[str, Any]:
         try:
-            return service.restore(publication_id)
+            publication = service.restore(publication_id)
+            reconcile_version(publication)
+            return publication
         except (
             PublicationNotFoundError,
             InvalidPublicationTransitionError,
@@ -322,7 +347,9 @@ def create_publishing_router(
     )
     async def restore_version(publication_id: int, version: int) -> dict[str, Any]:
         try:
-            return service.restore_version_as_draft(publication_id, version)
+            publication = service.restore_version_as_draft(publication_id, version)
+            reconcile_version(publication)
+            return publication
         except (
             PublicationNotFoundError,
             PublicationVersionNotFoundError,

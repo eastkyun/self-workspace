@@ -12,6 +12,7 @@ import {
 } from "./internal-links.js";
 import { createMarkdownSanitizer } from "./sanitizer.js";
 import { buildToc } from "./toc.js";
+import { assetImageKey, isSafeAssetHref } from "./images.js";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -104,6 +105,33 @@ function createMarked(options, state) {
         const rel = external ? ' rel="noopener noreferrer"' : "";
         return `<a href="${href}"${title}${target}${rel}>${label}</a>`;
       },
+      image(token) {
+        const match = /^image:\/\/([1-9][0-9]*)$/u.exec(
+          String(token.href ?? ""),
+        );
+        const alt = String(token.text ?? "");
+        if (!match) {
+          return `<span class="markdown-image-broken">${escapeHtml(
+            alt || `![image](${token.href ?? ""})`,
+          )}</span>`;
+        }
+        const assetId = match[1];
+        state.assetImages.push(assetId);
+        const resolved = options.assetImageResolutions?.get?.(
+          assetImageKey(assetId),
+        );
+        if (!resolved?.exists || !isSafeAssetHref(resolved.href, assetId)) {
+          return `<span class="markdown-image-broken" role="img" aria-label="${escapeHtml(
+            alt || `이미지 ${assetId}`,
+          )}">${escapeHtml(alt || `이미지 ${assetId}을 불러올 수 없습니다.`)}</span>`;
+        }
+        const title = token.title
+          ? ` title="${escapeHtml(token.title)}"`
+          : "";
+        return `<img class="markdown-image" src="${escapeHtml(
+          resolved.href,
+        )}" alt="${escapeHtml(alt)}"${title} loading="lazy" decoding="async">`;
+      },
     },
     extensions: [
       {
@@ -174,6 +202,7 @@ export function createMarkdownRenderer({
         headings: Object.freeze([]),
         toc: Object.freeze([]),
         internalLinks: Object.freeze([]),
+        assetImages: Object.freeze([]),
         warnings: Object.freeze([
           Object.freeze({
             code: "source-too-large",
@@ -182,7 +211,7 @@ export function createMarkdownRenderer({
         ]),
       });
     }
-    const state = { headings: [], internalLinks: [] };
+    const state = { headings: [], internalLinks: [], assetImages: [] };
     const marked = createMarked(options, state);
     const rawHtml = inline ? marked.parseInline(source) : marked.parse(source);
     const fragment = sanitizer.sanitizeToFragment(rawHtml);
@@ -197,6 +226,7 @@ export function createMarkdownRenderer({
         maxLevel: options.maxTocLevel,
       })),
       internalLinks: Object.freeze([...state.internalLinks]),
+      assetImages: Object.freeze([...new Set(state.assetImages)]),
       warnings: Object.freeze([]),
     });
   }

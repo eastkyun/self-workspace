@@ -148,6 +148,23 @@
   min-width: 0;
 }
 
+.markdown-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1rem auto;
+  border-radius: var(--workspace-radius-md, .75rem);
+}
+
+.markdown-image-broken {
+  display: inline-block;
+  max-width: 100%;
+  padding: .5rem .75rem;
+  border: 1px dashed currentcolor;
+  border-radius: .5rem;
+  overflow-wrap: anywhere;
+}
+
 .markdown-viewer pre {
   max-width: 100%;
   overflow-x: auto;

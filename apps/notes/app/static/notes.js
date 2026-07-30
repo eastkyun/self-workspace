@@ -14,11 +14,15 @@ import {
   attachMarkdownEditor,
   attachMarkdownPreview,
   attachSlashPalette,
+  attachImagePaste,
   collectInternalLinks,
+  collectAssetImages,
+  createAssetApi,
   createMarkdownRenderer,
   createMarkdownToolbar,
   mountMarkdownViewer,
   resolveInternalLinks,
+  resolveAssetImages,
 } from "./shared/markdown/index.js";
 import {
   createPublishingApi,
@@ -35,6 +39,12 @@ if (root) {
     publicationsUrl: root.dataset.publicationsEndpoint,
     typesUrl: root.dataset.publicationTypesEndpoint,
   });
+  const assetApi = createAssetApi({
+    uploadUrl: root.dataset.assetsUploadEndpoint,
+    reconcileUrl: root.dataset.assetsReconcileEndpoint,
+  });
+  const uploadSessionId = globalThis.crypto?.randomUUID?.()
+    || `notes-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const elements = {
     listPane: root.querySelector("#notes-list-pane"),
     list: root.querySelector("#notes-list"),
@@ -97,9 +107,31 @@ if (root) {
       },
     },
   );
+  async function refreshMarkdownPreviewImages() {
+    const assetIds = collectAssetImages(elements.content.value);
+    const assetImageResolutions = assetIds.length
+      ? await resolveAssetImages(assetIds, {
+        endpoint: root.dataset.assetsResolveEndpoint,
+      })
+      : new Map();
+    markdownPreview.setRenderOptions({
+      showToc: true,
+      emptyMessage: "미리볼 내용이 없습니다.",
+      assetImageResolutions,
+    });
+  }
   const markdownEditor = attachMarkdownEditor(elements.content, {
     profile: "full",
-    onPreviewToggle: () => markdownPreview.toggle(),
+    onPreviewToggle: () => {
+      refreshMarkdownPreviewImages()
+        .catch(showError)
+        .finally(() => markdownPreview.toggle());
+    },
+  });
+  attachImagePaste(elements.content, {
+    upload: (file) => assetApi.uploadImage(file, uploadSessionId),
+    onStatus: announce,
+    onError: showError,
   });
   const markdownToolbar = createMarkdownToolbar({
     document,
@@ -233,12 +265,23 @@ if (root) {
     elements.viewUpdated.dateTime = state.selectedNote.updated_at;
     const source = state.selectedNote.content;
     const references = collectInternalLinks(source);
+    const assetIds = collectAssetImages(source);
     let internalLinkResolutions = new Map();
-    if (references.length) {
+    let assetImageResolutions = new Map();
+    if (references.length || assetIds.length) {
       try {
-        internalLinkResolutions = await resolveInternalLinks(references, {
-          endpoint: root.dataset.internalLinkEndpoint,
-        });
+        [internalLinkResolutions, assetImageResolutions] = await Promise.all([
+          references.length
+            ? resolveInternalLinks(references, {
+              endpoint: root.dataset.internalLinkEndpoint,
+            })
+            : new Map(),
+          assetIds.length
+            ? resolveAssetImages(assetIds, {
+              endpoint: root.dataset.assetsResolveEndpoint,
+            })
+            : new Map(),
+        ]);
       } catch (error) {
         if (request === viewerRequest) showError(error);
       }
@@ -250,6 +293,7 @@ if (root) {
       renderOptions: {
         showToc: true,
         internalLinkResolutions,
+        assetImageResolutions,
         emptyMessage: "내용이 없습니다.",
       },
       ariaLabel: `${state.selectedNote.title} 본문`,
@@ -364,13 +408,22 @@ if (root) {
         title: state.selectedNote.title,
         summary: elements.publicationSummary.value,
       });
+      const previewAssetIds = collectAssetImages(preview.markdown);
+      const assetImageResolutions = previewAssetIds.length
+        ? await resolveAssetImages(previewAssetIds, {
+          endpoint: root.dataset.assetsResolveEndpoint,
+        })
+        : new Map();
       publicationPreviewViewer?.destroy();
       publicationPreviewViewer = mountMarkdownViewer(
         elements.publicationPreview,
         preview.markdown,
         {
           renderer: markdownRenderer,
-          renderOptions: preview.render_options,
+          renderOptions: {
+            ...preview.render_options,
+            assetImageResolutions,
+          },
           ariaLabel: `${preview.title} 발행 미리보기`,
         },
       );
@@ -622,6 +675,17 @@ if (root) {
       const note = state.creating
         ? await api.create(payload)
         : await api.update(state.selectedNote.id, payload);
+      try {
+        await assetApi.reconcile({
+          owner_type: "note",
+          owner_id: String(note.id),
+          field: "content",
+        });
+      } catch (assetError) {
+        showError(new Error(
+          `메모는 저장했지만 이미지 참조를 정리하지 못했습니다: ${assetError.message}`,
+        ));
+      }
       if (request !== state.mutationRequest) return;
       state.selectedNote = note;
       state.creating = false;

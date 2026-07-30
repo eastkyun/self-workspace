@@ -7,6 +7,15 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
+from assets.database import (
+    initialize_database as initialize_asset_database,
+    resolve_database_path as resolve_asset_database_path,
+    verify_database as verify_asset_database,
+)
+from assets.router import create_asset_router
+from assets.service import AssetService
+from assets.sources import WorkspaceMarkdownSourceReader
+from assets.storage import LocalFileStorage
 from apps.calendar.app.main import (
     create_app as create_calendar_app,
     initialize_database,
@@ -69,6 +78,8 @@ def create_app(
     *,
     notes_database_path: str | Path | None = None,
     publishing_database_path: str | Path | None = None,
+    asset_database_path: str | Path | None = None,
+    asset_blob_root: str | Path | None = None,
     app_registry: AppRegistry | None = None,
     quotes: Sequence[Quote] | None = None,
     quote_selector: QuoteSelector | None = None,
@@ -89,6 +100,29 @@ def create_app(
         ).resolve()
     else:
         resolved_publishing_database_path = resolve_publishing_database_path()
+    if asset_database_path is not None:
+        resolved_asset_database_path = resolve_asset_database_path(
+            asset_database_path
+        )
+    elif notes_database_path is not None:
+        resolved_asset_database_path = (
+            resolved_notes_database_path.parent / "assets.db"
+        ).resolve()
+    elif publishing_database_path is not None:
+        resolved_asset_database_path = (
+            resolved_publishing_database_path.parent / "assets.db"
+        ).resolve()
+    elif database_path is not None:
+        resolved_asset_database_path = (
+            resolved_database_path.parent / "assets.db"
+        ).resolve()
+    else:
+        resolved_asset_database_path = resolve_asset_database_path()
+    resolved_asset_blob_root = (
+        Path(asset_blob_root).expanduser().resolve()
+        if asset_blob_root is not None
+        else (resolved_asset_database_path.parent / "blobs").resolve()
+    )
     registry = app_registry or AppRegistry.load_default()
     quote_corpus = DEFAULT_QUOTES if quotes is None else tuple(quotes)
     source_resolver = SourceReferenceResolver(
@@ -119,6 +153,35 @@ def create_app(
     publication_search_provider = SqliteLikePublicationSearchProvider(
         resolved_publishing_database_path
     )
+    asset_markdown_source_reader = WorkspaceMarkdownSourceReader(
+        notes_service=notes_application.state.notes_service,
+        publishing_database_path=resolved_publishing_database_path,
+    )
+    asset_storage = LocalFileStorage(resolved_asset_blob_root)
+    asset_service = AssetService(
+        resolved_asset_database_path,
+        storage=asset_storage,
+        markdown_source_reader=asset_markdown_source_reader,
+    )
+
+    def reconcile_publication_version(
+        publication_id: int,
+        version: int,
+    ) -> None:
+        with publishing_database_connection(
+            resolved_publishing_database_path
+        ) as connection:
+            row = connection.execute(
+                "SELECT id FROM publication_versions "
+                "WHERE publication_id = ? AND version = ?",
+                (publication_id, version),
+            ).fetchone()
+        if row is not None:
+            asset_service.reconcile(
+                owner_type="publication_version",
+                owner_id=str(row["id"]),
+                field="markdown",
+            )
     internal_link_resolver = InternalLinkResolverRegistry(
         {
             "note": NotesInternalLinkProvider(resolved_notes_database_path),
@@ -149,6 +212,11 @@ def create_app(
         else:
             initialize_publishing_database(resolved_publishing_database_path)
             verify_publishing_database(resolved_publishing_database_path)
+        if resolved_asset_database_path.exists():
+            verify_asset_database(resolved_asset_database_path)
+        else:
+            initialize_asset_database(resolved_asset_database_path)
+            verify_asset_database(resolved_asset_database_path)
         with publishing_database_connection(
             resolved_publishing_database_path
         ) as connection:
@@ -170,6 +238,8 @@ def create_app(
     application.state.notes_database_path = resolved_notes_database_path
     application.state.notes_service = notes_application.state.notes_service
     application.state.publishing_database_path = resolved_publishing_database_path
+    application.state.asset_database_path = resolved_asset_database_path
+    application.state.asset_blob_root = resolved_asset_blob_root
     application.state.app_registry = registry
     application.state.quote_corpus = quote_corpus
     application.state.source_resolver = source_resolver
@@ -177,6 +247,9 @@ def create_app(
     application.state.publication_type_registry = publication_type_registry
     application.state.publishing_service = publishing_service
     application.state.publication_search_provider = publication_search_provider
+    application.state.asset_markdown_source_reader = asset_markdown_source_reader
+    application.state.asset_storage = asset_storage
+    application.state.asset_service = asset_service
     application.mount(
         "/static/shared",
         StaticFiles(directory=SHARED_STATIC_DIR),
@@ -196,6 +269,13 @@ def create_app(
             app_registry=registry,
             database_path=resolved_publishing_database_path,
             search_provider=publication_search_provider,
+            publication_version_reconciler=reconcile_publication_version,
+        )
+    )
+    application.include_router(
+        create_asset_router(
+            service=asset_service,
+            storage=asset_storage,
         )
     )
 
