@@ -275,13 +275,14 @@ def create_default_registry(
     *,
     icon_root: Path,
     template_root: Path,
+    additional_providers: tuple[PublicationType, ...] = (),
 ) -> PublicationTypeRegistry:
     """Compose built-ins explicitly; no discovery or import registration occurs."""
 
     from publishing.types import default_publication_types
 
     return PublicationTypeRegistry(
-        default_publication_types(),
+        (*default_publication_types(), *additional_providers),
         icon_root=icon_root,
         template_root=template_root,
     )

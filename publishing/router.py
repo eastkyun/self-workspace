@@ -27,6 +27,11 @@ from publishing.service import (
 )
 from publishing.search import SqliteLikePublicationSearchProvider
 from publishing.source_notes import NoteSnapshotReader
+from publishing.type_manifests import (
+    DeclarativePublicationType,
+    PublicationTypeDefinition,
+    PublicationTypeManifestStore,
+)
 from shared.app_registry import AppRegistry
 from shared.templating import create_templates, shell_context
 
@@ -89,6 +94,43 @@ def _render_options(provider: Any) -> dict[str, Any]:
     }
 
 
+def _manifest_payload(
+    definition: PublicationTypeDefinition,
+    *,
+    restart_required: bool,
+) -> dict[str, Any]:
+    return {
+        **definition.model_dump(),
+        "icon": "/static/icons/publication.svg",
+        "route_prefix": f"/{definition.type_id}",
+        "render_options": {
+            "toc_enabled": definition.toc_enabled,
+            "toc_levels": [2, 3, 4],
+            "related_enabled": definition.related_enabled,
+            "version_visible": definition.version_visible,
+            "backlink_enabled": False,
+        },
+        "builtin": False,
+        "restart_required": restart_required,
+    }
+
+
+def _provider_matches_definition(
+    provider: Any,
+    definition: PublicationTypeDefinition,
+) -> bool:
+    options = provider.render_options()
+    return (
+        provider.type_id == definition.type_id
+        and provider.display_name == definition.display_name
+        and provider.order == definition.order
+        and provider.enabled is definition.enabled
+        and options.toc_enabled is definition.toc_enabled
+        and options.related_enabled is definition.related_enabled
+        and options.version_visible is definition.version_visible
+    )
+
+
 def _management_publication(
     database_path: Path, publication_id: int
 ) -> dict[str, Any]:
@@ -146,6 +188,7 @@ def create_publishing_router(
     database_path: Path,
     search_provider: SqliteLikePublicationSearchProvider,
     publication_version_reconciler: Callable[[int, int], None] | None = None,
+    type_manifest_store: PublicationTypeManifestStore,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -170,6 +213,118 @@ def create_publishing_router(
             _publication_type_payload(provider)
             for provider in registry.get_creation_types()
         ]
+
+    @router.get("/api/publication-type-manifests")
+    async def list_type_manifests() -> list[dict[str, Any]]:
+        stored_custom = {
+            definition.type_id: definition
+            for definition in type_manifest_store.get_all()
+        }
+        active_custom_ids = {
+            provider.type_id
+            for provider in registry.get_all()
+            if provider.type_id in stored_custom
+        }
+        builtin = [
+            {
+                **_publication_type_payload(provider),
+                "builtin": True,
+                "restart_required": False,
+            }
+            for provider in registry.get_all()
+            if not isinstance(provider, DeclarativePublicationType)
+        ]
+        custom = [
+            _manifest_payload(
+                definition,
+                restart_required=definition.type_id not in active_custom_ids
+                or not _provider_matches_definition(
+                    registry.require(definition.type_id),
+                    definition,
+                ),
+            )
+            for definition in stored_custom.values()
+        ]
+        return sorted(
+            [*builtin, *custom],
+            key=lambda item: (item["order"], item["type_id"]),
+        )
+
+    def validate_manifest_candidate(
+        definition: PublicationTypeDefinition,
+        *,
+        replacing: bool,
+    ) -> None:
+        existing_custom = {
+            item.type_id: item for item in type_manifest_store.get_all()
+        }
+        active = registry.get(definition.type_id)
+        if active is not None and definition.type_id not in existing_custom:
+            raise HTTPException(status_code=409, detail="Built-in type is protected")
+        if replacing and definition.type_id not in existing_custom:
+            raise HTTPException(status_code=404, detail="Custom type not found")
+        if not replacing and (
+            definition.type_id in existing_custom or active is not None
+        ):
+            raise HTTPException(status_code=409, detail="Type ID already exists")
+        occupied_orders = {
+            provider.order: provider.type_id
+            for provider in registry.get_all()
+            if provider.type_id not in existing_custom
+        }
+        occupied_orders.update(
+            {
+                item.order: item.type_id
+                for item in existing_custom.values()
+                if item.type_id != definition.type_id
+            }
+        )
+        if definition.order in occupied_orders:
+            raise HTTPException(status_code=409, detail="Type order already exists")
+
+    @router.post(
+        "/api/publication-type-manifests",
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def create_type_manifest(
+        payload: PublicationTypeDefinition,
+    ) -> dict[str, Any]:
+        validate_manifest_candidate(payload, replacing=False)
+        type_manifest_store.save(payload, replace=False)
+        return _manifest_payload(payload, restart_required=True)
+
+    @router.put("/api/publication-type-manifests/{type_id}")
+    async def update_type_manifest(
+        type_id: str,
+        payload: PublicationTypeDefinition,
+    ) -> dict[str, Any]:
+        if payload.type_id != type_id:
+            raise HTTPException(status_code=422, detail="type_id cannot be changed")
+        validate_manifest_candidate(payload, replacing=True)
+        type_manifest_store.save(payload, replace=True)
+        return _manifest_payload(payload, restart_required=True)
+
+    @router.delete(
+        "/api/publication-type-manifests/{type_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
+    async def delete_type_manifest(type_id: str):
+        if type_manifest_store.get(type_id) is None:
+            if registry.exists(type_id):
+                raise HTTPException(status_code=409, detail="Built-in type is protected")
+            raise HTTPException(status_code=404, detail="Custom type not found")
+        with database_connection(database_path) as connection:
+            count = connection.execute(
+                "SELECT COUNT(*) FROM publications WHERE type_id = ?",
+                (type_id,),
+            ).fetchone()[0]
+        if count:
+            raise HTTPException(
+                status_code=409,
+                detail="A type with publications cannot be deleted; disable it instead",
+            )
+        type_manifest_store.delete(type_id)
+        return None
 
     @router.post("/api/publications/preview-from-note")
     async def preview_from_note(payload: PreviewFromNoteRequest) -> dict[str, Any]:
@@ -390,6 +545,21 @@ def create_publishing_router(
             context,
         )
 
+    @router.get("/publications/types/", include_in_schema=False)
+    async def publication_type_management(request: Request):
+        context = shell_context(
+            request,
+            app_registry,
+            current_app_id="publishing",
+            page_title="Publication Types",
+        )
+        context["current_app_name"] = "Publication Types"
+        return templates.TemplateResponse(
+            request,
+            "publication_types.html",
+            context,
+        )
+
     def render_publication(request: Request, *, type_id: str, slug: str):
         provider = registry.get(type_id)
         if provider is None:
@@ -442,6 +612,24 @@ def create_publishing_router(
     @router.get("/wiki/{slug}", include_in_schema=False)
     async def wiki_view(request: Request, slug: str):
         return render_publication(request, type_id="wiki", slug=slug)
+
+    def create_custom_view(type_id: str):
+        async def custom_view(request: Request, slug: str):
+            return render_publication(request, type_id=type_id, slug=slug)
+
+        return custom_view
+
+    for custom_provider in registry.get_all():
+        if custom_provider.type_id in {"manual", "wiki"}:
+            continue
+
+        router.add_api_route(
+            f"{custom_provider.route_prefix}/{{slug}}",
+            create_custom_view(custom_provider.type_id),
+            methods=["GET"],
+            include_in_schema=False,
+            name=f"publication-{custom_provider.type_id}",
+        )
 
     return router
 

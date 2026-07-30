@@ -1,0 +1,45 @@
+{% extends "app_shell.html" %}
+
+{% block page_head %}
+  <link rel="stylesheet" href="{{ workspace_path('/static/publishing/publishing.css') }}">
+{% endblock %}
+
+{% block content %}
+<section
+  id="publication-types-app"
+  class="publication-types-page"
+  data-api-endpoint="{{ workspace_path('/api/publication-type-manifests') }}"
+  aria-labelledby="publication-types-title"
+>
+  <header class="publication-home-header">
+    <p class="workspace-eyebrow">PUBLISHING</p>
+    <h2 id="publication-types-title">Publication Type 관리</h2>
+    <p>기본 Provider는 보호되며, 선언형 유형은 CRUD 후 Workspace 재시작 시 활성화됩니다.</p>
+  </header>
+  <div class="publication-type-layout">
+    <section aria-labelledby="registered-types-title">
+      <h3 id="registered-types-title">등록된 유형</h3>
+      <div id="publication-type-list" class="publication-type-list" aria-live="polite"></div>
+    </section>
+    <form id="publication-type-form" class="publication-type-form">
+      <h3 id="publication-type-form-title">새 유형 등록</h3>
+      <label>Type ID <input id="type-id" required pattern="[a-z][a-z0-9-]*" maxlength="40"></label>
+      <label>표시 이름 <input id="type-display-name" required maxlength="80"></label>
+      <label>표시 순서 <input id="type-order" type="number" min="0" max="10000" required></label>
+      <label><input id="type-enabled" type="checkbox" checked> 활성화</label>
+      <label><input id="type-toc" type="checkbox"> 목차 표시</label>
+      <label><input id="type-related" type="checkbox"> 관련 문서 영역</label>
+      <div class="publication-type-actions">
+        <button id="type-reset" type="button">새 유형</button>
+        <button id="type-delete" type="button" class="notes-danger-button" hidden>삭제</button>
+        <button type="submit">저장</button>
+      </div>
+      <p id="publication-type-status" role="status" aria-live="polite"></p>
+    </form>
+  </div>
+</section>
+{% endblock %}
+
+{% block page_scripts %}
+  <script type="module" src="{{ workspace_path('/static/publishing/publication-types.js') }}"></script>
+{% endblock %}

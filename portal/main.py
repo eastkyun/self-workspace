@@ -54,6 +54,9 @@ from publishing.router import create_publishing_router
 from publishing.service import PublishingService
 from publishing.search import SqliteLikePublicationSearchProvider
 from publishing.source_notes import NotesServiceSnapshotReader
+from publishing.type_manifests import (
+    PublicationTypeManifestStore,
+)
 from shared.app_registry import AppManifest, AppRegistry
 from shared.templating import (
     SHARED_STATIC_DIR,
@@ -80,6 +83,7 @@ def create_app(
     publishing_database_path: str | Path | None = None,
     asset_database_path: str | Path | None = None,
     asset_blob_root: str | Path | None = None,
+    publication_types_path: str | Path | None = None,
     app_registry: AppRegistry | None = None,
     quotes: Sequence[Quote] | None = None,
     quote_selector: QuoteSelector | None = None,
@@ -124,6 +128,9 @@ def create_app(
         else (resolved_asset_database_path.parent / "blobs").resolve()
     )
     registry = app_registry or AppRegistry.load_default()
+    publication_type_manifest_store = PublicationTypeManifestStore(
+        publication_types_path
+    )
     quote_corpus = DEFAULT_QUOTES if quotes is None else tuple(quotes)
     source_resolver = SourceReferenceResolver(
         {
@@ -141,6 +148,7 @@ def create_app(
     publication_type_registry = create_default_registry(
         icon_root=STATIC_DIR,
         template_root=PUBLISHING_TEMPLATES_DIR,
+        additional_providers=publication_type_manifest_store.providers(),
     )
     publication_note_reader = NotesServiceSnapshotReader(
         notes_application.state.notes_service
@@ -245,6 +253,9 @@ def create_app(
     application.state.source_resolver = source_resolver
     application.state.internal_link_resolver = internal_link_resolver
     application.state.publication_type_registry = publication_type_registry
+    application.state.publication_type_manifest_store = (
+        publication_type_manifest_store
+    )
     application.state.publishing_service = publishing_service
     application.state.publication_search_provider = publication_search_provider
     application.state.asset_markdown_source_reader = asset_markdown_source_reader
@@ -270,6 +281,7 @@ def create_app(
             database_path=resolved_publishing_database_path,
             search_provider=publication_search_provider,
             publication_version_reconciler=reconcile_publication_version,
+            type_manifest_store=publication_type_manifest_store,
         )
     )
     application.include_router(
