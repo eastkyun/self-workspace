@@ -78,7 +78,7 @@ export function createAssetApi({
         method: "POST",
         headers: {
           "Content-Type": file.type || "application/octet-stream",
-          "X-File-Name": file.name || "pasted-image",
+          "X-File-Name": encodeURIComponent(file.name || "pasted-image"),
         },
         body: file,
       }));

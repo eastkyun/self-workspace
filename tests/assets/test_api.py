@@ -57,7 +57,10 @@ async def upload(
     return await client.post(
         "/api/assets/images",
         params={"upload_session_id": session},
-        headers={"Content-Type": "image/png", "X-File-Name": "pasted.png"},
+        headers={
+            "Content-Type": "image/png",
+            "X-File-Name": "%ED%95%9C%EA%B8%80-%ED%99%94%EB%A9%B4.png",
+        },
         content=content or png_bytes(),
     )
 
@@ -85,6 +88,9 @@ async def test_upload_resolve_and_serve_normalized_image(client: AsyncClient) ->
     assert uploaded["exists"] is True
     assert uploaded["media_type"] == "image/png"
     assert uploaded["href"] == f"/api/assets/{uploaded['id']}/content"
+    assert client.workspace_app.state.asset_service.get_asset(
+        uploaded["id"]
+    )["original_name"] == "한글-화면.png"
 
     resolved = await client.post(
         "/api/assets/resolve",

@@ -51,12 +51,16 @@ test("asset API sends raw image and owner-only reconcile payload", async () => {
       };
     },
   });
-  const file = { name: "x.png", type: "image/png" };
+  const file = { name: "한글 화면.png", type: "image/png" };
   await api.uploadImage(file, "session-1");
   await api.reconcile({ owner_type: "note", owner_id: "7", field: "content" });
 
   assert.equal(calls[0].url, "/api/assets/images?upload_session_id=session-1");
   assert.equal(calls[0].options.body, file);
+  assert.equal(
+    calls[0].options.headers["X-File-Name"],
+    "%ED%95%9C%EA%B8%80%20%ED%99%94%EB%A9%B4.png",
+  );
   assert.deepEqual(JSON.parse(calls[1].options.body), {
     owner_type: "note",
     owner_id: "7",

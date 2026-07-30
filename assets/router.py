@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Annotated, Any
+from urllib.parse import unquote
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request, status
 from fastapi.responses import Response
@@ -91,12 +92,13 @@ def create_asset_router(
                 )
         content = bytes(content_buffer)
         try:
+            decoded_file_name = unquote(x_file_name, errors="strict")
             asset = service.upload_image(
                 content,
-                original_name=x_file_name,
+                original_name=decoded_file_name,
                 upload_session_id=upload_session_id,
             )
-        except ValueError as error:
+        except (UnicodeError, ValueError) as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
         except InvalidImageError as error:
             raise HTTPException(
