@@ -21,3 +21,5 @@ instance/**/*.db
 instance/**/*.db-*
 instance/**/*.bak
 instance/backups/
+instance/assets/blobs/
+instance/publishing/types.json
