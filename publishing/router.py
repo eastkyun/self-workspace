@@ -200,6 +200,10 @@ def create_publishing_router(
 
     @router.get("/api/publication-types")
     async def list_publication_types() -> list[dict[str, Any]]:
+        # The manifest may be changed by another local Workspace process (for
+        # example, a maintenance/import command). Keep the long-lived server
+        # snapshot aligned before exposing type-dependent read surfaces.
+        refresh_type_registry()
         return [
             _publication_type_payload(provider)
             for provider in registry.get_creation_types()
@@ -503,6 +507,7 @@ def create_publishing_router(
 
     @router.get("/publications/", include_in_schema=False)
     async def publication_home(request: Request):
+        refresh_type_registry()
         with database_connection(database_path) as connection:
             publications = repository.list_publications(
                 connection, status="published"
@@ -557,7 +562,10 @@ def create_publishing_router(
     def render_publication(request: Request, *, type_id: str, slug: str):
         provider = registry.get(type_id)
         if provider is None:
-            raise HTTPException(status_code=404, detail="Publication not found")
+            refresh_type_registry()
+            provider = registry.get(type_id)
+            if provider is None:
+                raise HTTPException(status_code=404, detail="Publication not found")
         try:
             content = service.get_public_content(type_id=type_id, slug=slug)
         except PublicationNotFoundError as error:

@@ -7,6 +7,7 @@ from httpx import ASGITransport, AsyncClient
 
 from apps.notes.app.schemas import NoteCreate
 from portal.main import create_app
+from publishing.types import default_publication_types
 
 pytestmark = pytest.mark.anyio
 
@@ -182,3 +183,51 @@ async def test_custom_type_applies_immediately_persists_and_cannot_delete_in_use
     assert "Why immutable snapshots?" in viewer.text
     assert blocked.status_code == 409
     assert "disable it instead" in blocked.text
+
+
+async def test_publication_reads_refresh_a_stale_registry_snapshot(
+    tmp_path: Path,
+) -> None:
+    application = create_app(**paths(tmp_path))
+    async with application.router.lifespan_context(application):
+        async with await client_for(application) as client:
+            created = await client.post(
+                "/api/publication-type-manifests",
+                json=faq_payload(),
+            )
+            assert created.status_code == 201
+            note = application.state.notes_service.create_note(
+                NoteCreate(
+                    title="Out-of-process manifest update",
+                    content="The publication remains readable.",
+                    note_type="general",
+                    is_pinned=False,
+                )
+            )
+            publication = await client.post(
+                "/api/publications",
+                json={
+                    "note_id": note["id"],
+                    "type_id": "faq",
+                    "slug": "manifest-refresh",
+                    "summary": "Registry refresh regression",
+                },
+            )
+            await client.post(
+                f"/api/publications/{publication.json()['id']}/publish"
+            )
+
+            application.state.publication_type_registry.replace_providers(
+                default_publication_types()
+            )
+            assert not application.state.publication_type_registry.exists("faq")
+
+            home = await client.get("/publications/")
+            viewer = await client.get(
+                "/publications/view/faq/manifest-refresh"
+            )
+
+    assert home.status_code == 200
+    assert "Out-of-process manifest update" in home.text
+    assert viewer.status_code == 200
+    assert application.state.publication_type_registry.exists("faq")
