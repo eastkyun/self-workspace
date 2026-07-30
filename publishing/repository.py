@@ -17,6 +17,19 @@ def get_publication(
     return row_to_dict(row) if row else None
 
 
+def get_publication_by_slug(
+    connection: sqlite3.Connection,
+    *,
+    type_id: str,
+    slug: str,
+) -> dict[str, Any] | None:
+    row = connection.execute(
+        "SELECT * FROM publications WHERE type_id = ? AND slug = ?",
+        (type_id, slug),
+    ).fetchone()
+    return row_to_dict(row) if row else None
+
+
 def list_publications(
     connection: sqlite3.Connection,
     *,
@@ -117,6 +130,28 @@ def list_publication_versions(
         (publication_id,),
     ).fetchall()
     return [row_to_dict(row) for row in rows]
+
+
+def get_projection_version(
+    connection: sqlite3.Connection,
+    publication: dict[str, Any],
+) -> dict[str, Any] | None:
+    version = (
+        publication["draft_version"]
+        or publication["published_version"]
+        or publication["latest_version"]
+    )
+    return get_publication_version(connection, publication["id"], version)
+
+
+def get_public_version(
+    connection: sqlite3.Connection,
+    publication: dict[str, Any],
+) -> dict[str, Any] | None:
+    version = publication["published_version"]
+    if publication["status"] != "published" or version is None:
+        return None
+    return get_publication_version(connection, publication["id"], version)
 
 
 def create_publication_version(
