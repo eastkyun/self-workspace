@@ -23,6 +23,7 @@ from publishing.service import (
     PublishingService,
     SourceNoteNotFoundError,
 )
+from publishing.search import SqliteLikePublicationSearchProvider
 from publishing.source_notes import NoteSnapshotReader
 from shared.app_registry import AppRegistry
 from shared.templating import create_templates, shell_context
@@ -140,6 +141,7 @@ def create_publishing_router(
     note_reader: NoteSnapshotReader,
     app_registry: AppRegistry,
     database_path: Path,
+    search_provider: SqliteLikePublicationSearchProvider,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -183,6 +185,24 @@ def create_publishing_router(
                 type_id=type_id,
                 status=publication_status,
             )
+
+    @router.get("/api/publications/search")
+    async def search_publications(
+        q: str = "",
+        type_id: str | None = Query(default=None, alias="type"),
+        limit: int = Query(default=20, ge=1, le=100),
+        offset: int = Query(default=0, ge=0),
+    ):
+        try:
+            return search_provider.search(
+                q,
+                type_id=type_id,
+                status_scope="public",
+                limit=limit,
+                offset=offset,
+            )
+        except (TypeError, ValueError) as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
 
     @router.get("/api/publications/{publication_id}")
     async def get_publication(publication_id: int) -> dict[str, Any]:

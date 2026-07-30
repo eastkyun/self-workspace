@@ -227,3 +227,23 @@ async def test_api_errors_do_not_expose_database_constraints(client: AsyncClient
     )).status_code == 409
     assert (await client.get("/api/publications/not-an-int")).status_code == 422
     assert (await client.get("/api/publications/999")).status_code == 404
+
+
+async def test_public_search_and_home_projection_use_published_snapshot(
+    client: AsyncClient,
+) -> None:
+    note = await create_note(client)
+    publication = await create_publication(client, note["id"])
+    await client.post(f"/api/publications/{publication['id']}/publish")
+
+    search = await client.get("/api/publications/search", params={"q": "Install"})
+    home = await client.get("/")
+
+    assert search.status_code == 200
+    assert [(item["slug"], item["version"]) for item in search.json()] == [
+        ("install-guide", 1)
+    ]
+    assert home.status_code == 200
+    assert "지식 발행물" in home.text
+    assert 'href="/manual/install-guide"' in home.text
+    assert "Install guide" in home.text

@@ -35,10 +35,12 @@ from publishing.database import (
     verify_database as verify_publishing_database,
 )
 from publishing.registry import create_default_registry
+from publishing.projection import build_portal_projection
 from publishing.router import STATIC_DIR as PUBLISHING_STATIC_DIR
 from publishing.router import TEMPLATES_DIR as PUBLISHING_TEMPLATES_DIR
 from publishing.router import create_publishing_router
 from publishing.service import PublishingService
+from publishing.search import SqliteLikePublicationSearchProvider
 from publishing.source_notes import NotesServiceSnapshotReader
 from shared.app_registry import AppManifest, AppRegistry
 from shared.templating import (
@@ -111,6 +113,9 @@ def create_app(
         registry=publication_type_registry,
         note_reader=publication_note_reader,
     )
+    publication_search_provider = SqliteLikePublicationSearchProvider(
+        resolved_publishing_database_path
+    )
     internal_link_resolver = InternalLinkResolverRegistry(
         {
             "note": NotesInternalLinkProvider(resolved_notes_database_path),
@@ -163,6 +168,7 @@ def create_app(
     application.state.internal_link_resolver = internal_link_resolver
     application.state.publication_type_registry = publication_type_registry
     application.state.publishing_service = publishing_service
+    application.state.publication_search_provider = publication_search_provider
     application.mount(
         "/static/shared",
         StaticFiles(directory=SHARED_STATIC_DIR),
@@ -181,11 +187,12 @@ def create_app(
             note_reader=publication_note_reader,
             app_registry=registry,
             database_path=resolved_publishing_database_path,
+            search_provider=publication_search_provider,
         )
     )
 
     @application.get("/", include_in_schema=False)
-    def index(request: Request):
+    async def index(request: Request):
         context = shell_context(
             request,
             registry,
@@ -195,6 +202,10 @@ def create_app(
         context["hub_quote"] = choose_quote(
             quote_corpus,
             selector=quote_selector,
+        )
+        context["publication_projection"] = build_portal_projection(
+            resolved_publishing_database_path,
+            publication_type_registry,
         )
         return templates.TemplateResponse(
             request,
