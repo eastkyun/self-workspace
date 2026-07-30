@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
     <title>{{ page_title }} · My Workspace</title>
-    <link rel="stylesheet" href="./static/shared/shell.css">
+    <link rel="stylesheet" href="{{ workspace_path('/static/shared/shell.css') }}">
     {% block page_head %}{% endblock %}
   </head>
   <body class="workspace-body" data-current-app="{{ current_app_id }}">
@@ -154,7 +154,7 @@
       </div>
     </dialog>
 
-    <script type="module" src="./static/shared/shell.js"></script>
+    <script type="module" src="{{ workspace_path('/static/shared/shell.js') }}"></script>
     {% block page_scripts %}{% endblock %}
   </body>
 </html>

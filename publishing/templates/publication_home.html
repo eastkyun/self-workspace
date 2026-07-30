@@ -1,0 +1,31 @@
+{% extends "app_shell.html" %}
+
+{% block page_head %}
+  <link rel="stylesheet" href="{{ workspace_path('/static/publishing/publishing.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="publication-home" aria-labelledby="publication-home-title">
+  <header class="publication-home-header">
+    <p class="workspace-eyebrow">KNOWLEDGE</p>
+    <h2 id="publication-home-title">Publications</h2>
+    <p>Notes에서 발행한 Manual과 Wiki를 읽습니다.</p>
+  </header>
+  <div class="publication-grid">
+    {% for publication in publications %}
+      <article class="publication-card">
+        <p class="publication-card-type">{{ publication.type_id }}</p>
+        <h3>
+          <a href="{{ workspace_path(publication.href) }}">
+            {{ publication.title }}
+          </a>
+        </h3>
+        {% if publication.summary %}<p>{{ publication.summary }}</p>{% endif %}
+        <p class="publication-card-meta">v{{ publication.published_version }}</p>
+      </article>
+    {% else %}
+      <p class="publication-empty">아직 발행된 문서가 없습니다.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

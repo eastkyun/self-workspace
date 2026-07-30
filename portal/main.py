@@ -28,6 +28,18 @@ from portal.quotes import (
     QuoteSelector,
     choose_quote,
 )
+from publishing.database import (
+    database_connection as publishing_database_connection,
+    initialize_database as initialize_publishing_database,
+    resolve_database_path as resolve_publishing_database_path,
+    verify_database as verify_publishing_database,
+)
+from publishing.registry import create_default_registry
+from publishing.router import STATIC_DIR as PUBLISHING_STATIC_DIR
+from publishing.router import TEMPLATES_DIR as PUBLISHING_TEMPLATES_DIR
+from publishing.router import create_publishing_router
+from publishing.service import PublishingService
+from publishing.source_notes import NotesServiceSnapshotReader
 from shared.app_registry import AppManifest, AppRegistry
 from shared.templating import (
     SHARED_STATIC_DIR,
@@ -51,12 +63,27 @@ def create_app(
     database_path: str | Path | None = None,
     *,
     notes_database_path: str | Path | None = None,
+    publishing_database_path: str | Path | None = None,
     app_registry: AppRegistry | None = None,
     quotes: Sequence[Quote] | None = None,
     quote_selector: QuoteSelector | None = None,
 ) -> FastAPI:
     resolved_database_path = resolve_database_path(database_path)
     resolved_notes_database_path = resolve_notes_database_path(notes_database_path)
+    if publishing_database_path is not None:
+        resolved_publishing_database_path = resolve_publishing_database_path(
+            publishing_database_path
+        )
+    elif notes_database_path is not None:
+        resolved_publishing_database_path = (
+            resolved_notes_database_path.parent / "publishing.db"
+        ).resolve()
+    elif database_path is not None:
+        resolved_publishing_database_path = (
+            resolved_database_path.parent / "publishing.db"
+        ).resolve()
+    else:
+        resolved_publishing_database_path = resolve_publishing_database_path()
     registry = app_registry or AppRegistry.load_default()
     quote_corpus = DEFAULT_QUOTES if quotes is None else tuple(quotes)
     source_resolver = SourceReferenceResolver(
@@ -65,6 +92,24 @@ def create_app(
                 resolved_database_path
             )
         }
+    )
+    notes_application = create_notes_app(
+        resolved_notes_database_path,
+        initialize_on_startup=False,
+        app_registry=registry,
+        source_resolver=source_resolver,
+    )
+    publication_type_registry = create_default_registry(
+        icon_root=STATIC_DIR,
+        template_root=PUBLISHING_TEMPLATES_DIR,
+    )
+    publication_note_reader = NotesServiceSnapshotReader(
+        notes_application.state.notes_service
+    )
+    publishing_service = PublishingService(
+        resolved_publishing_database_path,
+        registry=publication_type_registry,
+        note_reader=publication_note_reader,
     )
     internal_link_resolver = InternalLinkResolverRegistry(
         {
@@ -86,6 +131,21 @@ def create_app(
         else:
             initialize_notes_database(resolved_notes_database_path)
             verify_notes_database(resolved_notes_database_path)
+        if resolved_publishing_database_path.exists():
+            verify_publishing_database(resolved_publishing_database_path)
+        else:
+            initialize_publishing_database(resolved_publishing_database_path)
+            verify_publishing_database(resolved_publishing_database_path)
+        with publishing_database_connection(
+            resolved_publishing_database_path
+        ) as connection:
+            stored_type_ids = tuple(
+                row["type_id"]
+                for row in connection.execute(
+                    "SELECT DISTINCT type_id FROM publications ORDER BY type_id"
+                )
+            )
+        publication_type_registry.validate_stored_type_ids(stored_type_ids)
         yield
 
     application = FastAPI(
@@ -95,16 +155,34 @@ def create_app(
     )
     application.state.calendar_database_path = resolved_database_path
     application.state.notes_database_path = resolved_notes_database_path
+    application.state.notes_service = notes_application.state.notes_service
+    application.state.publishing_database_path = resolved_publishing_database_path
     application.state.app_registry = registry
     application.state.quote_corpus = quote_corpus
     application.state.source_resolver = source_resolver
     application.state.internal_link_resolver = internal_link_resolver
+    application.state.publication_type_registry = publication_type_registry
+    application.state.publishing_service = publishing_service
     application.mount(
         "/static/shared",
         StaticFiles(directory=SHARED_STATIC_DIR),
         name="shared-static",
     )
+    application.mount(
+        "/static/publishing",
+        StaticFiles(directory=PUBLISHING_STATIC_DIR),
+        name="publishing-static",
+    )
     application.mount("/static", StaticFiles(directory=STATIC_DIR), name="portal-static")
+    application.include_router(
+        create_publishing_router(
+            service=publishing_service,
+            registry=publication_type_registry,
+            note_reader=publication_note_reader,
+            app_registry=registry,
+            database_path=resolved_publishing_database_path,
+        )
+    )
 
     @application.get("/", include_in_schema=False)
     def index(request: Request):
@@ -143,12 +221,6 @@ def create_app(
         app_registry=registry,
     )
     application.mount("/apps/calendar", calendar_application, name="calendar")
-    notes_application = create_notes_app(
-        resolved_notes_database_path,
-        initialize_on_startup=False,
-        app_registry=registry,
-        source_resolver=source_resolver,
-    )
     application.mount("/apps/notes", notes_application, name="notes")
     return application
 

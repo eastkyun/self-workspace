@@ -1,0 +1,38 @@
+{% extends "app_shell.html" %}
+
+{% block page_head %}
+  <link rel="stylesheet" href="{{ workspace_path('/static/shared/markdown/markdown.css') }}">
+  <link rel="stylesheet" href="{{ workspace_path('/static/publishing/publishing.css') }}">
+{% endblock %}
+
+{% block content %}
+<article class="publication-page" data-publication-type="{{ publication.type_id }}">
+  <header class="publication-header">
+    <a class="publication-back-link" href="{{ workspace_path('/publications/') }}">← Publications</a>
+    <p class="workspace-eyebrow">{{ publication_type.display_name }}</p>
+    <h2>{{ publication_version.title }}</h2>
+    {% if publication_version.summary %}
+      <p class="publication-summary">{{ publication_version.summary }}</p>
+    {% endif %}
+    <dl class="publication-meta">
+      <div>
+        <dt>Version</dt>
+        <dd>v{{ publication_version.version }}</dd>
+      </div>
+      <div>
+        <dt>Published</dt>
+        <dd>{{ publication.published_at }}</dd>
+      </div>
+    </dl>
+  </header>
+  <div id="publication-markdown" class="publication-markdown"></div>
+</article>
+<script id="publication-source" type="application/json">{{ {
+  "markdown": publication_version.markdown,
+  "renderOptions": render_options
+} | tojson }}</script>
+{% endblock %}
+
+{% block page_scripts %}
+  <script type="module" src="{{ workspace_path('/static/publishing/publication-viewer.js') }}"></script>
+{% endblock %}
