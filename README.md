@@ -1,7 +1,8 @@
 # My Workspace
 
 여러 내부 앱과 외부 바로가기를 한 곳에서 여는 로컬 FastAPI App Hub입니다.
-기존 `todo-app`의 이력을 보존해 편입한 Calendar와 독립적인 Notes 문서 앱을 제공합니다.
+기존 `todo-app`의 이력을 보존해 편입한 Calendar, 독립적인 Notes 문서 앱,
+그리고 immutable snapshot 기반 Publishing Platform을 제공합니다.
 
 ## 구조
 
@@ -10,6 +11,8 @@ apps/calendar/   Calendar FastAPI sub-application, template, 로컬 vendor 자�
 apps/notes/      Notes CRUD, 검색, 논리적 source link, 전용 정적 자산
 portal/          App Hub composition root, Home template와 전용 자산
 shared/          App Shell, Registry, Markdown Core와 cross-app 공통 계약
+publishing/      Publication lifecycle, type registry, viewers와 search
+assets/          Workspace 공용 이미지 metadata, storage와 reference reconcile
 instance/        Git에서 제외되는 실행 데이터
 tests/           Calendar 원본 회귀와 Portal 통합 테스트
 docs/            편입·DB·registry 운영 문서
@@ -31,10 +34,16 @@ python -m uvicorn portal.main:app --reload
 - Notes: <http://127.0.0.1:8000/apps/notes/>
 - Calendar API: `/apps/calendar/api/tasks`, `/apps/calendar/api/topics`
 - Notes API: `/apps/notes/api/notes`
+- Publications: <http://127.0.0.1:8000/publications/>
+- Publication Type 관리: <http://127.0.0.1:8000/publications/types/>
 - Calendar OpenAPI: `/apps/calendar/docs`
 
 Calendar DB 기본 경로는 workspace 기준 `instance/calendar/tasks.db`입니다.
 Notes DB 기본 경로는 `instance/notes/notes.db`이며 Calendar DB와 물리적으로 분리됩니다.
+Publishing DB는 `instance/publishing/publishing.db`, Asset DB는
+`instance/assets/assets.db`에 별도로 생성됩니다.
+Publication Type 관리 화면의 선언형 유형은 전체 provider 검증 후 즉시
+Registry snapshot에 반영되며 Workspace 재시작이 필요하지 않습니다.
 
 ## App Registry
 
@@ -103,5 +112,8 @@ shell을 상속합니다. 두 앱은 FastAPI sub-application으로 명시적으�
 - [Notes architecture](docs/notes-architecture.md)
 - [Cross-app linking](docs/cross-app-linking.md)
 - [Shared Markdown Core](docs/shared-markdown-core.md)
+- [Publishing architecture](docs/publishing-architecture.md)
+- [Publication Type 확장](docs/publication-type-extension.md)
+- [Workspace 이미지와 Publishing](docs/publishing-images.md)
 - [내부 앱 추가](docs/adding-an-internal-app.md)
 - Calendar의 기존 기능·API·vendor 정보: [apps/calendar/README.md](apps/calendar/README.md)
