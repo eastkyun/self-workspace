@@ -1,27 +1,28 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Protocol
 from urllib.parse import unquote, urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from shared.app_registry import AppRegistry
-
 MAX_INTERNAL_LINKS = 50
+_CANONICAL_TARGET_PATTERN = r"(?:[1-9][0-9]*|[a-z0-9]+(?:-[a-z0-9]+)*)"
 
 
 class InternalLinkReference(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     type: str = Field(pattern=r"^[a-z][a-z0-9-]*$")
-    target: str = Field(min_length=1, max_length=120)
+    target: str = Field(
+        min_length=1,
+        max_length=120,
+        pattern=rf"^{_CANONICAL_TARGET_PATTERN}$",
+    )
 
     @field_validator("target")
     @classmethod
     def validate_target(cls, target: str) -> str:
-        if not target.isdecimal() or int(target) <= 0:
-            raise ValueError("internal link target must be a positive decimal")
         return target
 
 
@@ -59,37 +60,56 @@ class InternalLinkProvider(Protocol):
         """Resolve targets without writing to application storage."""
 
 
-def _safe_workspace_href(href: str, app_registry: AppRegistry) -> bool:
+class InternalRouteRegistry(Protocol):
+    def resolve_route(self, path: str) -> object | None:
+        """Return route metadata when the local path belongs to this registry."""
+
+
+def _safe_workspace_href(
+    href: str,
+    route_registries: Sequence[InternalRouteRegistry],
+) -> bool:
     parsed = urlsplit(href)
     if (
-        parsed.scheme
+        not href.startswith("/")
+        or any(ord(character) < 32 or ord(character) == 127 for character in href)
+        or parsed.scheme
         or parsed.netloc
         or parsed.fragment
-        or not parsed.path.startswith("/apps/")
+        or not parsed.path.startswith("/")
         or "\\" in href
         or "//" in parsed.path
     ):
         return False
     decoded_path = unquote(parsed.path)
-    if unquote(decoded_path) != decoded_path:
+    if decoded_path != parsed.path or unquote(decoded_path) != decoded_path:
         return False
     if any(segment in {".", ".."} for segment in decoded_path.split("/")):
         return False
-    app = app_registry.resolve_route(decoded_path)
-    return bool(app and app.kind == "internal" and decoded_path.startswith(app.route))
+    for registry in route_registries:
+        route = registry.resolve_route(decoded_path)
+        if route is None:
+            continue
+        # AppRegistry external entries are never valid internal-link targets.
+        if getattr(route, "kind", "internal") != "internal":
+            continue
+        return True
+    return False
 
 
 class InternalLinkResolverRegistry:
     def __init__(
         self,
         providers: Mapping[str, InternalLinkProvider],
-        app_registry: AppRegistry,
+        app_registry: InternalRouteRegistry,
+        *,
+        additional_route_registries: Sequence[InternalRouteRegistry] = (),
     ) -> None:
         normalized = dict(providers)
         if any(type_id != provider.type_id for type_id, provider in normalized.items()):
             raise ValueError("internal link provider key must match type_id")
         self._providers = normalized
-        self._app_registry = app_registry
+        self._route_registries = (app_registry, *tuple(additional_route_registries))
 
     def resolve_batch(
         self,
@@ -120,7 +140,7 @@ class InternalLinkResolverRegistry:
                 if (
                     target in targets
                     and link.target == target
-                    and _safe_workspace_href(link.href, self._app_registry)
+                    and _safe_workspace_href(link.href, self._route_registries)
                 ):
                     provider_results[(type_id, target)] = link
 
@@ -152,4 +172,3 @@ class InternalLinkResolverRegistry:
                 )
             )
         return tuple(results)
-

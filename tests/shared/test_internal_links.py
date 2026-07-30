@@ -79,11 +79,68 @@ def test_registry_rejects_provider_routes_outside_workspace() -> None:
     assert all(result.exists is False and result.href is None for result in results)
 
 
-def test_reference_requires_positive_decimal_target() -> None:
-    for target in ("0", "-1", "../1", "abc"):
+def test_reference_accepts_positive_decimal_or_canonical_slug_target() -> None:
+    assert InternalLinkReference(type="note", target="13").target == "13"
+    assert (
+        InternalLinkReference(type="manual", target="install-guide").target
+        == "install-guide"
+    )
+    assert InternalLinkReference(type="wiki", target="0").target == "0"
+    for target in ("-1", "../1", "Uppercase", "bad_slug", "two--hyphens"):
         try:
             InternalLinkReference(type="note", target=target)
         except ValueError:
             pass
         else:
             raise AssertionError(f"accepted malformed target: {target}")
+
+
+def test_registry_allows_only_registered_route_boundaries() -> None:
+    class ManualRouteRegistry:
+        def resolve_route(self, path: str) -> object | None:
+            if path == "/manual" or path.startswith("/manual/"):
+                return object()
+            return None
+
+    resolver = InternalLinkResolverRegistry(
+        {
+            "note": StaticProvider(
+                {
+                    "safe": ProviderLink(
+                        target="safe",
+                        href="/manual/install-guide",
+                        label="설치",
+                    ),
+                    "prefix": ProviderLink(
+                        target="prefix",
+                        href="/manuals/install-guide",
+                        label="유사 경로",
+                    ),
+                    "traversal": ProviderLink(
+                        target="traversal",
+                        href="/manual/../secret",
+                        label="경로 우회",
+                    ),
+                    "encoded": ProviderLink(
+                        target="encoded",
+                        href="/manual/%2e%2e/secret",
+                        label="인코딩 우회",
+                    ),
+                }
+            )
+        },
+        registry(),
+        additional_route_registries=(ManualRouteRegistry(),),
+    )
+    results = resolver.resolve_batch(
+        tuple(
+            InternalLinkReference(type="note", target=target)
+            for target in ("safe", "prefix", "traversal", "encoded")
+        )
+    )
+    by_target = {result.target: result for result in results}
+    assert by_target["safe"].exists is True
+    assert all(
+        by_target[target].exists is False
+        for target in ("prefix", "traversal", "encoded")
+    )

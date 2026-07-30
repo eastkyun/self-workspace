@@ -11,14 +11,22 @@ import {
 } from "../../../shared/static/markdown/internal-links.js";
 import { createMarkdownRenderer } from "../../../shared/static/markdown/renderer.js";
 
-test("parser accepts typed positive-decimal tokens and optional labels", () => {
+test("parser accepts positive-decimal and canonical-slug tokens", () => {
   assert.deepEqual(parseInternalLinkToken("[[note:13|회의 기록]]"), {
     type: "note",
     target: "13",
     label: "회의 기록",
     raw: "[[note:13|회의 기록]]",
   });
+  assert.deepEqual(parseInternalLinkToken("[[manual:install-guide|설치]]"), {
+    type: "manual",
+    target: "install-guide",
+    label: "설치",
+    raw: "[[manual:install-guide|설치]]",
+  });
   assert.equal(parseInternalLinkToken("[[note:../secret]]"), null);
+  assert.equal(parseInternalLinkToken("[[manual:Install-Guide]]"), null);
+  assert.equal(parseInternalLinkToken("[[manual:install--guide]]"), null);
   assert.equal(parseInternalLinkToken("[[Note:1]]"), null);
 });
 
@@ -105,3 +113,39 @@ test("batch client posts deduplicated references and validates routes", async ()
   assert.equal(snapshot.get("note:2").exists, true);
 });
 
+test("safe resolved href accepts local publication routes and rejects bypasses", () => {
+  const snapshot = normalizeResolutionSnapshot([
+    {
+      type: "manual",
+      target: "install-guide",
+      exists: true,
+      href: "/manual/install-guide",
+      label: "설치",
+    },
+    {
+      type: "wiki",
+      target: "traversal",
+      exists: true,
+      href: "/wiki/../secret",
+      label: "우회",
+    },
+    {
+      type: "wiki",
+      target: "encoded",
+      exists: true,
+      href: "/wiki/%2e%2e/secret",
+      label: "인코딩 우회",
+    },
+    {
+      type: "wiki",
+      target: "host",
+      exists: true,
+      href: "//evil.example/wiki/host",
+      label: "호스트 우회",
+    },
+  ]);
+  assert.equal(snapshot.get("manual:install-guide").exists, true);
+  assert.equal(snapshot.get("wiki:traversal").exists, false);
+  assert.equal(snapshot.get("wiki:encoded").exists, false);
+  assert.equal(snapshot.get("wiki:host").exists, false);
+});

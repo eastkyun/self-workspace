@@ -34,6 +34,9 @@ from publishing.database import (
     resolve_database_path as resolve_publishing_database_path,
     verify_database as verify_publishing_database,
 )
+from publishing.internal_link_provider import (
+    create_publication_internal_link_providers,
+)
 from publishing.registry import create_default_registry
 from publishing.projection import build_portal_projection
 from publishing.router import STATIC_DIR as PUBLISHING_STATIC_DIR
@@ -120,8 +123,13 @@ def create_app(
         {
             "note": NotesInternalLinkProvider(resolved_notes_database_path),
             "calendar": CalendarInternalLinkProvider(resolved_database_path),
+            **create_publication_internal_link_providers(
+                resolved_publishing_database_path,
+                publication_type_registry,
+            ),
         },
         registry,
+        additional_route_registries=(publication_type_registry,),
     )
 
     @asynccontextmanager
@@ -221,7 +229,7 @@ def create_app(
         "/api/internal-links/resolve",
         response_model=list[InternalLinkResult],
     )
-    def resolve_internal_links(
+    async def resolve_internal_links(
         payload: InternalLinkBatchRequest,
     ) -> tuple[InternalLinkResult, ...]:
         return internal_link_resolver.resolve_batch(payload.links)

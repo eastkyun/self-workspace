@@ -247,3 +247,18 @@ async def test_public_search_and_home_projection_use_published_snapshot(
     assert "지식 발행물" in home.text
     assert 'href="/manual/install-guide"' in home.text
     assert "Install guide" in home.text
+
+    links = await client.post(
+        "/api/internal-links/resolve",
+        json={"links": [{"type": "manual", "target": "install-guide"}]},
+    )
+    assert links.status_code == 200
+    assert links.json() == [
+        {
+            "type": "manual",
+            "target": "install-guide",
+            "exists": True,
+            "href": "/manual/install-guide",
+            "label": "Install guide",
+        }
+    ]

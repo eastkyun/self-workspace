@@ -1,16 +1,23 @@
 import { RENDER_LIMITS } from "./contracts.js";
 
 const TYPE_PATTERN = /^[a-z][a-z0-9-]*$/u;
-const TARGET_PATTERN = /^[1-9][0-9]*$/u;
-const TOKEN_PATTERN = /\[\[([a-z][a-z0-9-]*):([1-9][0-9]*)(?:\|([^\]\n]+))?\]\]/gu;
+const TARGET_SOURCE = "(?:[1-9][0-9]*|[a-z0-9]+(?:-[a-z0-9]+)*)";
+const TARGET_PATTERN = new RegExp(`^${TARGET_SOURCE}$`, "u");
+const TOKEN_PATTERN = new RegExp(
+  `\\[\\[([a-z][a-z0-9-]*):(${TARGET_SOURCE})(?:\\|([^\\]\\n]+))?\\]\\]`,
+  "gu",
+);
+const SINGLE_TOKEN_PATTERN = new RegExp(
+  `^\\[\\[([a-z][a-z0-9-]*):(${TARGET_SOURCE})(?:\\|([^\\]\\n]+))?\\]\\]$`,
+  "u",
+);
 
 export function internalLinkKey(type, target) {
   return `${type}:${target}`;
 }
 
 export function parseInternalLinkToken(raw) {
-  const match = /^\[\[([a-z][a-z0-9-]*):([1-9][0-9]*)(?:\|([^\]\n]+))?\]\]$/u
-    .exec(String(raw ?? ""));
+  const match = SINGLE_TOKEN_PATTERN.exec(String(raw ?? ""));
   if (!match) {
     return null;
   }
@@ -42,15 +49,28 @@ export function collectInternalLinks(markdown) {
 
 export function isSafeResolvedHref(href) {
   const value = String(href ?? "");
-  if (!value.startsWith("/apps/") || value.includes("\\") || value.includes("//")) {
+  const rawPath = value.split(/[?#]/u, 1)[0];
+  if (!value.startsWith("/")
+      || value.startsWith("//")
+      || value.includes("\\")
+      || value.includes("#")
+      || /[\u0000-\u001F\u007F]/u.test(value)
+      || rawPath.includes("//")
+      || rawPath.split("/").some((segment) => segment === "." || segment === "..")) {
     return false;
   }
   try {
+    if (decodeURIComponent(rawPath) !== rawPath) {
+      return false;
+    }
     const url = new URL(value, "https://workspace.invalid");
     if (url.origin !== "https://workspace.invalid") {
       return false;
     }
-    let decoded = decodeURIComponent(url.pathname);
+    const decoded = decodeURIComponent(url.pathname);
+    if (decoded !== url.pathname) {
+      return false;
+    }
     if (decodeURIComponent(decoded) !== decoded) {
       return false;
     }
@@ -115,4 +135,3 @@ export async function resolveInternalLinks(references, {
   }
   return normalizeResolutionSnapshot(await response.json());
 }
-

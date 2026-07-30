@@ -14,9 +14,14 @@ class CalendarInternalLinkProvider:
         self.database_path = database_path
 
     def resolve_many(self, targets: tuple[str, ...]) -> dict[str, ProviderLink]:
-        if not targets:
+        numeric_targets = tuple(
+            target
+            for target in targets
+            if target.isdecimal() and int(target) > 0
+        )
+        if not numeric_targets:
             return {}
-        ids = tuple(int(target) for target in targets)
+        ids = tuple(int(target) for target in numeric_targets)
         placeholders = ", ".join("?" for _ in ids)
         database_uri = f"{self.database_path.resolve().as_uri()}?mode=ro"
         with sqlite3.connect(database_uri, uri=True) as connection:
@@ -32,4 +37,3 @@ class CalendarInternalLinkProvider:
             )
             for event_id, title in rows
         }
-
