@@ -6,14 +6,21 @@ from collections.abc import Iterator
 from contextlib import asynccontextmanager, contextmanager
 from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Literal
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from access.context import WorkspaceContext
+from access.errors import AppNotAvailable, PermissionDenied, WorkspaceNotAvailable
+from apps.calendar.app import repository
+from apps.calendar.app.service import CalendarService, TaskNotFoundError
 from shared.app_registry import AppRegistry, PORTAL_STATIC_DIR
+from shared.errors import APIError
 from shared.templating import SHARED_STATIC_DIR, create_templates, shell_context
 
 APP_DIR = Path(__file__).resolve().parent
@@ -26,6 +33,9 @@ KST = ZoneInfo("Asia/Seoul")
 SCHEMA_VERSION = 2
 CALENDAR_SCHEMA_VERSION = 1
 templates = create_templates(TEMPLATES_DIR)
+
+ContextDependency = Callable[..., WorkspaceContext]
+CsrfDependency = Callable[[Request], None]
 
 
 def utc_now() -> str:
@@ -497,6 +507,75 @@ def verify_database(database_path: Path) -> None:
                 )
 
 
+def initialize_workspace_database(database_path: Path) -> None:
+    """Create a new empty Calendar database directly at tenant schema v3."""
+    if database_path.exists():
+        verify_workspace_database(database_path)
+        return
+    initialize_database(database_path, create_backup=False)
+    from apps.calendar.migrations import MIGRATIONS, TARGET_VERSION
+    from shared.migrations import migrate
+
+    bootstrap_id = "00000000-0000-4000-8000-000000000001"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        migrate(
+            connection,
+            target_version=TARGET_VERSION,
+            migrations=MIGRATIONS,
+            context={"workspace_id": bootstrap_id, "actor_id": bootstrap_id},
+        )
+    verify_workspace_database(database_path)
+
+
+def verify_workspace_database(database_path: Path) -> None:
+    """Fail closed unless Calendar is at the workspace-aware v3 schema."""
+    if not database_path.is_file():
+        raise RuntimeError(f"calendar database does not exist: {database_path}")
+    uri = f"{database_path.resolve().as_uri()}?mode=ro"
+    with sqlite3.connect(uri, uri=True) as connection:
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys=ON")
+        if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+            raise RuntimeError("calendar database quick_check failed")
+        if connection.execute("PRAGMA foreign_key_check").fetchall():
+            raise RuntimeError("calendar database foreign_key_check failed")
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
+        if version != 3:
+            raise RuntimeError(
+                "calendar database requires an offline migration: "
+                f"expected schema v3, found v{version}"
+            )
+        required_columns = {
+            "tasks": {"workspace_id", "created_by", "updated_by", "deleted_at"},
+            "topics": {"workspace_id"},
+            "task_topics": {"workspace_id"},
+        }
+        for table, expected in required_columns.items():
+            columns = {
+                row["name"]: row
+                for row in connection.execute(f"PRAGMA table_info({table})")
+            }
+            if not expected.issubset(columns) or any(
+                columns[name]["notnull"] != 1
+                for name in expected - {"deleted_at"}
+            ):
+                raise RuntimeError(f"calendar workspace schema is invalid: {table}")
+        indexes = {
+            row["name"]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='index'"
+            )
+        }
+        required_indexes = {
+            "idx_tasks_workspace_status",
+            "idx_tasks_workspace_dates",
+            "idx_topics_workspace_listing",
+        }
+        if not required_indexes.issubset(indexes):
+            raise RuntimeError("calendar workspace indexes are missing")
+
+
 @contextmanager
 def database_connection(database_path: Path) -> Iterator[sqlite3.Connection]:
     connection = sqlite3.connect(database_path)
@@ -637,6 +716,453 @@ def write_positions(
     )
 
 
+def _translate_workspace_error(error: Exception) -> HTTPException:
+    if isinstance(error, (WorkspaceNotAvailable, AppNotAvailable)):
+        return HTTPException(status_code=404, detail="Resource not found")
+    if isinstance(error, PermissionDenied):
+        return HTTPException(status_code=403, detail="Action forbidden")
+    if isinstance(error, TaskNotFoundError):
+        return HTTPException(status_code=404, detail="Task not found")
+    if isinstance(error, sqlite3.IntegrityError):
+        return HTTPException(status_code=409, detail="Topic name already exists")
+    if isinstance(error, ValueError):
+        return HTTPException(status_code=422, detail=str(error))
+    raise error
+
+
+def create_calendar_router(
+    *,
+    service: CalendarService,
+    app_registry: AppRegistry,
+    require_workspace: ContextDependency,
+    csrf: CsrfDependency | None = None,
+    csrf_cookie_name: str | None = None,
+) -> APIRouter:
+    """Canonical authenticated workspace Calendar UI/API router."""
+    router = APIRouter()
+    api = "/api/v1/workspaces/{workspace_id}/calendar"
+
+    def mutate(request: Request) -> None:
+        if csrf is not None:
+            csrf(request)
+
+    def require_manage(context: WorkspaceContext) -> None:
+        snapshot = service.authorization.require(
+            context, "calendar.read_all", app_key="calendar"
+        )
+        if not service.authorization.authorize(
+            context, "calendar.manage", snapshot=snapshot
+        ):
+            raise PermissionDenied("permission denied")
+
+    def render(request: Request, workspace_id: str):
+        notes_app = app_registry.get_app("notes")
+        if notes_app is None:
+            raise RuntimeError("Notes app is missing from the shared Registry snapshot")
+        canonical_routes = {
+            "/": f"/w/{workspace_id}/home",
+            "/apps/notes/": f"/w/{workspace_id}/notes/",
+            "/apps/calendar/": f"/w/{workspace_id}/calendar",
+            "/apps/publishing/": f"/w/{workspace_id}/publications",
+        }
+        return templates.TemplateResponse(
+            request,
+            "calendar.html",
+            shell_context(
+                request,
+                app_registry,
+                current_app_id="calendar",
+                page_title="Calendar",
+                path_for=lambda path: canonical_routes.get(path, path),
+            )
+            | {
+                "notes_route": notes_app.route,
+                "notes_api_base": f"/api/v1/workspaces/{workspace_id}/notes",
+                "calendar_api_base": f"{api.replace('{workspace_id}', workspace_id)}",
+                "workspace_user_state_api": f"/api/v1/workspaces/{workspace_id}",
+                "calendar_workspace_route": f"/w/{workspace_id}/calendar",
+                "calendar_internal_link_endpoint": f"/api/v1/workspaces/{workspace_id}/internal-links/resolve",
+                "calendar_csrf_cookie_name": csrf_cookie_name or "",
+                "calendar_static_base": "/apps/calendar/static",
+            },
+        )
+
+    @router.get("/w/{workspace_id}/calendar", include_in_schema=False)
+    def index(
+        request: Request,
+        workspace_id: str,
+        context: WorkspaceContext = Depends(require_workspace),
+    ):
+        try:
+            service.authorization.require(
+                context, "calendar.read_all", app_key="calendar"
+            )
+        except Exception as error:
+            raise _translate_workspace_error(error) from error
+        return render(request, workspace_id)
+
+    @router.get(f"{api}/tasks", response_model=list[Task])
+    def list_tasks(context: WorkspaceContext = Depends(require_workspace)):
+        try:
+            return service.list_tasks(context)
+        except Exception as error:
+            raise _translate_workspace_error(error) from error
+
+    @router.post(f"{api}/tasks", response_model=Task, status_code=201)
+    def create_task(
+        request: Request,
+        payload: TaskCreate,
+        context: WorkspaceContext = Depends(require_workspace),
+    ):
+        mutate(request)
+        start_at, due_at = normalize_schedule(
+            payload.start_at, payload.due_at, payload.all_day
+        )
+        try:
+            return service.create_task(
+                context,
+                title=payload.title,
+                description=payload.description,
+                status=payload.status,
+                all_day=payload.all_day,
+                start_at=start_at,
+                due_at=due_at,
+                topic_ids=payload.topic_ids,
+            )
+        except Exception as error:
+            raise _translate_workspace_error(error) from error
+
+    @router.patch(f"{api}/tasks/{{task_id}}", response_model=Task)
+    def update_task(
+        request: Request,
+        task_id: int,
+        payload: TaskUpdate,
+        context: WorkspaceContext = Depends(require_workspace),
+    ):
+        mutate(request)
+        try:
+            current = service.get_task(context, task_id)
+            changes = payload.model_dump(exclude_unset=True)
+            if any(value is None for value in changes.values()):
+                raise ValueError("Updated fields cannot be null")
+            start_value = changes.get(
+                "start_at", parse_aware_timestamp(str(current["start_at"]))
+            )
+            due_value = changes.get(
+                "due_at", parse_aware_timestamp(str(current["due_at"]))
+            )
+            all_day = bool(changes.get("all_day", current["all_day"]))
+            start_at, due_at = normalize_schedule(start_value, due_value, all_day)
+            return service.update_task(
+                context,
+                task_id,
+                title=str(changes.get("title", current["title"])),
+                description=str(changes.get("description", current["description"])),
+                status=str(changes.get("status", current["status"])),
+                position=int(changes.get("position", current["position"])),
+                all_day=all_day,
+                start_at=start_at,
+                due_at=due_at,
+                topic_ids=changes.get("topic_ids"),
+            )
+        except Exception as error:
+            raise _translate_workspace_error(error) from error
+
+    @router.delete(f"{api}/tasks/{{task_id}}", status_code=204)
+    def delete_task(
+        request: Request,
+        task_id: int,
+        context: WorkspaceContext = Depends(require_workspace),
+    ):
+        mutate(request)
+        try:
+            service.delete_task(context, task_id)
+        except Exception as error:
+            raise _translate_workspace_error(error) from error
+        return Response(status_code=204, headers={"Content-Length": "0"})
+
+    @router.get(f"{api}/topics", response_model=list[Topic])
+    def list_topics(context: WorkspaceContext = Depends(require_workspace)):
+        try:
+            service.authorization.require(context, "calendar.read_all", app_key="calendar")
+            with service._connection() as connection:
+                return repository.list_topics(connection, context.workspace_id)
+        except Exception as error:
+            raise _translate_workspace_error(error) from error
+
+    @router.post(f"{api}/topics", response_model=Topic, status_code=201)
+    def create_topic(
+        request: Request,
+        payload: TopicCreate,
+        context: WorkspaceContext = Depends(require_workspace),
+    ):
+        mutate(request)
+        try:
+            require_manage(context)
+            with service._connection() as connection:
+                return repository.create_topic(
+                    connection,
+                    context.workspace_id,
+                    name=payload.name,
+                    color=payload.color,
+                    timestamp=service._timestamp(),
+                )
+        except Exception as error:
+            raise _translate_workspace_error(error) from error
+
+    @router.patch(f"{api}/topics/{{topic_id}}", response_model=Topic)
+    def update_topic(
+        request: Request,
+        topic_id: int,
+        payload: TopicUpdate,
+        context: WorkspaceContext = Depends(require_workspace),
+    ):
+        mutate(request)
+        try:
+            require_manage(context)
+            changes = payload.model_dump(exclude_unset=True)
+            if not changes or any(value is None for value in changes.values()):
+                raise ValueError("At least one non-null topic field is required")
+            with service._connection() as connection:
+                current = repository.get_topic(connection, context.workspace_id, topic_id)
+                if current is None:
+                    raise TaskNotFoundError(topic_id)
+                updated = repository.update_topic(
+                    connection,
+                    context.workspace_id,
+                    topic_id,
+                    name=str(changes.get("name", current["name"])),
+                    color=str(changes.get("color", current["color"])),
+                    timestamp=service._timestamp(),
+                )
+                assert updated is not None
+                return updated
+        except Exception as error:
+            translated = _translate_workspace_error(error)
+            if isinstance(error, TaskNotFoundError):
+                translated.detail = "Topic not found"
+            raise translated from error
+
+    @router.delete(f"{api}/topics/{{topic_id}}", status_code=204)
+    def delete_topic(
+        request: Request,
+        topic_id: int,
+        context: WorkspaceContext = Depends(require_workspace),
+    ):
+        mutate(request)
+        try:
+            require_manage(context)
+            with service._connection() as connection:
+                if not repository.delete_topic(connection, context.workspace_id, topic_id):
+                    raise TaskNotFoundError(topic_id)
+        except Exception as error:
+            translated = _translate_workspace_error(error)
+            if isinstance(error, TaskNotFoundError):
+                translated.detail = "Topic not found"
+            raise translated from error
+        return Response(status_code=204, headers={"Content-Length": "0"})
+
+    return router
+
+
+def create_legacy_calendar_router(
+    *,
+    service: CalendarService,
+    require_legacy_workspace: Callable[[Request], WorkspaceContext],
+    csrf: CsrfDependency | None = None,
+    sunset: str = "Mon, 03 Aug 2027 00:00:00 GMT",
+) -> APIRouter:
+    """Authenticated legacy Calendar adapter without a fixed workspace context."""
+    router = APIRouter()
+
+    def deprecated(response: Response, workspace_id: str, suffix: str) -> None:
+        response.headers["Deprecation"] = "true"
+        response.headers["Sunset"] = sunset
+        response.headers["Link"] = (
+            f'</api/v1/workspaces/{workspace_id}/calendar{suffix}>; rel="successor-version"'
+        )
+
+    def manage(context: WorkspaceContext) -> None:
+        snapshot = service.authorization.require(
+            context, "calendar.read_all", app_key="calendar"
+        )
+        if not service.authorization.authorize(
+            context, "calendar.manage", snapshot=snapshot
+        ):
+            raise PermissionDenied("permission denied")
+
+    @router.get("/apps/calendar", include_in_schema=False)
+    @router.get("/apps/calendar/", include_in_schema=False)
+    def legacy_ui(request: Request):
+        try:
+            context = require_legacy_workspace(request)
+        except APIError as error:
+            if error.status_code != 401:
+                raise
+            target = request.url.path
+            if request.url.query:
+                target += f"?{request.url.query}"
+            return RedirectResponse(
+                f"/login?next={quote(target, safe='')}", status_code=307
+            )
+        query = f"?{request.url.query}" if request.url.query else ""
+        return RedirectResponse(
+            f"/w/{context.workspace_id}/calendar{query}", status_code=307
+        )
+
+    @router.api_route(
+        "/apps/calendar/api/tasks", methods=["GET", "POST"], include_in_schema=False
+    )
+    def tasks(request: Request, response: Response, payload: TaskCreate | None = None):
+        context = require_legacy_workspace(request)
+        deprecated(response, context.workspace_id, "/tasks")
+        try:
+            if request.method == "GET":
+                return service.list_tasks(context)
+            if csrf is not None:
+                csrf(request)
+            assert payload is not None
+            start_at, due_at = normalize_schedule(payload.start_at, payload.due_at, payload.all_day)
+            response.status_code = 201
+            return service.create_task(
+                context,
+                title=payload.title,
+                description=payload.description,
+                status=payload.status,
+                all_day=payload.all_day,
+                start_at=start_at,
+                due_at=due_at,
+                topic_ids=payload.topic_ids,
+            )
+        except Exception as error:
+            raise _translate_workspace_error(error) from error
+
+    @router.api_route(
+        "/apps/calendar/api/tasks/{task_id}",
+        methods=["PATCH", "DELETE"],
+        include_in_schema=False,
+    )
+    def task_item(
+        request: Request,
+        response: Response,
+        task_id: int,
+        payload: TaskUpdate | None = None,
+    ):
+        context = require_legacy_workspace(request)
+        deprecated(response, context.workspace_id, f"/tasks/{task_id}")
+        if csrf is not None:
+            csrf(request)
+        try:
+            if request.method == "DELETE":
+                service.delete_task(context, task_id)
+                response.status_code = 204
+                response.headers["Content-Length"] = "0"
+                return None
+            assert payload is not None
+            current = service.get_task(context, task_id)
+            changes = payload.model_dump(exclude_unset=True)
+            if any(value is None for value in changes.values()):
+                raise ValueError("Updated fields cannot be null")
+            start_at, due_at = normalize_schedule(
+                changes.get("start_at", parse_aware_timestamp(str(current["start_at"]))),
+                changes.get("due_at", parse_aware_timestamp(str(current["due_at"]))),
+                bool(changes.get("all_day", current["all_day"])),
+            )
+            return service.update_task(
+                context,
+                task_id,
+                title=str(changes.get("title", current["title"])),
+                description=str(changes.get("description", current["description"])),
+                status=str(changes.get("status", current["status"])),
+                position=int(changes.get("position", current["position"])),
+                all_day=bool(changes.get("all_day", current["all_day"])),
+                start_at=start_at,
+                due_at=due_at,
+                topic_ids=changes.get("topic_ids"),
+            )
+        except Exception as error:
+            raise _translate_workspace_error(error) from error
+
+    @router.api_route(
+        "/apps/calendar/api/topics", methods=["GET", "POST"], include_in_schema=False
+    )
+    def topics(
+        request: Request,
+        response: Response,
+        payload: TopicCreate | None = None,
+    ):
+        context = require_legacy_workspace(request)
+        deprecated(response, context.workspace_id, "/topics")
+        try:
+            if request.method == "GET":
+                service.authorization.require(
+                    context, "calendar.read_all", app_key="calendar"
+                )
+                with service._connection() as connection:
+                    return repository.list_topics(connection, context.workspace_id)
+            if csrf is not None:
+                csrf(request)
+            assert payload is not None
+            manage(context)
+            response.status_code = 201
+            with service._connection() as connection:
+                return repository.create_topic(
+                    connection,
+                    context.workspace_id,
+                    name=payload.name,
+                    color=payload.color,
+                    timestamp=service._timestamp(),
+                )
+        except Exception as error:
+            raise _translate_workspace_error(error) from error
+
+    @router.api_route(
+        "/apps/calendar/api/topics/{topic_id}",
+        methods=["PATCH", "DELETE"],
+        include_in_schema=False,
+    )
+    def topic_item(
+        request: Request,
+        response: Response,
+        topic_id: int,
+        payload: TopicUpdate | None = None,
+    ):
+        context = require_legacy_workspace(request)
+        deprecated(response, context.workspace_id, f"/topics/{topic_id}")
+        if csrf is not None:
+            csrf(request)
+        try:
+            manage(context)
+            with service._connection() as connection:
+                current = repository.get_topic(connection, context.workspace_id, topic_id)
+                if current is None:
+                    raise TaskNotFoundError(topic_id)
+                if request.method == "DELETE":
+                    repository.delete_topic(connection, context.workspace_id, topic_id)
+                    response.status_code = 204
+                    response.headers["Content-Length"] = "0"
+                    return None
+                assert payload is not None
+                changes = payload.model_dump(exclude_unset=True)
+                if not changes or any(value is None for value in changes.values()):
+                    raise ValueError("At least one non-null topic field is required")
+                return repository.update_topic(
+                    connection,
+                    context.workspace_id,
+                    topic_id,
+                    name=str(changes.get("name", current["name"])),
+                    color=str(changes.get("color", current["color"])),
+                    timestamp=service._timestamp(),
+                )
+        except Exception as error:
+            translated = _translate_workspace_error(error)
+            if isinstance(error, TaskNotFoundError):
+                translated.detail = "Topic not found"
+            raise translated from error
+
+    return router
+
+
 def create_app(
     database_path: str | Path | None = None,
     *,
@@ -685,7 +1211,12 @@ def create_app(
                 current_app_id="calendar",
                 page_title="Calendar",
             )
-            | {"notes_route": notes_app.route},
+            | {
+                "notes_route": notes_app.route,
+                "calendar_api_base": "/api",
+                "calendar_csrf_cookie_name": "",
+                "calendar_static_base": "./static",
+            },
         )
 
     @application.get("/api/topics", response_model=list[Topic])
@@ -899,3 +1430,17 @@ def create_app(
 
 
 app = create_app()
+
+
+__all__ = (
+    "STATIC_DIR",
+    "TEMPLATES_DIR",
+    "create_app",
+    "create_calendar_router",
+    "create_legacy_calendar_router",
+    "initialize_database",
+    "initialize_workspace_database",
+    "resolve_database_path",
+    "verify_database",
+    "verify_workspace_database",
+)

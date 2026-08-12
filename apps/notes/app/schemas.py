@@ -58,6 +58,10 @@ class NoteResponse(BaseModel):
     is_pinned: bool
     created_at: str
     updated_at: str
+    workspace_id: str
+    created_by: str
+    updated_by: str
+    deleted_at: str | None
 
 
 class NoteLinkResponse(BaseModel):
@@ -70,4 +74,5 @@ class NoteLinkResponse(BaseModel):
     source_id: str
     source_title_snapshot: str
     created_at: str
+    workspace_id: str
     orphan: bool

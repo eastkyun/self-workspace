@@ -9,6 +9,9 @@
 !.codex/prompts/**
 
 .venv/
+.env
+.env.*
+!.env.example
 .playwright-browsers/
 node_modules/
 __pycache__/

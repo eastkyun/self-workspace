@@ -20,6 +20,13 @@ const indexSource = await readFile(
   new URL("../../apps/calendar/app/templates/calendar.html", import.meta.url),
   "utf8",
 );
+const fullCalendarBundleSource = await readFile(
+  new URL(
+    "../../apps/calendar/app/static/vendor/fullcalendar/7.0.2/daygrid.esm.js",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const shellStylesSource = await readFile(
   new URL("../../shared/static/shell.css", import.meta.url),
   "utf8",
@@ -72,10 +79,99 @@ test("calendar deep links accept only positive decimal event IDs", () => {
 
 test("uses FullCalendar v7 render and singular class APIs", () => {
   assert.match(appSource, /calendar\.render\(\)/);
-  assert.match(appSource, /calendar\.updateSize\(\)/);
+  assert.match(appSource, /typeof calendarInstance\?\.updateSize === "function"/);
+  assert.match(appSource, /else calendarInstance\?\.render\(\)/);
   assert.match(appSource, /workspace:layout-change/);
   assert.match(appSource, /dayCellClass:/);
   assert.doesNotMatch(appSource, /rerenderDates|dayCellClassNames|themeSystem/);
+});
+
+test("loads the local dayGrid-only FullCalendar ESM bundle", () => {
+  assert.match(appSource, /from "\.\/vendor\/fullcalendar\/7\.0\.2\/daygrid\.esm\.js"/);
+  assert.match(appSource, /plugins:\s*\[dayGridPlugin, classicThemePlugin\]/);
+  assert.match(appSource, /locales:\s*\[koLocale\]/);
+  assert.doesNotMatch(indexSource, /fullcalendar\.global|locales-all|themes\/classic\/global/);
+  assert.ok(fullCalendarBundleSource.length < 300_000);
+});
+
+test("keeps the shared loader visible until initial calendar data settles", () => {
+  assert.match(indexSource, /data-workspace-await-ready/);
+  assert.match(appSource, /\.finally\(\(\) => globalThis\.workspaceAppReady\?\.\(\)\)/);
+});
+
+test("synchronizes the clicked date class directly on the rendered day cell", () => {
+  assert.match(appSource, /function syncSelectedDateCell\(date, preferredCell = null\)/);
+  assert.match(appSource, /querySelectorAll\("\[data-date\]\.is-selected-date"\)/);
+  assert.match(appSource, /cell\.classList\.remove\("is-selected-date"\)/);
+  assert.match(appSource, /selectedCell\?\.classList\.add\("is-selected-date"\)/);
+  assert.doesNotMatch(appSource, /dateClick:/);
+  assert.match(appSource, /calendarElement\.addEventListener\("click"/);
+  assert.match(appSource, /dayCellFromInteractionTarget\(event\.target\)/);
+  assert.match(appSource, /selectDate\(dayCell\.dataset\.date, dayCell\)/);
+  assert.match(appSource, /info\.el\.dataset\.calendarEvent = "true"/);
+  assert.match(appSource, /target\.closest\("\[data-calendar-event\], button, a\[href\]"\)/);
+  assert.match(appSource, /target\.closest\('\[role="gridcell"\]\[data-date\]'\)/);
+  assert.match(
+    stylesSource,
+    /\.calendar-shell \[data-date\]\.is-selected-date\s*\{[^}]*background:[^}]*var\(--primary\)[^}]*box-shadow:\s*inset 0 0 0 3px var\(--primary\)/s,
+  );
+});
+
+test("avoids redundant full renders when refreshing events or selecting a date", () => {
+  const refreshSource = appSource.match(
+    /function refreshViews\(\) \{[\s\S]*?\n\}/,
+  )?.[0];
+  const selectSource = appSource.match(
+    /function selectDate\(date, dayElement = null\) \{[\s\S]*?\n\}/,
+  )?.[0];
+
+  assert.ok(refreshSource);
+  assert.match(refreshSource, /calendar\.batchRendering/);
+  assert.match(refreshSource, /calendar\.getEventSources\(\)/);
+  assert.doesNotMatch(refreshSource, /calendar\.removeAllEvents\(\)/);
+  assert.doesNotMatch(refreshSource, /calendar\.render\(\)/);
+  assert.ok(selectSource);
+  assert.match(selectSource, /syncSelectedDateCell\(date, dayElement\)/);
+  assert.doesNotMatch(selectSource, /calendar\.render\(\)/);
+});
+
+test("makes delegated day selection keyboard accessible", () => {
+  assert.match(appSource, /dayCellDidMount:\s*\(info\) => \{/);
+  assert.match(appSource, /info\.el\.tabIndex\s*=\s*0/);
+  assert.match(appSource, /calendarElement\.addEventListener\("keydown"/);
+  assert.match(appSource, /event\.key !== "Enter" && event\.key !== " "/);
+  assert.match(appSource, /event\.preventDefault\(\)/);
+});
+
+test("stops date-cell pointer starts before FullCalendar hit dragging", () => {
+  const guardSource = appSource.match(
+    /\["mousedown", "touchstart"\]\.forEach\([\s\S]*?\n\}\);/,
+  )?.[0];
+  assert.ok(guardSource);
+  assert.match(
+    guardSource,
+    /calendarElement\.addEventListener\(eventName,[\s\S]*dayCellFromInteractionTarget\(event\.target\)[\s\S]*event\.stopPropagation\(\)[\s\S]*\{ capture: true \}/,
+  );
+  assert.doesNotMatch(guardSource, /event\.preventDefault\(\)/);
+});
+
+test("falls back to render when the initialized calendar has no updateSize method", () => {
+  const source = appSource.match(
+    /function refreshCalendarLayout\(calendarInstance = calendar\) \{[\s\S]*?\n\}/,
+  )?.[0];
+  assert.ok(source);
+  const refreshCalendarLayout = Function(
+    `${source}; return refreshCalendarLayout;`,
+  )();
+  let renderCalls = 0;
+  assert.doesNotThrow(() => refreshCalendarLayout({
+    render() { renderCalls += 1; },
+  }));
+  assert.equal(renderCalls, 1);
+  assert.match(
+    appSource,
+    /workspace:layout-change[\s\S]*requestAnimationFrame\(\(\) => \{[\s\S]*refreshCalendarLayout\(\)/,
+  );
 });
 
 test("makes rendered calendar events keyboard accessible", () => {

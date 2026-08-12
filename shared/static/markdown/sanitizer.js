@@ -1,4 +1,5 @@
 import createDOMPurify from "./vendor/purify.es.mjs";
+import { isSafeAssetHref } from "./images.js";
 
 const ALLOWED_TAGS = Object.freeze([
   "a",
@@ -59,10 +60,7 @@ function isSafeHref(value) {
 }
 
 function isSafeImageSource(value) {
-  const normalized = String(value ?? "").trim();
-  return /^\/(?:[a-z0-9._~-]+\/)*api\/assets\/[1-9][0-9]*\/content$/iu.test(
-    normalized,
-  );
+  return isSafeAssetHref(String(value ?? "").trim());
 }
 
 export function createMarkdownSanitizer(windowLike = globalThis.window) {

@@ -23,25 +23,37 @@ import {
   mountMarkdownViewer,
   resolveInternalLinks,
   resolveAssetImages,
-} from "./shared/markdown/index.js";
+} from "/static/shared/markdown/index.js";
 import {
   createPublishingApi,
   publicationIdFromTarget,
   publicationTargetValue,
   suggestPublicationSlug,
 } from "/static/publishing/publish-dialog.js";
+import { createWorkspaceUserState } from "/static/shared/workspace-user-state.js";
 
 const root = document.querySelector("#notes-app");
 
 if (root) {
-  const api = createNotesApi(root.dataset.apiBase);
+  const csrfToken = () => {
+    const name = root.dataset.csrfCookieName;
+    if (!name) return "";
+    const item = document.cookie.split("; ").find((entry) => entry.startsWith(`${name}=`));
+    return item ? decodeURIComponent(item.split("=").slice(1).join("=")) : "";
+  };
+  const api = createNotesApi(root.dataset.apiBase, fetch, csrfToken);
+  const userState = root.dataset.userStateBase
+    ? createWorkspaceUserState({ baseUrl: root.dataset.userStateBase, csrfToken })
+    : null;
   const publishingApi = createPublishingApi({
     publicationsUrl: root.dataset.publicationsEndpoint,
     typesUrl: root.dataset.publicationTypesEndpoint,
+    csrfToken,
   });
   const assetApi = createAssetApi({
     uploadUrl: root.dataset.assetsUploadEndpoint,
     reconcileUrl: root.dataset.assetsReconcileEndpoint,
+    csrfToken,
   });
   const uploadSessionId = globalThis.crypto?.randomUUID?.()
     || `notes-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -56,6 +68,7 @@ if (root) {
     viewBackButton: root.querySelector("#view-notes-back"),
     editButton: root.querySelector("#edit-note"),
     publishButton: root.querySelector("#publish-note"),
+    favoriteButton: root.querySelector("#favorite-note"),
     viewTitle: root.querySelector("#note-view-title"),
     viewType: root.querySelector("#note-view-type"),
     viewUpdated: root.querySelector("#note-view-updated"),
@@ -192,6 +205,25 @@ if (root) {
   function clearError() {
     elements.error.hidden = true;
     elements.error.textContent = "";
+  }
+
+  async function syncFavorite(note) {
+    if (!userState || !elements.favoriteButton) return;
+    const items = await userState.favorites();
+    const active = items.some((item) => item.resource_type === "note" && String(item.resource_id) === String(note.id));
+    elements.favoriteButton.hidden = false;
+    elements.favoriteButton.setAttribute("aria-pressed", String(active));
+    elements.favoriteButton.textContent = active ? "즐겨찾기 해제" : "즐겨찾기";
+  }
+
+  async function toggleFavorite() {
+    const note = state.selectedNote;
+    if (!userState || !note) return;
+    const active = elements.favoriteButton.getAttribute("aria-pressed") === "true";
+    const method = active ? userState.unfavorite("note", note.id) : userState.favorite("note", note.id, {
+      app_key: "notes", label: note.title, href: root.dataset.appRoute,
+    });
+    try { await method; await syncFavorite(note); } catch (error) { showError(error); }
   }
 
   function updateLocation(
@@ -626,6 +658,10 @@ if (root) {
       setDraft(note);
       renderList();
       if (updateHistory) updateLocation(note.id);
+      if (userState) {
+        void userState.recent("note", note.id, {app_key: "notes", label: note.title, href: root.dataset.appRoute});
+        void syncFavorite(note).catch(() => {});
+      }
       window.requestAnimationFrame(() => elements.editButton.focus());
     } catch (error) {
       if (request !== state.selectionRequest) return;
@@ -766,6 +802,7 @@ if (root) {
     window.requestAnimationFrame(() => elements.title.focus());
   });
   elements.publishButton.addEventListener("click", openPublishDialog);
+  elements.favoriteButton?.addEventListener("click", toggleFavorite);
   elements.publishDialogClose.addEventListener("click", () => {
     elements.publishDialog.close();
   });
@@ -853,5 +890,5 @@ if (root) {
         confirm: false,
       });
     }
-  });
+  }).finally(() => globalThis.workspaceAppReady?.());
 }

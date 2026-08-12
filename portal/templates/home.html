@@ -5,7 +5,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="hub-page">
+<div class="hub-page" data-workspace-await-ready>
   <section class="hub-welcome" aria-labelledby="hub-welcome-title">
     <p class="workspace-eyebrow">APP HUB</p>
     {% if hub_quote %}
@@ -46,38 +46,6 @@
     <div id="all-apps" class="hub-card-grid"></div>
   </section>
 
-  <section class="hub-publications" aria-labelledby="publications-title">
-    <div class="hub-section-heading">
-      <div>
-        <p class="workspace-eyebrow">PUBLISHED</p>
-        <h2 id="publications-title">지식 발행물</h2>
-      </div>
-      <a href="{{ workspace_path('/publications/') }}">전체 보기</a>
-    </div>
-    {% if publication_projection.recent %}
-      <div class="hub-publication-groups">
-        {% for group in publication_projection.groups %}
-          {% if group["items"] %}
-          <section aria-labelledby="publication-group-{{ group.type_id }}">
-            <h3 id="publication-group-{{ group.type_id }}">{{ group.display_name }}</h3>
-            <div class="hub-publication-grid">
-              {% for publication in group["items"] %}
-              <article class="hub-publication-card">
-                <p class="workspace-eyebrow">{{ group.display_name }}</p>
-                <h4><a href="{{ workspace_path(publication.href) }}">{{ publication.title }}</a></h4>
-                {% if publication.summary %}<p>{{ publication.summary }}</p>{% endif %}
-                <span>v{{ publication.version }}</span>
-              </article>
-              {% endfor %}
-            </div>
-          </section>
-          {% endif %}
-        {% endfor %}
-      </div>
-    {% else %}
-      <p class="hub-empty-state">Notes에서 Manual이나 Wiki를 발행하면 여기에 표시됩니다.</p>
-    {% endif %}
-  </section>
 </div>
 
 <template id="app-card-template">

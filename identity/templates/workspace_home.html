@@ -1,0 +1,94 @@
+{% extends "app_shell.html" %}
+
+{% block page_head %}
+  <link rel="stylesheet" href="/static/shared/workspace-home.css">
+{% endblock %}
+
+{% block global_actions %}
+  <a class="workspace-home-switch" href="/workspace-selector">Workspace 전환</a>
+  {% if can_manage_settings %}<a class="workspace-home-settings" href="/w/{{ workspace.id }}/settings">설정</a>{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="workspace-home" data-workspace-home>
+  <section class="workspace-home-hero" aria-labelledby="workspace-home-title">
+    <div class="workspace-home-hero-copy">
+      <p class="workspace-eyebrow">{{ workspace.type }} WORKSPACE</p>
+      <h2 id="workspace-home-title"><span data-home-greeting>다시 만나 반가워요.</span><br>{{ workspace.name }}</h2>
+      <p>{{ workspace.description or '자주 쓰는 앱과 최근 작업을 한곳에서 이어가세요.' }}</p>
+    </div>
+    <div class="workspace-home-context" aria-label="Workspace 정보">
+      <span>{{ workspace.type | lower | capitalize }}</span>
+      <span>{{ workspace.role_key | lower | capitalize }}</span>
+      <span>{{ home_apps | length }} apps</span>
+    </div>
+  </section>
+
+  <section class="workspace-home-section" aria-labelledby="quick-access-title" data-effective-home>
+    <div class="workspace-home-heading">
+      <div><p class="workspace-home-kicker">QUICK ACCESS</p><h2 id="quick-access-title">바로 시작하기</h2></div>
+      <p>Workspace에서 사용할 수 있는 앱입니다.</p>
+    </div>
+    <div class="workspace-app-cards" data-effective-launcher>
+      {% for app in home_apps %}
+      <a class="workspace-app-card workspace-app-card--{{ app.key }}" data-app-key="{{ app.key }}" href="{{ app.route | replace('{workspace_id}', workspace.id) }}">
+        <span class="workspace-app-card-icon"><img src="{{ app.icon }}" alt=""></span>
+        <span class="workspace-app-card-copy"><strong>{{ app.display_name }}</strong><span>{{ app.description }}</span></span>
+        <span class="workspace-app-card-arrow" aria-hidden="true">→</span>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="workspace-home-section" aria-labelledby="dashboard-title" data-dashboard data-workspace-id="{{ workspace.id }}">
+    <div class="workspace-home-heading">
+      <div><p class="workspace-home-kicker">TODAY</p><h2 id="dashboard-title">나의 Dashboard</h2></div>
+      <button class="workspace-dashboard-manage" type="button" data-dashboard-manage>위젯 관리</button>
+    </div>
+    <div class="workspace-dashboard-grid" data-dashboard-grid>
+      {% for widget in dashboard_widgets %}
+      <article class="workspace-home-panel workspace-dashboard-widget workspace-dashboard-widget--{{ widget.size | lower }}" data-widget-key="{{ widget.widget_key }}">
+        <header class="workspace-home-heading workspace-home-heading--compact">
+          <div><p class="workspace-home-kicker">{{ widget.widget_key }}</p><h3>{{ widget.display_name }}</h3></div>
+          <div class="workspace-widget-actions">
+            <button type="button" draggable="true" data-widget-drag-handle aria-label="{{ widget.display_name }} 위치 끌어서 이동">⠿</button>
+            <button type="button" data-widget-resize aria-label="{{ widget.display_name }} 가로로 끌어 크기 조절">↔</button>
+            <button type="button" data-widget-hide aria-label="{{ widget.display_name }} 숨기기">×</button>
+          </div>
+        </header>
+        {% if widget.error %}
+          <div class="workspace-home-empty workspace-widget-error"><strong>이 위젯을 불러오지 못했습니다.</strong><p>다른 위젯은 계속 사용할 수 있습니다.</p></div>
+        {% elif widget.widget_key == 'workspace.search' %}
+          <a class="workspace-dashboard-search" href="{{ widget.data.href }}">Notes, 일정, 발행물을 통합 검색하기 <span aria-hidden="true">→</span></a>
+        {% elif widget.widget_key == 'workspace.activity' %}
+          <div class="workspace-activity-summary"><strong>{{ widget.data.count }}</strong><span>지난 24시간 활동</span></div>
+        {% elif widget.data %}
+          <ul class="workspace-resource-list">
+          {% for item in widget.data %}
+            <li><a href="{{ item.href }}"><span><strong>{{ item.title or item.label }}</strong><small>{{ item.status or item.app_key or '' }}</small></span>{% if item.updated_at or item.viewed_at %}<time datetime="{{ item.updated_at or item.viewed_at }}" data-relative-time>{{ item.updated_at or item.viewed_at }}</time>{% endif %}</a></li>
+          {% endfor %}
+          </ul>
+        {% else %}
+          <div class="workspace-home-empty"><span aria-hidden="true">○</span><strong>표시할 항목이 없습니다</strong><p>새 활동이 생기면 여기에 표시됩니다.</p></div>
+        {% endif %}
+      </article>
+      {% endfor %}
+    </div>
+    <dialog class="workspace-dashboard-dialog" data-dashboard-dialog aria-labelledby="dashboard-dialog-title">
+      <form method="dialog"><button aria-label="위젯 관리 닫기">×</button></form>
+      <h3 id="dashboard-dialog-title">위젯 관리</h3>
+      <p>위젯을 표시하거나 숨길 수 있습니다. 저장된 순서와 크기는 앱을 잠시 꺼도 유지됩니다.</p>
+      <ul>
+        {% for item in dashboard_layout %}
+        <li data-layout-key="{{ item.widget_key }}" data-layout-order="{{ item.display_order }}" data-layout-size="{{ item.size }}" data-layout-enabled="{{ 'true' if item.enabled else 'false' }}">
+          <code>{{ item.widget_key }}</code><span class="workspace-layout-controls"><button type="button" data-layout-move="up" aria-label="{{ item.widget_key }} 앞으로 이동">↑</button><button type="button" data-layout-move="down" aria-label="{{ item.widget_key }} 뒤로 이동">↓</button><label><span class="sr-only">{{ item.widget_key }} 크기</span><select data-layout-size><option value="SMALL"{% if item.size == 'SMALL' %} selected{% endif %}>S</option><option value="MEDIUM"{% if item.size == 'MEDIUM' %} selected{% endif %}>M</option><option value="LARGE"{% if item.size == 'LARGE' %} selected{% endif %}>L</option></select></label><button type="button" data-widget-toggle>{{ '숨기기' if item.enabled else '표시하기' }}</button></span>
+        </li>
+        {% endfor %}
+      </ul>
+      <p class="workspace-dashboard-status" aria-live="polite" data-dashboard-status></p>
+    </dialog>
+  </section>
+</div>
+{% endblock %}
+
+{% block page_scripts %}<script type="module" src="/static/shared/workspace-home.js"></script>{% endblock %}

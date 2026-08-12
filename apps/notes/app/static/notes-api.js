@@ -1,4 +1,4 @@
-export function createNotesApi(baseUrl, fetchImpl = fetch) {
+export function createNotesApi(baseUrl, fetchImpl = fetch, csrfToken = () => "") {
   async function request(path = "", options = {}) {
     const response = await fetchImpl(`${baseUrl}${path}`, {
       ...options,
@@ -37,25 +37,35 @@ export function createNotesApi(baseUrl, fetchImpl = fetch) {
     create(payload) {
       return request("", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: mutationHeaders(csrfToken()),
         body: JSON.stringify(payload),
       });
     },
     update(noteId, payload) {
       return request(`/${noteId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: mutationHeaders(csrfToken()),
         body: JSON.stringify(payload),
       });
     },
     remove(noteId) {
-      return request(`/${noteId}`, { method: "DELETE" });
+      return request(`/${noteId}`, { method: "DELETE", headers: mutationHeaders(csrfToken()) });
     },
     links(noteId) {
       return request(`/${noteId}/links`);
     },
     unlink(noteId, linkId) {
-      return request(`/${noteId}/links/${linkId}`, { method: "DELETE" });
+      return request(`/${noteId}/links/${linkId}`, {
+        method: "DELETE",
+        headers: mutationHeaders(csrfToken()),
+      });
     },
+  };
+}
+
+function mutationHeaders(token) {
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { "X-CSRF-Token": token } : {}),
   };
 }

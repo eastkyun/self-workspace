@@ -15,6 +15,10 @@ const styles = await readFile(
   new URL("../../portal/static/hub.css", import.meta.url),
   "utf8",
 );
+const script = await readFile(
+  new URL("../../portal/static/hub.js", import.meta.url),
+  "utf8",
+);
 
 const apps = [
   { id: "calendar", default_pinned: true },
@@ -44,4 +48,9 @@ test("renders the local quote with semantic responsive markup", () => {
   assert.match(template, /\{% else %\}[\s\S]*좋은 오후예요/);
   assert.match(styles, /\.hub-quote-text\s*\{[^}]*overflow-wrap:\s*anywhere/s);
   assert.match(styles, /@media \(max-width: 760px\)/);
+});
+
+test("signals readiness after the initial hub request settles", () => {
+  assert.match(template, /data-workspace-await-ready/);
+  assert.match(script, /\.finally\(\(\) => globalThis\.workspaceAppReady\?\.\(\)\)/);
 });

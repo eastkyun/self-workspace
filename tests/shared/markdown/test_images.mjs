@@ -24,6 +24,14 @@ test("collects unique image asset IDs and validates local content routes", () =>
   assert.equal(isSafeAssetHref("/api/assets/4/content", "3"), false);
   assert.equal(isSafeAssetHref("https://evil.test/api/assets/3/content", "3"), false);
   assert.equal(isSafeAssetHref("/api/assets/%33/content", "3"), false);
+  assert.equal(
+    isSafeAssetHref("/api/v1/workspaces/11111111-1111-1111-1111-111111111111/assets/3/content", "3"),
+    true,
+  );
+  assert.equal(
+    isSafeAssetHref("/api/publications/public/22222222-2222-2222-2222-222222222222/assets/3/content", "3"),
+    true,
+  );
 });
 
 test("renderer emits only resolver-approved local images", () => {
@@ -49,6 +57,15 @@ test("renderer emits only resolver-approved local images", () => {
   assert.match(unresolved, /markdown-image-broken/);
   assert.doesNotMatch(remote, /<img/);
   assert.doesNotMatch(remote, /evil\.test\/x\.png/);
+
+  const canonicalHref = "/api/v1/workspaces/11111111-1111-1111-1111-111111111111/assets/3/content";
+  const canonicalResolutions = normalizeAssetResolutionSnapshot([
+    { id: 3, exists: true, href: canonicalHref, media_type: "image/png" },
+  ]);
+  const canonical = renderer().render("![workspace image](image://3)", {
+    assetImageResolutions: canonicalResolutions,
+  });
+  assert.match(canonical, new RegExp(`src="${canonicalHref}"`));
 });
 
 test("asset resolver posts a bounded ID batch and rejects unsafe results", async () => {

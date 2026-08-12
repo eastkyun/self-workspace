@@ -2,9 +2,9 @@
 
 ## Source of truth
 - Status: Active
-- Last refreshed: 2026-07-29
-- Primary product surfaces: Portal Hub, shared App Shell, Calendar, Notes
-- Evidence reviewed: `shared/templates/app_shell.html`, shared tokens, Calendar and Notes templates/CSS/JS, five-viewport Chromium tests
+- Last refreshed: 2026-08-12
+- Primary product surfaces: Portal Hub, Workspace Home, shared App Shell, Calendar, Notes, Publishing, Workspace settings
+- Evidence reviewed: `shared/templates/app_shell.html`, `identity/templates/workspace_home.html`, shared tokens, Calendar and Notes templates/CSS/JS, five-viewport Chromium tests
 
 ## Brand
 - Personality: calm local workspace, focused writing desk, practical planner
@@ -13,23 +13,24 @@
 
 ## Product goals
 - Goals: move between apps without losing context; make schedules and linked writing feel cohesive
-- Non-goals: rich-text editing, collaboration, authentication, visual effects without functional value
+- Non-goals: rich-text editing, novelty analytics, visual effects without functional value
 - Success signals: fast recognition of current app/state, no horizontal overflow, keyboard-complete core flows
 
 ## Personas and jobs
-- Primary personas: a single local Workspace user organizing schedules and durable notes
-- User jobs: capture a thought, prepare meeting minutes, connect research to an event, recover context after an event is deleted
+- Primary personas: personal Workspace owners and small team members organizing shared schedules and durable knowledge
+- User jobs: resume recent work, open a favorite resource, scan Workspace activity, capture a thought, prepare meeting minutes, connect research to an event
 - Key contexts of use: desktop planning, compact laptop/tablet, quick mobile review/edit
 
 ## Information architecture
 - Primary navigation: shared Sidebar, Header, Launcher, Registry-driven app cards
-- Core routes/screens: `/`, `/apps/calendar/`, `/apps/notes/`, Notes new/detail states
-- Content hierarchy: Workspace chrome → app toolbar → primary work surface → contextual actions
+- Core routes/screens: `/`, `/w/{workspace_id}/home`, `/w/{workspace_id}/calendar`, `/w/{workspace_id}/notes`, `/w/{workspace_id}/publications`, Notes new/detail states
+- Content hierarchy: Workspace chrome → orientation/quick access → personal context (favorites/recent) → team activity → app work surface
 
 ## Design principles
 - Writing first: Notes editor should read as a document, not a database form
 - Context beside content: Calendar details use a spacious left/right planner spread on desktop
 - Progressive density: desktop uses two panes; mobile uses one focused view
+- Resume before browse: Workspace Home prioritizes returning to saved/recent resources over decorative metrics
 - Tradeoffs: preserve existing tokens and vanilla implementation over introducing a component framework
 
 ## Visual language
@@ -42,7 +43,7 @@
 
 ## Components
 - Existing components to reuse: shared Shell buttons, Sidebar, Launcher, Calendar button variants
-- New/changed components: Notes document surface, Note type badge, save status, Calendar task book pages
+- New/changed components: Workspace Home hero, quick-access app cards, resource lists, activity timeline, Notes document surface, Note type badge, save status, Calendar task book pages
 - Variants and states: selected, pinned, loading, saving, empty, error, orphan
 - Token/component ownership: shell tokens remain shared; Notes and Calendar styling remains app-local
 
@@ -59,7 +60,7 @@
 - Touch/hover differences: minimum 42–44px actions; hover is supplemental
 
 ## Interaction states
-- Loading: local status text without layout shift
+- Loading: every shared-shell screen shows the same local SVG/CSS progress indicator without layout shift; server-rendered screens dismiss it after first paint, while async apps dismiss it only after initial data settles
 - Empty: clear next action and focusable creation CTA
 - Error: persistent accessible local alert
 - Success: inline and screen-reader save status

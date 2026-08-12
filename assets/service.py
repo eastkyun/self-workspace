@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import io
+import hashlib
 import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Callable, Protocol
+from uuid import uuid4
 
 from PIL import Image, UnidentifiedImageError
+
+from access.context import WorkspaceContext
 
 from . import repository
 from .database import database_connection
@@ -90,29 +94,57 @@ class AssetService:
         storage: StorageProvider,
         markdown_source_reader: MarkdownSourceReader,
         clock: Callable[[], datetime] | None = None,
+        markdown_source_reader_factory: Callable[
+            [WorkspaceContext], MarkdownSourceReader
+        ]
+        | None = None,
+        default_context: WorkspaceContext | None = None,
     ) -> None:
         self.database_path = Path(database_path).resolve()
         self.storage = storage
         self.markdown_source_reader = markdown_source_reader
+        self.markdown_source_reader_factory = markdown_source_reader_factory
+        self.default_context = default_context
         self.clock = clock or (lambda: datetime.now(UTC))
 
     def _now(self) -> str:
         return self.clock().astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+    def _reader(self, context: WorkspaceContext | None) -> MarkdownSourceReader:
+        if context is not None and self.markdown_source_reader_factory is not None:
+            return self.markdown_source_reader_factory(context)
+        return self.markdown_source_reader
 
     @staticmethod
     def _validate_owner(owner_type: str, owner_id: str, field: str) -> None:
         if not _FIELD.fullmatch(owner_type) or not _OWNER_PART.fullmatch(owner_id) or not _FIELD.fullmatch(field):
             raise ValueError("invalid asset reference owner")
 
-    def upload_image(self, content: bytes, *, original_name: str, upload_session_id: str) -> dict:
+    def upload_image(
+        self,
+        content: bytes,
+        *,
+        original_name: str,
+        upload_session_id: str,
+        context: WorkspaceContext | None = None,
+    ) -> dict:
+        context = context or self.default_context
         self._validate_owner("upload_session", upload_session_id, "upload")
         normalized, media_type, extension = _normalize_image(content)
         sha256 = digest_bytes(normalized)
-        storage_key = content_storage_key(sha256, extension)
+        if context is not None:
+            storage_digest = hashlib.sha256(
+                f"{context.workspace_id}:{sha256}".encode("utf-8")
+            ).hexdigest()
+        else:
+            storage_digest = sha256
+        storage_key = content_storage_key(storage_digest, extension)
         self.storage.put(storage_key, normalized)
         now = self._now()
         with database_connection(self.database_path) as connection:
-            asset = repository.get_asset_by_sha256(connection, sha256)
+            asset = repository.get_asset_by_sha256(
+                connection, sha256, context.workspace_id if context else None
+            )
             if asset is None:
                 asset = repository.create_asset(
                     connection,
@@ -122,6 +154,9 @@ class AssetService:
                     storage_key=storage_key,
                     original_name=_safe_original_name(original_name, extension),
                     created_at=now,
+                    workspace_id=context.workspace_id if context else None,
+                    uploaded_by=context.user_id if context else None,
+                    public_id=str(uuid4()) if context else None,
                 )
             repository.add_reference(
                 connection,
@@ -130,18 +165,36 @@ class AssetService:
                 owner_id=upload_session_id,
                 field="upload",
                 created_at=now,
+                workspace_id=context.workspace_id if context else None,
             )
             return asset
 
-    def reconcile(self, *, owner_type: str, owner_id: str, field: str) -> tuple[int, ...]:
+    def reconcile(
+        self,
+        *,
+        owner_type: str,
+        owner_id: str,
+        field: str,
+        context: WorkspaceContext | None = None,
+    ) -> tuple[int, ...]:
+        requested_context = context
+        context = context or self.default_context
         self._validate_owner(owner_type, owner_id, field)
-        markdown = self.markdown_source_reader.get_markdown(owner_type, owner_id, field)
+        markdown = self._reader(requested_context).get_markdown(
+            owner_type, owner_id, field
+        )
         if markdown is None:
             raise MarkdownSourceNotFoundError("stored Markdown source was not found")
         asset_ids = extract_asset_ids(markdown)
         now = self._now()
         with database_connection(self.database_path) as connection:
-            missing = [asset_id for asset_id in asset_ids if repository.get_asset(connection, asset_id) is None]
+            missing = [
+                asset_id
+                for asset_id in asset_ids
+                if repository.get_asset(
+                    connection, asset_id, context.workspace_id if context else None
+                ) is None
+            ]
             if missing:
                 raise AssetNotFoundError(f"stored Markdown references missing assets: {missing}")
             repository.replace_owner_references(
@@ -151,14 +204,20 @@ class AssetService:
                 field=field,
                 asset_ids=asset_ids,
                 created_at=now,
+                workspace_id=context.workspace_id if context else None,
             )
         return asset_ids
 
-    def get_asset(self, asset_id: int) -> dict:
+    def get_asset(
+        self, asset_id: int, context: WorkspaceContext | None = None
+    ) -> dict:
+        context = context or self.default_context
         if asset_id <= 0:
             raise AssetNotFoundError("asset was not found")
         with database_connection(self.database_path) as connection:
-            asset = repository.get_asset(connection, asset_id)
+            asset = repository.get_asset(
+                connection, asset_id, context.workspace_id if context else None
+            )
         if asset is None:
             raise AssetNotFoundError("asset was not found")
         return asset

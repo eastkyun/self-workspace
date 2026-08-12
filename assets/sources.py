@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from access.context import WorkspaceContext
 from apps.notes.app.service import NoteNotFoundError, NotesService
 from publishing.database import database_connection as publishing_database_connection
 
@@ -21,9 +22,11 @@ class WorkspaceMarkdownSourceReader:
         self,
         *,
         notes_service: NotesService,
+        notes_context: WorkspaceContext,
         publishing_database_path: str | Path,
     ) -> None:
         self.notes_service = notes_service
+        self.notes_context = notes_context
         self.publishing_database_path = Path(publishing_database_path).resolve()
 
     def get_markdown(
@@ -38,7 +41,7 @@ class WorkspaceMarkdownSourceReader:
 
         if owner_type == "note" and field == "content":
             try:
-                note = self.notes_service.get_note(source_id)
+                note = self.notes_service.get_note(self.notes_context, source_id)
             except NoteNotFoundError:
                 return None
             return str(note["content"])

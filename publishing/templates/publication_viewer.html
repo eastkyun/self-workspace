@@ -39,8 +39,8 @@
 <script id="publication-source" type="application/json">{{ {
   "markdown": publication_version.markdown,
   "renderOptions": render_options,
-  "assetResolveEndpoint": workspace_path('/api/assets/resolve'),
-  "archiveEndpoint": workspace_path('/api/publications/' ~ publication.id ~ '/archive'),
+  "assetResolveEndpoint": '/api/publications/public/' ~ publication.public_id ~ '/assets/resolve',
+  "archiveEndpoint": '/api/v1/workspaces/' ~ publication.workspace_id ~ '/publications/' ~ publication.id ~ '/archive',
   "libraryUrl": workspace_path('/publications/')
 } | tojson }}</script>
 {% endblock %}

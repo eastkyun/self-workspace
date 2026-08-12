@@ -8,7 +8,7 @@ from httpx import ASGITransport, AsyncClient
 
 from apps.notes.app.schemas import NoteCreate, NoteUpdate
 from portal.main import create_app
-from publishing.database import verify_database
+from publishing.database import verify_workspace_database
 
 pytestmark = pytest.mark.anyio
 
@@ -38,7 +38,8 @@ async def client(application):
 
 
 async def create_note(client: AsyncClient, *, content: str = "# Install\n\nSafe") -> dict:
-    return client.workspace_app.state.notes_service.create_note(
+    return client.workspace_app.state.legacy_notes_service.create_note(
+        client.workspace_app.state.legacy_notes_context,
         NoteCreate(
             title="Install guide",
             content=content,
@@ -82,7 +83,7 @@ async def test_temp_database_injection_and_type_registry_are_explicit(
 
     assert application.state.publishing_database_path == tmp_path / "publishing.db"
     assert application.state.publishing_database_path.is_file()
-    verify_database(application.state.publishing_database_path)
+    verify_workspace_database(application.state.publishing_database_path)
     assert [item["type_id"] for item in response.json()] == ["manual", "wiki"]
     assert response.json()[0]["render_options"]["toc_enabled"] is True
     assert application.state.publishing_service.registry is (
@@ -137,13 +138,15 @@ async def test_publication_lifecycle_versions_and_public_visibility(
     assert "/static/publishing/publication-viewer.js" in public.text
     assert 'id="publication-delete"' in public.text
     assert (
-        f"/api/publications/{publication_id}/archive"
+        f"/api/v1/workspaces/{publication['workspace_id']}/publications/"
+        f"{publication_id}/archive"
         in public.text
     )
     assert Path("publishing/static/publication-viewer.js").is_file()
     assert "install-guide" in (await client.get("/publications/")).text
 
-    client.workspace_app.state.notes_service.update_note(
+    client.workspace_app.state.legacy_notes_service.update_note(
+        client.workspace_app.state.legacy_notes_context,
         note["id"],
         NoteUpdate(
             title="Install guide v2",
@@ -234,7 +237,7 @@ async def test_api_errors_do_not_expose_database_constraints(client: AsyncClient
     assert (await client.get("/api/publications/999")).status_code == 404
 
 
-async def test_public_search_and_home_projection_use_published_snapshot(
+async def test_public_search_and_library_use_published_snapshot_without_hub_projection(
     client: AsyncClient,
 ) -> None:
     note = await create_note(client)
@@ -250,10 +253,11 @@ async def test_public_search_and_home_projection_use_published_snapshot(
         ("install-guide", 1)
     ]
     assert home.status_code == 200
-    assert "지식 발행물" in home.text
-    assert 'href="/manual/install-guide"' in home.text
-    assert "Install guide" in home.text
+    assert "지식 발행물" not in home.text
+    canonical_href = f"/p/{publication['public_id']}/install-guide"
     assert library.status_code == 200
+    assert f'href="{canonical_href}"' in library.text
+    assert "Install guide" in library.text
     assert "발행된 지식을 한곳에서 읽으세요" in library.text
     assert 'class="publication-home-stats"' in library.text
     assert "Manual" in library.text
@@ -269,7 +273,7 @@ async def test_public_search_and_home_projection_use_published_snapshot(
             "type": "manual",
             "target": "install-guide",
             "exists": True,
-            "href": "/manual/install-guide",
+            "href": canonical_href,
             "label": "Install guide",
         }
     ]

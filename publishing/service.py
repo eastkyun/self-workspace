@@ -6,7 +6,9 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
+from access.context import WorkspaceContext
 from publishing import repository
 from publishing.contracts import PublicationSnapshot, PublicationType
 from publishing.database import database_connection
@@ -86,12 +88,17 @@ class PublishingService:
         note_reader: NoteSnapshotReader,
         clock: Callable[[], datetime] = utc_now,
         event_dispatcher: AfterCommitEventDispatcher | None = None,
+        note_reader_factory: Callable[[WorkspaceContext], NoteSnapshotReader]
+        | None = None,
+        default_context: WorkspaceContext | None = None,
     ) -> None:
         self.database_path = Path(database_path)
         self.registry = registry
         self.note_reader = note_reader
         self.clock = clock
         self.event_dispatcher = event_dispatcher or AfterCommitEventDispatcher()
+        self.note_reader_factory = note_reader_factory
+        self.default_context = default_context
 
     def _timestamp(self) -> str:
         value = self.clock()
@@ -126,8 +133,15 @@ class PublishingService:
             raise InvalidSlugError("slug is not canonical lowercase ASCII")
         return slug
 
-    def _require_source_note(self, note_id: int) -> NoteSnapshot:
-        snapshot = self.note_reader.get_snapshot(note_id)
+    def _reader(self, context: WorkspaceContext | None) -> NoteSnapshotReader:
+        if context is not None and self.note_reader_factory is not None:
+            return self.note_reader_factory(context)
+        return self.note_reader
+
+    def _require_source_note(
+        self, note_id: int, context: WorkspaceContext | None = None
+    ) -> NoteSnapshot:
+        snapshot = self._reader(context).get_snapshot(note_id)
         if snapshot is None:
             raise SourceNoteNotFoundError(note_id)
         return snapshot
@@ -136,8 +150,11 @@ class PublishingService:
     def _require_publication(
         connection: sqlite3.Connection,
         publication_id: int,
+        workspace_id: str | None = None,
     ) -> dict[str, Any]:
-        publication = repository.get_publication(connection, publication_id)
+        publication = repository.get_publication(
+            connection, publication_id, workspace_id
+        )
         if publication is None:
             raise PublicationNotFoundError(publication_id)
         return publication
@@ -179,10 +196,13 @@ class PublishingService:
         type_id: str,
         slug: str,
         summary: str = "",
+        context: WorkspaceContext | None = None,
     ) -> dict[str, Any]:
+        requested_context = context
+        context = context or self.default_context
         provider = self._require_provider(type_id, enabled=True)
         canonical_slug = self._validate_slug(provider, slug)
-        source = self._require_source_note(note_id)
+        source = self._require_source_note(note_id, requested_context)
         timestamp = self._timestamp()
         try:
             with database_connection(self.database_path) as connection:
@@ -197,7 +217,19 @@ class PublishingService:
                     markdown=source.markdown,
                     source_note_updated_at=source.updated_at,
                     created_at=timestamp,
+                    workspace_id=context.workspace_id if context else None,
+                    created_by=context.user_id if context else None,
+                    public_id=str(uuid4()) if context else None,
                 )
+                if requested_context is None and publication.get("public_id"):
+                    aliases = [
+                        f"/publications/view/{provider.type_id}/{canonical_slug}"
+                    ]
+                    if provider.type_id in {"manual", "wiki"}:
+                        aliases.append(f"/{provider.type_id}/{canonical_slug}")
+                    repository.add_publication_route_aliases(
+                        connection, publication, tuple(aliases)
+                    )
         except sqlite3.IntegrityError as error:
             if "publications.type_id, publications.slug" in str(error):
                 raise DuplicateSlugError((type_id, slug)) from error
@@ -225,7 +257,11 @@ class PublishingService:
         publication_id: int,
         *,
         summary: str | None = None,
+        context: WorkspaceContext | None = None,
     ) -> dict[str, Any]:
+        requested_context = context
+        context = context or self.default_context
+        workspace_id = context.workspace_id if context else None
         # The publication determines its immutable source Note; callers cannot
         # replace note_id after creation.
         timestamp = self._timestamp()
@@ -233,13 +269,17 @@ class PublishingService:
         try:
             with database_connection(self.database_path) as connection:
                 connection.execute("BEGIN IMMEDIATE")
-                publication = self._require_publication(connection, publication_id)
+                publication = self._require_publication(
+                    connection, publication_id, workspace_id
+                )
                 self._require_provider(publication["type_id"], enabled=True)
                 if publication["status"] == "archived":
                     raise InvalidPublicationTransitionError(
                         "restore an archived publication before saving a draft"
                     )
-                source = self._require_source_note(publication["note_id"])
+                source = self._require_source_note(
+                    publication["note_id"], requested_context
+                )
                 next_version = publication["latest_version"] + 1
                 draft_summary = publication["summary"] if summary is None else summary
                 version = repository.create_publication_version(
@@ -265,6 +305,7 @@ class PublishingService:
                     published_at=publication["published_at"],
                     archived_at=None,
                     updated_at=timestamp,
+                    workspace_id=workspace_id,
                 )
                 events = (
                     PublicationVersionCreated(
@@ -279,11 +320,20 @@ class PublishingService:
         self._dispatch(events)
         return updated  # type: ignore[return-value]
 
-    def publish(self, publication_id: int) -> dict[str, Any]:
+    def publish(
+        self,
+        publication_id: int,
+        *,
+        context: WorkspaceContext | None = None,
+    ) -> dict[str, Any]:
+        context = context or self.default_context
+        workspace_id = context.workspace_id if context else None
         timestamp = self._timestamp()
         with database_connection(self.database_path) as connection:
             connection.execute("BEGIN IMMEDIATE")
-            publication = self._require_publication(connection, publication_id)
+            publication = self._require_publication(
+                connection, publication_id, workspace_id
+            )
             provider = self._require_provider(publication["type_id"], enabled=True)
             if publication["status"] == "archived":
                 raise InvalidPublicationTransitionError(
@@ -318,6 +368,7 @@ class PublishingService:
                 published_at=timestamp,
                 archived_at=None,
                 updated_at=timestamp,
+                workspace_id=workspace_id,
             )
         self._dispatch(
             (
@@ -330,11 +381,20 @@ class PublishingService:
         )
         return updated  # type: ignore[return-value]
 
-    def discard_draft(self, publication_id: int) -> dict[str, Any]:
+    def discard_draft(
+        self,
+        publication_id: int,
+        *,
+        context: WorkspaceContext | None = None,
+    ) -> dict[str, Any]:
+        context = context or self.default_context
+        workspace_id = context.workspace_id if context else None
         timestamp = self._timestamp()
         with database_connection(self.database_path) as connection:
             connection.execute("BEGIN IMMEDIATE")
-            publication = self._require_publication(connection, publication_id)
+            publication = self._require_publication(
+                connection, publication_id, workspace_id
+            )
             draft_version = publication["draft_version"]
             if draft_version is None:
                 raise InvalidPublicationTransitionError(
@@ -353,6 +413,7 @@ class PublishingService:
                     published_at=None,
                     archived_at=timestamp,
                     updated_at=timestamp,
+                    workspace_id=workspace_id,
                 )
                 events: tuple[PublicationEvent, ...] = (
                     PublicationDraftDiscarded(
@@ -381,6 +442,7 @@ class PublishingService:
                     published_at=publication["published_at"],
                     archived_at=None,
                     updated_at=timestamp,
+                    workspace_id=workspace_id,
                 )
                 events = (
                     PublicationDraftDiscarded(
@@ -392,11 +454,20 @@ class PublishingService:
         self._dispatch(events)
         return updated  # type: ignore[return-value]
 
-    def archive(self, publication_id: int) -> dict[str, Any]:
+    def archive(
+        self,
+        publication_id: int,
+        *,
+        context: WorkspaceContext | None = None,
+    ) -> dict[str, Any]:
+        context = context or self.default_context
+        workspace_id = context.workspace_id if context else None
         timestamp = self._timestamp()
         with database_connection(self.database_path) as connection:
             connection.execute("BEGIN IMMEDIATE")
-            publication = self._require_publication(connection, publication_id)
+            publication = self._require_publication(
+                connection, publication_id, workspace_id
+            )
             if publication["status"] == "archived":
                 raise InvalidPublicationTransitionError("publication is already archived")
             projection = repository.get_projection_version(connection, publication)
@@ -414,17 +485,27 @@ class PublishingService:
                 published_at=publication["published_at"],
                 archived_at=timestamp,
                 updated_at=timestamp,
+                workspace_id=workspace_id,
             )
         self._dispatch(
             (PublicationArchived(publication_id=publication_id, occurred_at=timestamp),)
         )
         return updated  # type: ignore[return-value]
 
-    def restore(self, publication_id: int) -> dict[str, Any]:
+    def restore(
+        self,
+        publication_id: int,
+        *,
+        context: WorkspaceContext | None = None,
+    ) -> dict[str, Any]:
+        context = context or self.default_context
+        workspace_id = context.workspace_id if context else None
         timestamp = self._timestamp()
         with database_connection(self.database_path) as connection:
             connection.execute("BEGIN IMMEDIATE")
-            publication = self._require_publication(connection, publication_id)
+            publication = self._require_publication(
+                connection, publication_id, workspace_id
+            )
             if publication["status"] != "archived":
                 raise InvalidPublicationTransitionError("publication is not archived")
             projection = repository.get_projection_version(connection, publication)
@@ -484,6 +565,7 @@ class PublishingService:
                 published_at=publication["published_at"],
                 archived_at=None,
                 updated_at=timestamp,
+                workspace_id=workspace_id,
             )
         self._dispatch(events)
         return updated  # type: ignore[return-value]
@@ -492,12 +574,18 @@ class PublishingService:
         self,
         publication_id: int,
         version: int,
+        *,
+        context: WorkspaceContext | None = None,
     ) -> dict[str, Any]:
+        context = context or self.default_context
+        workspace_id = context.workspace_id if context else None
         timestamp = self._timestamp()
         try:
             with database_connection(self.database_path) as connection:
                 connection.execute("BEGIN IMMEDIATE")
-                publication = self._require_publication(connection, publication_id)
+                publication = self._require_publication(
+                    connection, publication_id, workspace_id
+                )
                 self._require_provider(publication["type_id"], enabled=True)
                 if publication["status"] == "archived":
                     raise InvalidPublicationTransitionError(
@@ -530,6 +618,7 @@ class PublishingService:
                     published_at=publication["published_at"],
                     archived_at=None,
                     updated_at=timestamp,
+                    workspace_id=workspace_id,
                 )
         except sqlite3.IntegrityError as error:
             raise PublishingPersistenceError("could not restore publication version") from error
@@ -551,16 +640,28 @@ class PublishingService:
         publication_id: int | None = None,
         type_id: str | None = None,
         slug: str | None = None,
+        public_id: str | None = None,
+        route_path: str | None = None,
     ) -> PublicPublicationContent:
         with database_connection(self.database_path) as connection:
-            if publication_id is not None:
+            if public_id is not None:
+                publication = repository.get_publication_by_public_id(
+                    connection, public_id
+                )
+            elif route_path is not None:
+                publication = repository.get_publication_by_route_alias(
+                    connection, route_path
+                )
+            elif publication_id is not None:
                 publication = repository.get_publication(connection, publication_id)
             elif type_id is not None and slug is not None:
                 publication = repository.get_publication_by_slug(
                     connection, type_id=type_id, slug=slug
                 )
             else:
-                raise ValueError("publication_id or type_id and slug are required")
+                raise ValueError(
+                    "public_id, route_path, publication_id, or type_id and slug are required"
+                )
             if publication is None:
                 raise PublicationNotFoundError(publication_id or (type_id, slug))
             version = repository.get_public_version(connection, publication)

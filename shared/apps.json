@@ -40,25 +40,88 @@
   ],
   "apps": [
     {
-      "id": "calendar",
-      "name": "calendar",
-      "display_name": "Calendar",
-      "description": "월간 캘린더에서 일정과 주제를 관리합니다.",
-      "icon": "/static/icons/calendar.svg",
-      "route": "/apps/calendar/",
-      "category": "productivity",
-      "enabled": true,
-      "default_pinned": true,
-      "navigation_visible": true,
-      "launcher_visible": true,
-      "order": 10,
+      "id": "home",
+      "name": "home",
+      "display_name": "Home",
+      "description": "Workspace home",
+      "icon": "/static/icons/manual.svg",
+      "route": "/apps/home/",
+      "category": "system",
+      "enabled": false,
+      "default_pinned": false,
+      "navigation_visible": false,
+      "launcher_visible": false,
+      "order": 0,
       "version": "1.0.0",
       "kind": "internal",
-      "search_keywords": [
-        "schedule",
-        "tasks",
-        "일정"
-      ]
+      "search_keywords": [],
+      "platform": {
+        "key": "home",
+        "builtin": true,
+        "status": "ACTIVE",
+        "routes": {
+          "ui": "/w/{workspace_id}/home",
+          "api_v1": null,
+          "public": null
+        },
+        "sidebar": {
+          "visible": false,
+          "label": "Home",
+          "order": 0
+        },
+        "launcher": false,
+        "home_card": false,
+        "permissions": [],
+        "settings_schema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "widgets": [
+          {
+            "key": "favorites",
+            "name": "즐겨찾기",
+            "required_permissions": [],
+            "default_size": "MEDIUM",
+            "settings_schema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          {
+            "key": "recent_views",
+            "name": "최근 본 항목",
+            "required_permissions": [],
+            "default_size": "MEDIUM",
+            "settings_schema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          {
+            "key": "workspace.activity",
+            "name": "최근 Workspace 활동",
+            "required_permissions": [],
+            "default_size": "SMALL",
+            "settings_schema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          }
+        ],
+        "capabilities": {
+          "search": false,
+          "dashboard": true,
+          "internal_links": false
+        },
+        "default_enabled": {
+          "personal": true,
+          "team": true
+        }
+      }
     },
     {
       "id": "notes",
@@ -84,7 +147,614 @@
         "노트",
         "회의록",
         "연구 노트"
-      ]
+      ],
+      "platform": {
+        "key": "notes",
+        "builtin": true,
+        "status": "ACTIVE",
+        "routes": {
+          "ui": "/w/{workspace_id}/notes",
+          "api_v1": "/api/v1/workspaces/{workspace_id}/notes",
+          "public": null
+        },
+        "sidebar": {
+          "visible": true,
+          "label": "Notes",
+          "order": 10
+        },
+        "launcher": true,
+        "home_card": true,
+        "permissions": [
+          {
+            "code": "notes.read_all",
+            "name": "notes.read_all",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "notes.create",
+            "name": "notes.create",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "notes.update_own",
+            "name": "notes.update_own",
+            "description": "",
+            "supports_own": true,
+            "owner_only": false
+          },
+          {
+            "code": "notes.update_all",
+            "name": "notes.update_all",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "notes.delete_own",
+            "name": "notes.delete_own",
+            "description": "",
+            "supports_own": true,
+            "owner_only": false
+          },
+          {
+            "code": "notes.delete_all",
+            "name": "notes.delete_all",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "notes.manage",
+            "name": "notes.manage",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          }
+        ],
+        "settings_schema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "widgets": [
+          {
+            "key": "notes.recent",
+            "name": "최근 수정 Notes",
+            "required_permissions": [
+              "notes.read_all"
+            ],
+            "default_size": "MEDIUM",
+            "settings_schema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          {
+            "key": "notes.mine",
+            "name": "내 Notes",
+            "required_permissions": [
+              "notes.read_all"
+            ],
+            "default_size": "MEDIUM",
+            "settings_schema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          }
+        ],
+        "capabilities": {
+          "search": true,
+          "dashboard": true,
+          "internal_links": true
+        },
+        "default_enabled": {
+          "personal": true,
+          "team": true
+        }
+      }
+    },
+    {
+      "id": "calendar",
+      "name": "calendar",
+      "display_name": "Calendar",
+      "description": "월간 캘린더에서 일정과 주제를 관리합니다.",
+      "icon": "/static/icons/calendar.svg",
+      "route": "/apps/calendar/",
+      "category": "productivity",
+      "enabled": true,
+      "default_pinned": true,
+      "navigation_visible": true,
+      "launcher_visible": true,
+      "order": 20,
+      "version": "1.0.0",
+      "kind": "internal",
+      "search_keywords": [
+        "schedule",
+        "tasks",
+        "일정"
+      ],
+      "platform": {
+        "key": "calendar",
+        "builtin": true,
+        "status": "ACTIVE",
+        "routes": {
+          "ui": "/w/{workspace_id}/calendar",
+          "api_v1": "/api/v1/workspaces/{workspace_id}/calendar",
+          "public": null
+        },
+        "sidebar": {
+          "visible": true,
+          "label": "Calendar",
+          "order": 20
+        },
+        "launcher": true,
+        "home_card": true,
+        "permissions": [
+          {
+            "code": "calendar.read_all",
+            "name": "calendar.read_all",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "calendar.create",
+            "name": "calendar.create",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "calendar.update_own",
+            "name": "calendar.update_own",
+            "description": "",
+            "supports_own": true,
+            "owner_only": false
+          },
+          {
+            "code": "calendar.update_all",
+            "name": "calendar.update_all",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "calendar.delete_own",
+            "name": "calendar.delete_own",
+            "description": "",
+            "supports_own": true,
+            "owner_only": false
+          },
+          {
+            "code": "calendar.delete_all",
+            "name": "calendar.delete_all",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "calendar.manage",
+            "name": "calendar.manage",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          }
+        ],
+        "settings_schema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "widgets": [
+          {
+            "key": "calendar.today",
+            "name": "오늘 일정",
+            "required_permissions": [
+              "calendar.read_all"
+            ],
+            "default_size": "LARGE",
+            "settings_schema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          }
+        ],
+        "capabilities": {
+          "search": true,
+          "dashboard": true,
+          "internal_links": true
+        },
+        "default_enabled": {
+          "personal": true,
+          "team": true
+        }
+      }
+    },
+    {
+      "id": "search",
+      "name": "search",
+      "display_name": "Search",
+      "description": "Search workspace content",
+      "icon": "/static/icons/wiki.svg",
+      "route": "/apps/search/",
+      "category": "system",
+      "enabled": false,
+      "default_pinned": false,
+      "navigation_visible": false,
+      "launcher_visible": false,
+      "order": 30,
+      "version": "1.0.0",
+      "kind": "internal",
+      "search_keywords": [],
+      "platform": {
+        "key": "search",
+        "builtin": true,
+        "status": "ACTIVE",
+        "routes": {
+          "ui": "/w/{workspace_id}/search",
+          "api_v1": "/api/v1/workspaces/{workspace_id}/search",
+          "public": null
+        },
+        "sidebar": {
+          "visible": false,
+          "label": "Search",
+          "order": 30
+        },
+        "launcher": true,
+        "home_card": true,
+        "permissions": [
+          {
+            "code": "search.read_all",
+            "name": "search.read_all",
+            "description": "View workspace search shell and authorized results",
+            "supports_own": false,
+            "owner_only": false
+          }
+        ],
+        "settings_schema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "widgets": [
+          {
+            "key": "workspace.search",
+            "name": "Workspace 검색",
+            "required_permissions": [
+              "search.read_all"
+            ],
+            "default_size": "SMALL",
+            "settings_schema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          }
+        ],
+        "capabilities": {
+          "search": false,
+          "dashboard": true,
+          "internal_links": false
+        },
+        "default_enabled": {
+          "personal": true,
+          "team": true
+        }
+      }
+    },
+    {
+      "id": "publishing",
+      "name": "publishing",
+      "display_name": "Published",
+      "description": "Publish workspace documents",
+      "icon": "/static/icons/publication.svg",
+      "route": "/apps/publishing/",
+      "category": "knowledge",
+      "enabled": true,
+      "default_pinned": false,
+      "navigation_visible": true,
+      "launcher_visible": true,
+      "order": 40,
+      "version": "1.0.0",
+      "kind": "internal",
+      "search_keywords": [],
+      "platform": {
+        "key": "publishing",
+        "builtin": true,
+        "status": "ACTIVE",
+        "routes": {
+          "ui": "/w/{workspace_id}/publications",
+          "api_v1": "/api/v1/workspaces/{workspace_id}/publications",
+          "public": null
+        },
+        "sidebar": {
+          "visible": true,
+          "label": "Published",
+          "order": 40
+        },
+        "launcher": true,
+        "home_card": true,
+        "permissions": [
+          {
+            "code": "publishing.read_all",
+            "name": "publishing.read_all",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "publishing.create",
+            "name": "publishing.create",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "publishing.update_own",
+            "name": "publishing.update_own",
+            "description": "",
+            "supports_own": true,
+            "owner_only": false
+          },
+          {
+            "code": "publishing.update_all",
+            "name": "publishing.update_all",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "publishing.delete_own",
+            "name": "publishing.delete_own",
+            "description": "",
+            "supports_own": true,
+            "owner_only": false
+          },
+          {
+            "code": "publishing.delete_all",
+            "name": "publishing.delete_all",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "publishing.manage",
+            "name": "publishing.manage",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          }
+        ],
+        "settings_schema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "widgets": [],
+        "capabilities": {
+          "search": true,
+          "dashboard": false,
+          "internal_links": true
+        },
+        "default_enabled": {
+          "personal": true,
+          "team": true
+        }
+      }
+    },
+    {
+      "id": "assets",
+      "name": "assets",
+      "display_name": "Assets",
+      "description": "Manage workspace assets",
+      "icon": "/static/icons/publication.svg",
+      "route": "/apps/assets/",
+      "category": "knowledge",
+      "enabled": false,
+      "default_pinned": false,
+      "navigation_visible": false,
+      "launcher_visible": false,
+      "order": 50,
+      "version": "1.0.0",
+      "kind": "internal",
+      "search_keywords": [],
+      "platform": {
+        "key": "assets",
+        "builtin": true,
+        "status": "ACTIVE",
+        "routes": {
+          "ui": "/w/{workspace_id}/assets",
+          "api_v1": "/api/v1/workspaces/{workspace_id}/assets",
+          "public": null
+        },
+        "sidebar": {
+          "visible": false,
+          "label": "Assets",
+          "order": 50
+        },
+        "launcher": false,
+        "home_card": false,
+        "permissions": [
+          {
+            "code": "assets.read_all",
+            "name": "assets.read_all",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "assets.create",
+            "name": "assets.create",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "assets.update_own",
+            "name": "assets.update_own",
+            "description": "",
+            "supports_own": true,
+            "owner_only": false
+          },
+          {
+            "code": "assets.update_all",
+            "name": "assets.update_all",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "assets.delete_own",
+            "name": "assets.delete_own",
+            "description": "",
+            "supports_own": true,
+            "owner_only": false
+          },
+          {
+            "code": "assets.delete_all",
+            "name": "assets.delete_all",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "assets.manage",
+            "name": "assets.manage",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          }
+        ],
+        "settings_schema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "widgets": [],
+        "capabilities": {
+          "search": false,
+          "dashboard": false,
+          "internal_links": false
+        },
+        "default_enabled": {
+          "personal": true,
+          "team": true
+        }
+      }
+    },
+    {
+      "id": "workspace",
+      "name": "workspace",
+      "display_name": "Workspace",
+      "description": "Workspace administration",
+      "icon": "/static/icons/manual.svg",
+      "route": "/apps/workspace/",
+      "category": "system",
+      "enabled": false,
+      "default_pinned": false,
+      "navigation_visible": false,
+      "launcher_visible": false,
+      "order": 60,
+      "version": "1.0.0",
+      "kind": "internal",
+      "search_keywords": [],
+      "platform": {
+        "key": "workspace",
+        "builtin": true,
+        "status": "ACTIVE",
+        "routes": {
+          "ui": "/w/{workspace_id}/settings",
+          "api_v1": "/api/v1/workspaces/{workspace_id}/settings",
+          "public": null
+        },
+        "sidebar": {
+          "visible": true,
+          "label": "Workspace",
+          "order": 60
+        },
+        "launcher": false,
+        "home_card": false,
+        "permissions": [
+          {
+            "code": "workspace.settings.manage",
+            "name": "workspace.settings.manage",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "workspace.apps.manage",
+            "name": "workspace.apps.manage",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "workspace.members.invite",
+            "name": "workspace.members.invite",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "workspace.members.remove",
+            "name": "workspace.members.remove",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "workspace.roles.assign",
+            "name": "workspace.roles.assign",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "workspace.permissions.manage",
+            "name": "workspace.permissions.manage",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "workspace.ownership.transfer",
+            "name": "workspace.ownership.transfer",
+            "description": "",
+            "supports_own": false,
+            "owner_only": true
+          },
+          {
+            "code": "workspace.delete",
+            "name": "workspace.delete",
+            "description": "",
+            "supports_own": false,
+            "owner_only": true
+          }
+        ],
+        "settings_schema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "widgets": [],
+        "capabilities": {
+          "search": false,
+          "dashboard": false,
+          "internal_links": false
+        },
+        "default_enabled": {
+          "personal": false,
+          "team": false
+        }
+      }
     }
   ]
 }

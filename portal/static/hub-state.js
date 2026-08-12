@@ -14,3 +14,11 @@ export function decodePinnedIds(serialized, apps) {
     return defaultPinnedIds(apps);
   }
 }
+
+export function workspaceAppRoute(app, workspaceId) {
+  if (workspaceId && ["calendar", "notes", "publishing"].includes(app.id)) {
+    const slug = app.id === "publishing" ? "publications" : app.id;
+    return `/w/${workspaceId}/${slug}`;
+  }
+  return app.route;
+}

@@ -16,6 +16,104 @@ const registeredIds = new Set(
   [...document.querySelectorAll(".workspace-launcher-item[data-app-id]")]
     .map((item) => item.dataset.appId),
 );
+const appRoot = new URL("../../", import.meta.url);
+const guestActions = document.querySelector("#workspace-guest-actions");
+const account = document.querySelector("#workspace-account");
+const accountToggle = document.querySelector("#workspace-account-toggle");
+const accountMenu = document.querySelector("#workspace-account-menu");
+const accountLabel = document.querySelector("#workspace-account-label");
+const accountAvatar = document.querySelector("#workspace-account-avatar");
+const accountName = document.querySelector("#workspace-account-name");
+const accountEmail = document.querySelector("#workspace-account-email");
+const profileDialog = document.querySelector("#workspace-profile-dialog");
+const appLoading = document.querySelector("#workspace-app-loading");
+const workspaceMain = document.querySelector("#workspace-main");
+let appLoadingFallback = null;
+
+function finishAppLoading() {
+  if (!appLoading || appLoading.hidden || appLoading.classList.contains("is-leaving")) return;
+  window.clearTimeout(appLoadingFallback);
+  workspaceMain?.setAttribute("aria-busy", "false");
+  appLoading.setAttribute("aria-hidden", "true");
+  appLoading.classList.add("is-leaving");
+  window.setTimeout(() => {
+    appLoading.hidden = true;
+  }, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 180);
+}
+
+globalThis.workspaceAppReady = finishAppLoading;
+
+if (document.querySelector("[data-workspace-await-ready]")) {
+  appLoadingFallback = window.setTimeout(finishAppLoading, 15_000);
+} else {
+  window.requestAnimationFrame(() => window.requestAnimationFrame(finishAppLoading));
+}
+
+function canonicalAppRoute(appId, workspaceId) {
+  if (!workspaceId || !["calendar", "notes", "publishing"].includes(appId)) return null;
+  const slug = appId === "publishing" ? "publications" : appId;
+  return new URL(`w/${workspaceId}/${slug}`, appRoot).pathname;
+}
+
+function rewriteWorkspaceAppLinks(workspaceId) {
+  for (const appId of ["calendar", "notes", "publishing"]) {
+    const route = canonicalAppRoute(appId, workspaceId);
+    if (!route) continue;
+    for (const item of document.querySelectorAll(`[data-app-id="${appId}"]`)) {
+      const link = item.matches("a") ? item : item.querySelector("a");
+      if (link) link.href = route;
+    }
+  }
+}
+
+function csrfToken() {
+  const item = document.cookie.split("; ").find((entry) => entry.split("=", 1)[0].endsWith("_csrf"));
+  return item ? decodeURIComponent(item.split("=").slice(1).join("=")) : "";
+}
+
+async function loadAccount() {
+  try {
+    const response = await fetch(new URL("api/v1/users/me", appRoot), { headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error("guest");
+    const user = await response.json();
+    const display = user.display_name || user.email;
+    accountLabel.textContent = display;
+    accountAvatar.textContent = display.trim().charAt(0).toUpperCase() || "U";
+    accountName.textContent = display;
+    accountEmail.textContent = user.email;
+    document.querySelector("#workspace-profile-name").textContent = display;
+    document.querySelector("#workspace-profile-email").textContent = user.email;
+    rewriteWorkspaceAppLinks(user.last_workspace_id);
+    window.dispatchEvent(new CustomEvent("workspace:account-loaded", {
+      detail: { workspaceId: user.last_workspace_id },
+    }));
+    account.hidden = false;
+    return user;
+  } catch {
+    guestActions.hidden = false;
+    return null;
+  }
+}
+
+accountToggle?.addEventListener("click", () => {
+  const open = accountMenu.hidden;
+  accountMenu.hidden = !open;
+  accountToggle.setAttribute("aria-expanded", String(open));
+});
+document.querySelector("#workspace-profile-open")?.addEventListener("click", () => {
+  accountMenu.hidden = true;
+  accountToggle.setAttribute("aria-expanded", "false");
+  profileDialog.showModal();
+});
+document.querySelector("#workspace-profile-close")?.addEventListener("click", () => profileDialog.close());
+document.querySelector("#workspace-logout")?.addEventListener("click", async () => {
+  const response = await fetch(new URL("api/v1/auth/logout", appRoot), {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken() },
+  });
+  if (response.ok) window.location.assign(new URL("login", appRoot));
+});
+globalThis.workspaceAccountPromise = loadAccount();
 
 let launcherTrigger = null;
 

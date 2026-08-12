@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
+from access.context import WorkspaceContext
+
 
 @dataclass(frozen=True, slots=True)
 class NoteSnapshot:
@@ -23,18 +25,23 @@ class NoteSnapshotReader(Protocol):
 class NotesApplicationService(Protocol):
     """Narrow same-process boundary implemented by NotesService."""
 
-    def get_note(self, note_id: int) -> dict[str, Any]: ...
+    def get_note(self, context: WorkspaceContext, note_id: int) -> dict[str, Any]: ...
 
 
 class NotesServiceSnapshotReader:
     """Adapt the official Notes application service without internal HTTP."""
 
-    def __init__(self, notes_service: NotesApplicationService) -> None:
+    def __init__(
+        self,
+        notes_service: NotesApplicationService,
+        context: WorkspaceContext,
+    ) -> None:
         self._notes_service = notes_service
+        self._context = context
 
     def get_snapshot(self, note_id: int) -> NoteSnapshot | None:
         try:
-            note = self._notes_service.get_note(note_id)
+            note = self._notes_service.get_note(self._context, note_id)
         except LookupError:
             return None
         return NoteSnapshot(

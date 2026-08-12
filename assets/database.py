@@ -130,6 +130,76 @@ def verify_database(database_path: str | Path | None = None) -> None:
             raise RuntimeError("Asset database is missing owner reference index")
 
 
+def initialize_workspace_database(database_path: str | Path | None = None) -> Path:
+    """Create an empty Asset database directly at tenant-aware schema v2."""
+    path = resolve_database_path(database_path)
+    if path.exists():
+        verify_workspace_database(path)
+        return path
+    initialize_database(path)
+    from assets.migrations import MIGRATIONS, TARGET_VERSION
+    from shared.migrations import migrate
+
+    bootstrap_id = "00000000-0000-4000-8000-000000000001"
+    with sqlite3.connect(path) as connection:
+        _configure(connection)
+        migrate(
+            connection,
+            target_version=TARGET_VERSION,
+            migrations=MIGRATIONS,
+            context={
+                "workspace_id": bootstrap_id,
+                "actor_id": bootstrap_id,
+                "release_id": bootstrap_id,
+                "asset_public_ids": {},
+            },
+        )
+    verify_workspace_database(path)
+    return path
+
+
+def verify_workspace_database(database_path: str | Path | None = None) -> None:
+    """Fail closed unless Assets is at tenant-aware schema v2."""
+    path = resolve_database_path(database_path)
+    if not path.is_file():
+        raise RuntimeError(f"Asset database does not exist: {path}")
+    with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as connection:
+        _configure(connection)
+        if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+            raise RuntimeError("Asset database quick_check failed")
+        if connection.execute("PRAGMA foreign_key_check").fetchall():
+            raise RuntimeError("Asset database foreign_key_check failed")
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
+        if version != 2:
+            raise RuntimeError(
+                "asset database requires an offline migration: "
+                f"expected schema v2, found v{version}"
+            )
+        required = {
+            "assets": {"workspace_id", "uploaded_by", "public_id"},
+            "asset_references": {"workspace_id"},
+        }
+        for table, expected in required.items():
+            columns = {
+                row[1]: row for row in connection.execute(f"PRAGMA table_info({table})")
+            }
+            if not expected.issubset(columns) or any(
+                columns[name][3] != 1 for name in expected
+            ):
+                raise RuntimeError(f"Asset workspace schema is invalid: {table}")
+        indexes = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='index'"
+            )
+        }
+        if not {
+            "idx_assets_workspace_created",
+            "idx_asset_references_workspace_owner",
+        }.issubset(indexes):
+            raise RuntimeError("Asset workspace indexes are missing")
+
+
 @contextmanager
 def database_connection(database_path: str | Path | None = None) -> Iterator[sqlite3.Connection]:
     connection = sqlite3.connect(resolve_database_path(database_path))

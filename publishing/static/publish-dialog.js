@@ -8,6 +8,7 @@ export function createPublishingApi({
   publicationsUrl,
   typesUrl,
   fetchImpl = fetch,
+  csrfToken = () => "",
 }) {
   async function request(url, options = {}) {
     const response = await fetchImpl(url, {
@@ -29,7 +30,7 @@ export function createPublishingApi({
   function json(method, body) {
     return {
       method,
-      headers: { "Content-Type": "application/json" },
+      headers: mutationHeaders(csrfToken()),
       body: JSON.stringify(body),
     };
   }
@@ -59,9 +60,17 @@ export function createPublishingApi({
     publish(publicationId) {
       return request(`${publicationsUrl}/${publicationId}/publish`, {
         method: "POST",
+        headers: mutationHeaders(csrfToken()),
       });
     },
   });
+}
+
+function mutationHeaders(token) {
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { "X-CSRF-Token": token } : {}),
+  };
 }
 
 export function suggestPublicationSlug(title) {

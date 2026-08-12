@@ -301,6 +301,72 @@ def verify_database(database_path: str | Path | None = None) -> None:
         verify_projection_source_of_truth(connection)
 
 
+def initialize_workspace_database(database_path: str | Path | None = None) -> Path:
+    """Create an empty Publishing database at tenant-aware schema v2."""
+    path = resolve_database_path(database_path)
+    if path.exists():
+        verify_workspace_database(path)
+        return path
+    initialize_database(path)
+    from publishing.migrations import MIGRATIONS, TARGET_VERSION
+    from shared.migrations import migrate
+
+    bootstrap_id = "00000000-0000-4000-8000-000000000001"
+    with sqlite3.connect(path) as connection:
+        _configure_connection(connection)
+        migrate(
+            connection,
+            target_version=TARGET_VERSION,
+            migrations=MIGRATIONS,
+            context={
+                "workspace_id": bootstrap_id,
+                "actor_id": bootstrap_id,
+                "release_id": bootstrap_id,
+                "publication_public_ids": {},
+                "public_asset_projection": (),
+            },
+        )
+    verify_workspace_database(path)
+    return path
+
+
+def verify_workspace_database(database_path: str | Path | None = None) -> None:
+    """Fail closed unless Publishing is at tenant-aware schema v2."""
+    path = resolve_database_path(database_path)
+    if not path.is_file():
+        raise RuntimeError(f"Publishing database does not exist: {path}")
+    with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as connection:
+        _configure_connection(connection)
+        if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+            raise RuntimeError("Publishing database quick_check failed")
+        if connection.execute("PRAGMA foreign_key_check").fetchall():
+            raise RuntimeError("Publishing database foreign_key_check failed")
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
+        if version != 2:
+            raise RuntimeError(
+                "publishing database requires an offline migration: "
+                f"expected schema v2, found v{version}"
+            )
+        columns = {
+            row[1]: row
+            for row in connection.execute("PRAGMA table_info(publications)")
+        }
+        required = {"workspace_id", "created_by", "visibility", "public_id"}
+        if not required.issubset(columns) or any(
+            columns[name][3] != 1
+            for name in ("workspace_id", "created_by", "visibility")
+        ):
+            raise RuntimeError("Publishing workspace schema is invalid")
+        indexes = _schema_objects(connection, "index")
+        if "idx_publications_workspace_status" not in indexes:
+            raise RuntimeError("Publishing workspace index is missing")
+        for table in ("publication_route_aliases", "publication_public_assets"):
+            if table not in _schema_objects(connection, "table"):
+                raise RuntimeError(f"Publishing workspace table is missing: {table}")
+        verify_pointer_invariants(connection)
+        verify_projection_source_of_truth(connection)
+
+
 @contextmanager
 def database_connection(
     database_path: str | Path | None = None,

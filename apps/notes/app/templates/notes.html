@@ -1,22 +1,26 @@
 {% extends "app_shell.html" %}
 
 {% block page_head %}
-    <link rel="stylesheet" href="./static/shared/markdown/markdown.css">
-    <link rel="stylesheet" href="./static/notes.css">
+    <link rel="stylesheet" href="/static/shared/markdown/markdown.css">
+    <link rel="stylesheet" href="/static/notes/notes.css">
 {% endblock %}
 
 {% block content %}
 <section
   id="notes-app"
   class="notes-app"
+  data-workspace-await-ready
   data-mode="{{ notes_mode }}"
-  data-api-base="./api/notes"
-  data-internal-link-endpoint="{{ workspace_path('/api/internal-links/resolve') }}"
-  data-publications-endpoint="{{ workspace_path('/api/publications') }}"
-  data-publication-types-endpoint="{{ workspace_path('/api/publication-types') }}"
-  data-assets-upload-endpoint="{{ workspace_path('/api/assets/images') }}"
-  data-assets-resolve-endpoint="{{ workspace_path('/api/assets/resolve') }}"
-  data-assets-reconcile-endpoint="{{ workspace_path('/api/assets/references/reconcile') }}"
+  data-api-base="{{ notes_api_base }}"
+  data-csrf-cookie-name="{{ notes_csrf_cookie_name }}"
+  data-internal-link-endpoint="{{ notes_internal_link_endpoint|default(workspace_path('/api/internal-links/resolve')) }}"
+  data-publications-endpoint="{{ notes_publications_api_base|default(workspace_path('/api/publications')) }}"
+  data-publication-types-endpoint="{{ notes_publication_types_endpoint|default(workspace_path('/api/publication-types')) }}"
+  data-assets-upload-endpoint="{{ notes_assets_api_base|default(workspace_path('/api/assets')) }}/images"
+  data-assets-resolve-endpoint="{{ notes_assets_api_base|default(workspace_path('/api/assets')) }}/resolve"
+  data-assets-reconcile-endpoint="{{ notes_assets_api_base|default(workspace_path('/api/assets')) }}/references/reconcile"
+  data-user-state-base="{{ workspace_user_state_api|default('') }}"
+  data-app-route="{{ notes_workspace_route|default(workspace_path('/apps/notes/')) }}"
   aria-labelledby="notes-title"
 >
   <header class="notes-toolbar">
@@ -60,6 +64,7 @@
         <header class="notes-editor-header">
           <button id="view-notes-back" class="notes-secondary-button notes-back" type="button">목록으로</button>
           <span class="note-view-spacer"></span>
+          <button id="favorite-note" class="notes-secondary-button" type="button" aria-pressed="false" hidden>즐겨찾기</button>
           <button id="publish-note" class="notes-secondary-button" type="button">발행</button>
           <button id="edit-note" class="notes-primary-button" type="button">편집</button>
         </header>
@@ -180,5 +185,5 @@
 {% endblock %}
 
 {% block page_scripts %}
-    <script type="module" src="./static/notes.js"></script>
+    <script type="module" src="/static/notes/notes.js"></script>
 {% endblock %}

@@ -45,18 +45,19 @@ def test_connection_enables_foreign_keys_and_cascades_links(tmp_path: Path) -> N
         cursor = connection.execute(
             """
             INSERT INTO notes (
-                title, content, note_type, is_pinned, created_at, updated_at
+                title, content, note_type, is_pinned, created_at, updated_at,
+                workspace_id, created_by, updated_by
             ) VALUES ('Note', '', 'general', 0, '2026-07-29T00:00:00+00:00',
-                      '2026-07-29T00:00:00+00:00')
+                      '2026-07-29T00:00:00+00:00', 'w', 'u', 'u')
             """
         )
         connection.execute(
             """
             INSERT INTO note_links (
                 note_id, source_app, source_type, source_id,
-                source_title_snapshot, created_at
+                source_title_snapshot, created_at, workspace_id
             ) VALUES (?, 'calendar', 'event', '1', 'Event',
-                      '2026-07-29T00:00:00+00:00')
+                      '2026-07-29T00:00:00+00:00', 'w')
             """,
             (cursor.lastrowid,),
         )
@@ -94,3 +95,35 @@ def test_rejects_unversioned_existing_schema(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="explicit migration"):
         initialize_database(path)
+
+
+def test_v1_staged_cutover_compatibility_and_workspace_route_guard(tmp_path: Path) -> None:
+    path = tmp_path / "legacy.db"
+    with sqlite3.connect(path) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE notes (
+                id INTEGER PRIMARY KEY, title TEXT NOT NULL, content TEXT NOT NULL,
+                note_type TEXT NOT NULL, is_pinned INTEGER NOT NULL,
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+            );
+            CREATE TABLE note_links (
+                id INTEGER PRIMARY KEY, note_id INTEGER NOT NULL,
+                source_app TEXT NOT NULL, source_type TEXT NOT NULL,
+                source_id TEXT NOT NULL, source_title_snapshot TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE
+            );
+            CREATE INDEX idx_notes_listing ON notes(is_pinned, updated_at, id);
+            CREATE INDEX idx_note_links_note ON note_links(note_id, id);
+            CREATE INDEX idx_note_links_source
+                ON note_links(source_app, source_type, source_id, note_id);
+            PRAGMA user_version=1;
+            """
+        )
+
+    # Pre-cutover processes remain startable while the v2 staging copy awaits
+    # coordinated promotion, but canonical workspace routes cannot activate.
+    verify_database(path)
+    with pytest.raises(RuntimeError, match="legacy-only"):
+        verify_database(path, require_current=True)

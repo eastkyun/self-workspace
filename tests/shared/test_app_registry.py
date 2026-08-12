@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -298,6 +299,27 @@ def test_registry_json_serialization_is_canonical(tmp_path: Path) -> None:
     assert first.to_json().index('"id": "calendar"') < first.to_json().index(
         '"id": "notes"'
     )
+
+
+def test_default_registry_serialization_preserves_platform_metadata() -> None:
+    registry = AppRegistry.load_default()
+    manifest = registry.get_app("notes")
+    with pytest.raises(TypeError, match="immutable"):
+        manifest.platform["status"] = "DISABLED"
+    with pytest.raises(TypeError, match="immutable"):
+        manifest.platform["routes"]["ui"] = "/tampered"
+    document = json.loads(registry.to_json())
+    notes = next(app for app in document["apps"] if app["id"] == "notes")
+    assert notes["platform"]["key"] == "notes"
+
+
+def test_workspace_manifest_uses_permission_aware_settings_entry_route() -> None:
+    registry = AppRegistry.load_default()
+
+    workspace = registry.get_app("workspace")
+
+    assert workspace is not None
+    assert workspace.platform["routes"]["ui"] == "/w/{workspace_id}/settings"
 
 
 def test_search_is_case_insensitive_and_normalizes_whitespace(

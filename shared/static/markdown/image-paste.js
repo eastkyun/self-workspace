@@ -56,6 +56,7 @@ export function createAssetApi({
   uploadUrl = "/api/assets/images",
   reconcileUrl = "/api/assets/references/reconcile",
   fetchImpl = globalThis.fetch,
+  csrfToken = () => "",
 } = {}) {
   async function read(response) {
     const payload = await response.json();
@@ -79,6 +80,7 @@ export function createAssetApi({
         headers: {
           "Content-Type": file.type || "application/octet-stream",
           "X-File-Name": encodeURIComponent(file.name || "pasted-image"),
+          ...(csrfToken() ? { "X-CSRF-Token": csrfToken() } : {}),
         },
         body: file,
       }));
@@ -86,7 +88,10 @@ export function createAssetApi({
     async reconcile(owner) {
       return read(await fetchImpl(reconcileUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(csrfToken() ? { "X-CSRF-Token": csrfToken() } : {}),
+        },
         body: JSON.stringify(owner),
       }));
     },

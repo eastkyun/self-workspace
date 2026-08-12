@@ -34,12 +34,14 @@ def shell_context(
     *,
     current_app_id: str,
     page_title: str,
+    path_for: Callable[[str], str] | None = None,
 ) -> dict[str, Any]:
     registered_apps = registry.get_enabled()
     navigation_apps = registry.get_navigation()
     launcher_apps = registry.get_launcher()
     current_app = registry.get_app(current_app_id)
-    path_for: Callable[[str], str] = lambda path: workspace_path(request, path)
+    if path_for is None:
+        path_for = lambda path: workspace_path(request, path)
     return {
         "apps": registered_apps,
         "navigation_apps": navigation_apps,

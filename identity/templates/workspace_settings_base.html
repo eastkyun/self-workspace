@@ -1,0 +1,49 @@
+{% extends "app_shell.html" %}
+
+{% block page_head %}
+  <link rel="stylesheet" href="/static/shared/workspace-settings.css">
+{% endblock %}
+
+{% block global_actions %}
+  <a class="workspace-settings-home-link" href="/w/{{ workspace.id }}/home" aria-label="홈으로">홈으로</a>
+{% endblock %}
+
+{% block content %}
+<div class="workspace-settings-page" data-workspace-settings>
+  <header class="workspace-settings-hero">
+    <div>
+      <p class="workspace-settings-kicker">WORKSPACE SETTINGS</p>
+      <h2 id="workspace-settings-title">{{ settings_heading }}</h2>
+      <p>{{ settings_description }}</p>
+    </div>
+    <label class="workspace-settings-switcher" for="workspace-selector">
+      <span>현재 워크스페이스</span>
+      <select id="workspace-selector" data-workspace-selector>
+        {% for item in workspaces %}
+        <option value="{{ item.id }}"{% if item.id == workspace.id %} selected{% endif %}>{{ item.name }} ({{ item.type }})</option>
+        {% endfor %}
+      </select>
+    </label>
+  </header>
+
+  <div class="workspace-settings-layout">
+    <nav class="workspace-settings-nav" aria-label="Workspace settings">
+      <p>설정</p>
+      {% if can_manage_settings %}<a{% if settings_section == 'general' %} aria-current="page"{% endif %} href="/w/{{ workspace.id }}/settings/general">일반</a>{% endif %}
+      <a{% if settings_section == 'members' %} aria-current="page"{% endif %} href="/w/{{ workspace.id }}/settings/members">멤버</a>
+      {% if can_manage_apps %}<a{% if settings_section == 'apps' %} aria-current="page"{% endif %} href="/w/{{ workspace.id }}/settings/apps">앱</a>{% endif %}
+      {% if can_manage_settings %}<a{% if settings_section == 'roles' %} aria-current="page"{% endif %} href="/w/{{ workspace.id }}/settings/roles">역할</a>{% endif %}
+      {% if can_manage_permissions %}<a{% if settings_section == 'permissions' %} aria-current="page"{% endif %} href="/w/{{ workspace.id }}/settings/permissions">권한</a>{% endif %}
+    </nav>
+
+    <div class="workspace-settings-content">
+      {% block settings_content %}{% endblock %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+  <script src="/static/shared/workspace-settings.js" defer></script>
+  {% block settings_scripts %}{% endblock %}
+{% endblock %}

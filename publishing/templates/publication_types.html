@@ -8,7 +8,8 @@
 <section
   id="publication-types-app"
   class="publication-types-page"
-  data-api-endpoint="{{ workspace_path('/api/publication-type-manifests') }}"
+  data-workspace-await-ready
+  data-api-endpoint="{{ publication_type_api_endpoint | default(workspace_path('/api/publication-type-manifests')) }}"
   aria-labelledby="publication-types-title"
 >
   <header class="publication-types-hero">

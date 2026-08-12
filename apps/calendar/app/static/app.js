@@ -1,4 +1,10 @@
 import {
+  Calendar,
+  classicThemePlugin,
+  dayGridPlugin,
+  koLocale,
+} from "./vendor/fullcalendar/7.0.2/daygrid.esm.js";
+import {
   activeTopicOptions,
   allDayInputToRange,
   apiTimestampToLocalInput,
@@ -24,10 +30,10 @@ import {
   createMarkdownToolbar,
   mountMarkdownViewer,
   resolveInternalLinks,
-} from "./shared/markdown/index.js";
+} from "/static/shared/markdown/index.js";
+import { createWorkspaceUserState } from "/static/shared/workspace-user-state.js";
 
 const STATUS_LABELS = { todo: "할 일", doing: "진행 중", done: "완료" };
-const APP_BASE_URL = new URL("./", document.baseURI);
 const dialog = document.querySelector("#task-dialog");
 const form = document.querySelector("#task-form");
 const titleInput = document.querySelector("#task-title");
@@ -42,6 +48,7 @@ const taskDetailStatus = document.querySelector("#task-detail-status");
 const taskDetailSchedule = document.querySelector("#task-detail-schedule");
 const taskDetailTopics = document.querySelector("#task-detail-topics");
 const editTaskButton = document.querySelector("#edit-task-button");
+const favoriteTaskButton = document.querySelector("#favorite-task-button");
 const cancelDialogButton = document.querySelector("#cancel-dialog");
 const saveTaskButton = document.querySelector("#save-task-button");
 const statusInput = document.querySelector("#task-status");
@@ -82,8 +89,21 @@ const topicOverflowPopover = document.querySelector("#topic-overflow-popover");
 const topicOverflowList = document.querySelector("#topic-overflow-list");
 const activeTopicCount = document.querySelector("#active-topic-count");
 const calendarPage = document.querySelector(".calendar-page");
+const calendarElement = document.querySelector("#calendar");
+const apiBase = calendarPage.dataset.apiBase;
+const csrfCookieName = calendarPage.dataset.csrfCookieName;
 const notesRoute = calendarPage.dataset.notesRoute;
+const notesApiBase = calendarPage.dataset.notesApiBase;
 const internalLinkEndpoint = calendarPage.dataset.internalLinkEndpoint;
+const userState = calendarPage.dataset.userStateBase
+  ? createWorkspaceUserState({
+    baseUrl: calendarPage.dataset.userStateBase,
+    csrfToken: () => {
+      const value = document.cookie.split("; ").find((entry) => entry.startsWith(`${csrfCookieName}=`))?.split("=").slice(1).join("=");
+      return value ? decodeURIComponent(value) : "";
+    },
+  })
+  : null;
 const linkedNotesSection = document.querySelector("#linked-notes-section");
 const linkedNotesList = document.querySelector("#linked-notes-list");
 const linkedNotesStatus = document.querySelector("#linked-notes-status");
@@ -186,8 +206,16 @@ function roundedDefaultRange(date = null) {
 }
 
 async function request(url, options = {}) {
-  const response = await fetch(new URL(url, APP_BASE_URL), {
-    headers: { "Content-Type": "application/json", ...options.headers },
+  const token = csrfCookieName
+    ? document.cookie.split("; ").find((entry) => entry.startsWith(`${csrfCookieName}=`))?.split("=").slice(1).join("=")
+    : "";
+  const path = url.replace(/^api\//, "");
+  const response = await fetch(`${apiBase}/${path}`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { "X-CSRF-Token": decodeURIComponent(token) } : {}),
+      ...options.headers,
+    },
     ...options,
   });
   if (!response.ok) {
@@ -209,9 +237,16 @@ async function request(url, options = {}) {
 }
 
 async function notesRequest(path = "", options = {}) {
-  const response = await fetch(`${notesRoute}api/notes${path}`, {
+  const token = csrfCookieName
+    ? document.cookie.split("; ").find((entry) => entry.startsWith(`${csrfCookieName}=`))?.split("=").slice(1).join("=")
+    : "";
+  const response = await fetch(`${notesApiBase}${path}`, {
     ...options,
-    headers: { "Content-Type": "application/json", ...options.headers },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { "X-CSRF-Token": decodeURIComponent(token) } : {}),
+      ...options.headers,
+    },
   });
   if (!response.ok) {
     let message = "노트 요청을 처리하지 못했습니다.";
@@ -482,9 +517,10 @@ function refreshViews() {
   const overdueCount = tasks.filter((task) => isTaskOverdue(task)).length;
   document.querySelector("#overdue-count").textContent = overdueCount;
   document.querySelector("#filter-empty").hidden = activeFilters().statuses.size > 0;
-  calendar.removeAllEvents();
-  calendar.addEventSource(visibleTasks().map((task) => taskToCalendarEvent(task)));
-  calendar.render();
+  calendar.batchRendering(() => {
+    for (const source of calendar.getEventSources()) source.remove();
+    calendar.addEventSource(visibleTasks().map((task) => taskToCalendarEvent(task)));
+  });
   renderSelectedDate();
   scheduleNextOverdueRefresh();
 }
@@ -599,6 +635,18 @@ function enterTaskEditMode() {
 function openTaskDialog(task = null, date = null) {
   const dialogGeneration = ++taskDialogGeneration;
   currentTask = task;
+  favoriteTaskButton.hidden = !task || !userState;
+  if (task && userState) {
+    void userState.recent("calendar", task.id, {
+      app_key: "calendar", label: task.title, href: calendarPage.dataset.appRoute,
+    });
+    void userState.favorites().then((items) => {
+      if (currentTask?.id !== task.id) return;
+      const active = items.some((item) => item.resource_type === "calendar" && String(item.resource_id) === String(task.id));
+      favoriteTaskButton.setAttribute("aria-pressed", String(active));
+      favoriteTaskButton.textContent = active ? "즐겨찾기 해제" : "즐겨찾기";
+    }).catch(() => {});
+  }
   form.reset();
   const defaults = roundedDefaultRange(date);
   taskIdInput.value = task?.id ?? "";
@@ -657,6 +705,19 @@ function openTaskDialog(task = null, date = null) {
   dialog.showModal();
   setTaskDialogMode(task ? "detail" : "create");
 }
+
+favoriteTaskButton?.addEventListener("click", async () => {
+  if (!userState || !currentTask) return;
+  const active = favoriteTaskButton.getAttribute("aria-pressed") === "true";
+  try {
+    if (active) await userState.unfavorite("calendar", currentTask.id);
+    else await userState.favorite("calendar", currentTask.id, {
+      app_key: "calendar", label: currentTask.title, href: calendarPage.dataset.appRoute,
+    });
+    favoriteTaskButton.setAttribute("aria-pressed", String(!active));
+    favoriteTaskButton.textContent = active ? "즐겨찾기" : "즐겨찾기 해제";
+  } catch (error) { showError(error.message); }
+});
 
 function noteTypeLabel(noteType) {
   return {
@@ -895,14 +956,26 @@ async function deleteTask(task) {
   }
 }
 
-function selectDate(date) {
+function syncSelectedDateCell(date, preferredCell = null) {
+  calendarElement.querySelectorAll("[data-date].is-selected-date").forEach((cell) => {
+    cell.classList.remove("is-selected-date");
+  });
+  const selectedCell = preferredCell?.dataset.date === date
+    ? preferredCell
+    : calendarElement.querySelector(`[data-date="${date}"]`);
+  selectedCell?.classList.add("is-selected-date");
+}
+
+function selectDate(date, dayElement = null) {
   selectedKstDate = date;
   selectedPage = 1;
-  calendar.render();
+  syncSelectedDateCell(date, dayElement);
   renderSelectedDate();
 }
 
-calendar = new FullCalendar.Calendar(document.querySelector("#calendar"), {
+calendar = new Calendar(calendarElement, {
+  plugins: [dayGridPlugin, classicThemePlugin],
+  locales: [koLocale],
   initialView: "dayGridMonth",
   locale: "ko",
   timeZone: "Asia/Seoul",
@@ -916,7 +989,10 @@ calendar = new FullCalendar.Calendar(document.querySelector("#calendar"), {
   selectable: false,
   nowIndicator: false,
   eventDisplay: "block",
-  dateClick: (info) => selectDate(info.dateStr),
+  dayCellDidMount: (info) => {
+    info.el.tabIndex = 0;
+    info.el.setAttribute("aria-label", `날짜 선택: ${info.el.dataset.date}`);
+  },
   eventClick: (info) => {
     info.jsEvent.preventDefault();
     const task = tasks.find((item) => String(item.id) === info.event.id);
@@ -924,6 +1000,7 @@ calendar = new FullCalendar.Calendar(document.querySelector("#calendar"), {
   },
   eventDidMount: (info) => {
     const task = tasks.find((item) => String(item.id) === info.event.id);
+    info.el.dataset.calendarEvent = "true";
     info.el.tabIndex = 0;
     info.el.setAttribute("role", "button");
     info.el.setAttribute("aria-label", task ? `일정 열기: ${task.title}` : `일정 열기: ${info.event.title}`);
@@ -970,9 +1047,38 @@ calendar = new FullCalendar.Calendar(document.querySelector("#calendar"), {
   },
 });
 calendar.render();
+
+function dayCellFromInteractionTarget(target) {
+  if (!(target instanceof Element)) return null;
+  if (target.closest("[data-calendar-event], button, a[href]")) return null;
+  return target.closest('[role="gridcell"][data-date]');
+}
+
+["mousedown", "touchstart"].forEach((eventName) => {
+  calendarElement.addEventListener(eventName, (event) => {
+    if (dayCellFromInteractionTarget(event.target)) event.stopPropagation();
+  }, { capture: true });
+});
+calendarElement.addEventListener("click", (event) => {
+  const dayCell = dayCellFromInteractionTarget(event.target);
+  if (dayCell) selectDate(dayCell.dataset.date, dayCell);
+});
+calendarElement.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const dayCell = dayCellFromInteractionTarget(event.target);
+  if (!dayCell) return;
+  event.preventDefault();
+  selectDate(dayCell.dataset.date, dayCell);
+});
+
+function refreshCalendarLayout(calendarInstance = calendar) {
+  if (typeof calendarInstance?.updateSize === "function") calendarInstance.updateSize();
+  else calendarInstance?.render();
+}
+
 window.addEventListener("workspace:layout-change", () => {
   window.requestAnimationFrame(() => {
-    calendar.updateSize();
+    refreshCalendarLayout();
     updateTopicOverflowButton();
   });
 });
@@ -1072,4 +1178,5 @@ loadData()
       openTaskDialog(linkedTask);
     }
   })
-  .catch((error) => showError(error.message));
+  .catch((error) => showError(error.message))
+  .finally(() => globalThis.workspaceAppReady?.());

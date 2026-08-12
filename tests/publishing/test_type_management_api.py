@@ -142,7 +142,8 @@ async def test_custom_type_applies_immediately_persists_and_cannot_delete_in_use
         async with await client_for(restarted) as client:
             types = await client.get("/api/publication-types")
             manifests = await client.get("/api/publication-type-manifests")
-            note = restarted.state.notes_service.create_note(
+            note = restarted.state.legacy_notes_service.create_note(
+                restarted.state.legacy_notes_context,
                 NoteCreate(
                     title="Why immutable snapshots?",
                     content="Because published versions must not drift.",
@@ -196,7 +197,8 @@ async def test_publication_reads_refresh_a_stale_registry_snapshot(
                 json=faq_payload(),
             )
             assert created.status_code == 201
-            note = application.state.notes_service.create_note(
+            note = application.state.legacy_notes_service.create_note(
+                application.state.legacy_notes_context,
                 NoteCreate(
                     title="Out-of-process manifest update",
                     content="The publication remains readable.",

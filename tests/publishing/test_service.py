@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from access.context import WorkspaceContext
 from publishing.database import (
     database_connection,
     initialize_database,
@@ -36,6 +37,14 @@ from publishing.types.manual import ManualPublicationType
 from publishing.types.wiki import WikiPublicationType
 
 NOW = datetime(2026, 7, 30, tzinfo=UTC)
+CONTEXT = WorkspaceContext(
+    user_id="00000000-0000-4000-8000-000000000001",
+    workspace_id="00000000-0000-4000-8000-000000000002",
+    membership_id="00000000-0000-4000-8000-000000000003",
+    role_key="owner",
+    enabled_app_ids=("notes",),
+    authorization_version=1,
+)
 
 
 class FakeNotes:
@@ -93,7 +102,8 @@ def assert_valid(path: Path) -> None:
 
 def test_notes_service_adapter_reads_saved_state_in_process() -> None:
     class FakeNotesService:
-        def get_note(self, note_id: int):
+        def get_note(self, context: WorkspaceContext, note_id: int):
+            assert context is CONTEXT
             if note_id != 13:
                 raise LookupError(note_id)
             return {
@@ -103,7 +113,7 @@ def test_notes_service_adapter_reads_saved_state_in_process() -> None:
                 "updated_at": "2026-07-30T00:00:00Z",
             }
 
-    reader = NotesServiceSnapshotReader(FakeNotesService())
+    reader = NotesServiceSnapshotReader(FakeNotesService(), CONTEXT)
 
     assert reader.get_snapshot(13) == NoteSnapshot(
         13, "Saved", "# Saved", "2026-07-30T00:00:00Z"

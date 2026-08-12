@@ -20,10 +20,18 @@ if (root) {
   };
   let editingId = null;
   let currentItems = [];
+  const csrfToken = () => {
+    const item = document.cookie.split("; ").find((entry) => entry.split("=", 1)[0].endsWith("_csrf"));
+    return item ? decodeURIComponent(item.split("=").slice(1).join("=")) : "";
+  };
 
   async function request(url, options = {}) {
+    const mutating = options.method && options.method !== "GET";
     const response = await fetch(url, {
-      headers: options.body ? { "Content-Type": "application/json" } : {},
+      headers: {
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
+        ...(mutating ? { "X-CSRF-Token": csrfToken() } : {}),
+      },
       ...options,
     });
     if (response.status === 204) return null;
@@ -218,5 +226,7 @@ if (root) {
     }
   });
   fields.reset.addEventListener("click", () => reset());
-  load().catch((error) => setStatus(error.message, "error"));
+  load()
+    .catch((error) => setStatus(error.message, "error"))
+    .finally(() => globalThis.workspaceAppReady?.());
 }

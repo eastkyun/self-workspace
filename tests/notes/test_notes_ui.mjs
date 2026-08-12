@@ -86,6 +86,7 @@ test("API adapter builds mounted relative CRUD requests", async () => {
 });
 
 test("UI contains accessible list, editor, statuses, and dirty guard", () => {
+  assert.match(script, /from "\/static\/shared\/markdown\/index\.js"/);
   assert.match(template, /role="listbox"/);
   assert.match(script, /setAttribute\("aria-selected"/);
   assert.match(template, /aria-live="polite"/);
@@ -125,4 +126,9 @@ test("mobile layout is single-column without horizontal overflow", () => {
   assert.match(styles, /\.notes-document\s*\{[^}]*grid-template-columns:\s*1fr/s);
   assert.match(styles, /\.notes-app\s*\{[^}]*min-width:\s*0/s);
   assert.match(styles, /\.notes-workspace\s*\{[^}]*min-width:\s*0/s);
+});
+
+test("signals readiness after the initial notes request settles", () => {
+  assert.match(template, /data-workspace-await-ready/);
+  assert.match(script, /\.finally\(\(\) => globalThis\.workspaceAppReady\?\.\(\)\)/);
 });

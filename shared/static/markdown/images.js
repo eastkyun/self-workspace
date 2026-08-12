@@ -30,7 +30,10 @@ export function isSafeAssetHref(href, expectedAssetId = null) {
   } catch {
     return false;
   }
-  const match = /(?:^|\/)api\/assets\/([1-9][0-9]*)\/content$/u.exec(value);
+  const legacy = /^\/api\/assets\/([1-9][0-9]*)\/content$/u.exec(value);
+  const workspace = /^\/api\/v1\/workspaces\/[0-9a-f-]{36}\/assets\/([1-9][0-9]*)\/content$/u.exec(value);
+  const published = /^\/api\/publications\/public\/[0-9a-f-]{36}\/assets\/([1-9][0-9]*)\/content$/u.exec(value);
+  const match = legacy || workspace || published;
   return Boolean(
     match
     && (expectedAssetId === null || match[1] === String(expectedAssetId)),

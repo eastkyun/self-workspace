@@ -28,3 +28,8 @@ test("management UI uses the declarative API without remote requests", () => {
   assert.match(script, /즉시 적용/);
   assert.doesNotMatch(script, /https?:\/\//);
 });
+
+test("signals readiness after publication types initially load", () => {
+  assert.match(template, /data-workspace-await-ready/);
+  assert.match(script, /\.finally\(\(\) => globalThis\.workspaceAppReady\?\.\(\)\)/);
+});

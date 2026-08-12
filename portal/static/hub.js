@@ -1,4 +1,4 @@
-import { decodePinnedIds } from "./hub-state.js";
+import { decodePinnedIds, workspaceAppRoute } from "./hub-state.js";
 
 const STORAGE_KEY = "my-workspace:pinned-apps:v1";
 const cardTemplate = document.querySelector("#app-card-template");
@@ -8,6 +8,11 @@ const allAppsContainer = document.querySelector("#all-apps");
 
 let apps = [];
 let pinnedIds = new Set();
+let workspaceId = null;
+
+function appRoute(app) {
+  return workspaceAppRoute(app, workspaceId);
+}
 
 function safePinnedIds(registeredApps) {
   try {
@@ -26,7 +31,7 @@ function savePinnedIds() {
 }
 
 function linkAttributes(link, app) {
-  link.href = app.route;
+  link.href = appRoute(app);
   if (app.kind === "external") {
     link.target = "_blank";
     link.rel = "noopener noreferrer";
@@ -75,10 +80,12 @@ window.addEventListener("workspace:pins-changed", (event) => {
 });
 
 async function start() {
-  const response = await fetch("./api/hub/apps", {
-    headers: { Accept: "application/json" },
-  });
+  const [response, user] = await Promise.all([
+    fetch("./api/hub/apps", { headers: { Accept: "application/json" } }),
+    globalThis.workspaceAccountPromise ?? Promise.resolve(null),
+  ]);
   if (!response.ok) throw new Error("앱 목록을 불러오지 못했습니다.");
+  workspaceId = user?.last_workspace_id || null;
   apps = await response.json();
   pinnedIds = safePinnedIds(apps);
   render();
@@ -87,4 +94,4 @@ async function start() {
 start().catch((error) => {
   pinnedEmpty.hidden = false;
   pinnedEmpty.textContent = error.message;
-});
+}).finally(() => globalThis.workspaceAppReady?.());

@@ -25,6 +25,30 @@ _SLUG_PATTERN = r"^[a-z][a-z0-9-]*$"
 _VERSION_PATTERN = r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$"
 
 
+class FrozenJSONDict(dict[str, Any]):
+    """JSON-object compatible mapping that remains serializable but cannot mutate."""
+
+    @staticmethod
+    def _immutable(*_args: object, **_kwargs: object) -> None:
+        raise TypeError("platform metadata is immutable")
+
+    __setitem__ = _immutable
+    __delitem__ = _immutable
+    clear = _immutable
+    pop = _immutable
+    popitem = _immutable
+    setdefault = _immutable
+    update = _immutable
+
+
+def _deep_freeze_json(value: Any) -> Any:
+    if isinstance(value, dict):
+        return FrozenJSONDict({key: _deep_freeze_json(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return tuple(_deep_freeze_json(item) for item in value)
+    return value
+
+
 def normalize_internal_route(route: str) -> str:
     """Return the canonical internal app route.
 
@@ -108,6 +132,18 @@ class AppManifest(BaseModel):
     version: str = Field(pattern=_VERSION_PATTERN)
     kind: Literal["internal", "external"] = "internal"
     search_keywords: tuple[str, ...] = ()
+    # Declarative platform metadata is preserved on registry round trips.
+    # Runtime wiring remains explicit in portal/main.py and is never imported here.
+    platform: dict[str, Any] | None = None
+
+    @field_validator("platform")
+    @classmethod
+    def freeze_platform_metadata(cls, value: Any) -> dict[str, Any] | None:
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise ValueError("platform metadata must be an object")
+        return _deep_freeze_json(json.loads(json.dumps(value, ensure_ascii=False)))
 
     @field_validator("icon")
     @classmethod

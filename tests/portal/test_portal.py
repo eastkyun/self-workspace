@@ -1,6 +1,8 @@
 from pathlib import Path
+import sqlite3
 
 from fastapi.testclient import TestClient
+from starlette.middleware.gzip import GZipMiddleware
 
 from portal.main import create_app
 from portal.quotes import Quote
@@ -53,10 +55,25 @@ def registry(*apps: AppManifest) -> AppRegistry:
     )
 
 
+def test_portal_compresses_large_responses(tmp_path: Path) -> None:
+    application = create_app(
+        tmp_path / "calendar.db",
+        notes_database_path=tmp_path / "notes.db",
+    )
+
+    middleware = next(
+        item for item in application.user_middleware if item.cls is GZipMiddleware
+    )
+    assert middleware.kwargs["minimum_size"] == 1_000
+
+
+
 def test_default_registry_loads_calendar_and_notes_apps() -> None:
     app_registry = AppRegistry.load_default()
 
-    assert [app.id for app in app_registry.get_all()] == ["calendar", "notes"]
+    assert [app.id for app in app_registry.get_all()] == [
+        "calendar", "notes", "publishing", "assets", "home", "search", "workspace"
+    ]
     assert app_registry.get_app("calendar").route == "/apps/calendar/"
     assert app_registry.get_app("calendar").navigation_visible is True
     assert app_registry.get_app("calendar").launcher_visible is True
@@ -89,6 +106,8 @@ def test_portal_surfaces_use_the_same_registry_snapshot(tmp_path: Path) -> None:
     assert home.text.count('data-app-id="calendar"') == 1
     assert home.text.count('data-app-id="launcher"') == 1
     assert 'data-app-id="disabled"' not in home.text
+    assert "지식 발행물" not in home.text
+    assert "hub-publication" not in home.text
 
 
 def test_hub_api_uses_canonical_registry_fields(tmp_path: Path) -> None:
@@ -159,3 +178,164 @@ def test_hub_escapes_quote_content_and_falls_back_when_empty(
     assert "&lt;Author&gt;" in escaped.text
     assert 'class="hub-quote"' not in fallback.text
     assert "좋은 오후예요" in fallback.text
+
+
+def test_workspace_internal_links_require_membership_and_scope_notes(tmp_path: Path) -> None:
+    calendar_path = tmp_path / "calendar.db"
+    notes_path = tmp_path / "notes.db"
+    application = create_app(calendar_path, notes_database_path=notes_path)
+    origin = {"Origin": "http://testserver"}
+
+    with TestClient(application) as client:
+        assert client.post(
+            "/api/v1/workspaces/missing/internal-links/resolve",
+            json={"links": [{"type": "note", "target": "1"}]},
+        ).status_code == 401
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=origin,
+            json={"email": "owner@example.com", "password": "password"},
+        )
+        workspace_id = signup.json()["workspace_id"]
+        user_id = signup.json()["user_id"]
+        with sqlite3.connect(notes_path) as connection:
+            connection.execute(
+                """INSERT INTO notes (
+                    title, content, note_type, is_pinned, created_at, updated_at,
+                    workspace_id, created_by, updated_by, deleted_at
+                ) VALUES ('Scoped note', '', 'general', 0, 'c', 'u', ?, ?, ?, NULL)""",
+                (workspace_id, user_id, user_id),
+            )
+        response = client.post(
+            f"/api/v1/workspaces/{workspace_id}/internal-links/resolve",
+            json={
+                "links": [
+                    {"type": "note", "target": "1"},
+                    {"type": "calendar", "target": "1"},
+                ]
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()[0] == {
+            "type": "note",
+            "target": "1",
+            "exists": True,
+            "href": f"/w/{workspace_id}/notes?note_id=1",
+            "label": "Scoped note",
+        }
+        # Calendar v2 has no tenant key, so the canonical endpoint fails closed
+        # until the coordinated v3 cutover.
+        assert response.json()[1]["exists"] is False
+
+        client.post(
+            "/api/v1/auth/signup",
+            headers=origin,
+            json={"email": "other@example.com", "password": "password"},
+        )
+        assert client.post(
+            f"/api/v1/workspaces/{workspace_id}/internal-links/resolve",
+            json={"links": [{"type": "note", "target": "1"}]},
+        ).status_code == 404
+
+
+def test_notes_use_the_authenticated_workspace_id(tmp_path: Path) -> None:
+    notes_path = tmp_path / "notes.db"
+    application = create_app(
+        tmp_path / "calendar.db", notes_database_path=notes_path
+    )
+    origin = {"Origin": "http://testserver"}
+
+    with TestClient(application) as client:
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=origin,
+            json={"email": "notes@example.com", "password": "password"},
+        )
+        workspace_id = signup.json()["workspace_id"]
+        csrf = signup.json()["csrf_token"]
+        legacy = client.get("/apps/notes/", follow_redirects=False)
+        assert legacy.status_code == 307
+        assert legacy.headers["location"] == f"/w/{workspace_id}/notes"
+        page = client.get(f"/w/{workspace_id}/notes")
+        assert page.status_code == 200
+        assert f'/api/v1/workspaces/{workspace_id}/notes' in page.text
+        assert f'/api/v1/workspaces/{workspace_id}/internal-links/resolve' in page.text
+        assert f'href="/w/{workspace_id}/calendar"' in page.text
+        assert f'href="/w/{workspace_id}/home"' in page.text
+
+        created = client.post(
+            f"/api/v1/workspaces/{workspace_id}/notes",
+            headers={**origin, "X-CSRF-Token": csrf},
+            json={"title": "Workspace note"},
+        )
+        assert created.status_code == 201
+        with sqlite3.connect(notes_path) as connection:
+            stored = connection.execute(
+                "SELECT workspace_id, created_by FROM notes WHERE id=?",
+                (created.json()["id"],),
+            ).fetchone()
+        assert stored == (workspace_id, signup.json()["user_id"])
+        invalid = client.get(
+            "/w/00000000-0000-4000-8000-000000000002/notes"
+        )
+        assert invalid.status_code == 404
+
+
+def test_calendar_isolated_between_personal_workspaces(tmp_path: Path) -> None:
+    calendar_path = tmp_path / "calendar.db"
+    application = create_app(
+        calendar_path,
+        notes_database_path=tmp_path / "notes.db",
+    )
+    origin = {"Origin": "http://testserver"}
+
+    with TestClient(application) as first, TestClient(application) as second:
+        first_signup = first.post(
+            "/api/v1/auth/signup",
+            headers=origin,
+            json={"email": "first@example.com", "password": "password"},
+        ).json()
+        second_signup = second.post(
+            "/api/v1/auth/signup",
+            headers=origin,
+            json={"email": "second@example.com", "password": "password"},
+        ).json()
+        first_workspace = first_signup["workspace_id"]
+        second_workspace = second_signup["workspace_id"]
+        task_payload = {
+            "title": "First workspace only",
+            "start_at": "2026-08-07T09:00:00+09:00",
+            "due_at": "2026-08-07T10:00:00+09:00",
+        }
+        created = first.post(
+            f"/api/v1/workspaces/{first_workspace}/calendar/tasks",
+            headers={**origin, "X-CSRF-Token": first_signup["csrf_token"]},
+            json=task_payload,
+        )
+        assert created.status_code == 201, created.text
+        task_id = created.json()["id"]
+
+        assert first.get(
+            f"/api/v1/workspaces/{first_workspace}/calendar/tasks"
+        ).json()[0]["id"] == task_id
+        assert second.get(
+            f"/api/v1/workspaces/{second_workspace}/calendar/tasks"
+        ).json() == []
+        assert second.get(
+            f"/api/v1/workspaces/{first_workspace}/calendar/tasks"
+        ).status_code == 404
+        assert second.patch(
+            f"/api/v1/workspaces/{second_workspace}/calendar/tasks/{task_id}",
+            headers={**origin, "X-CSRF-Token": second_signup["csrf_token"]},
+            json={"title": "Cross-workspace overwrite"},
+        ).status_code == 404
+        legacy = first.get("/apps/calendar", follow_redirects=False)
+        assert legacy.status_code == 307
+        assert legacy.headers["location"] == f"/w/{first_workspace}/calendar"
+
+    with sqlite3.connect(calendar_path) as connection:
+        stored = connection.execute(
+            "SELECT workspace_id, created_by FROM tasks WHERE id=?",
+            (task_id,),
+        ).fetchone()
+    assert stored == (first_workspace, first_signup["user_id"])

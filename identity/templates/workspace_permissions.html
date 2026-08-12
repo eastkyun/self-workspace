@@ -1,0 +1,55 @@
+{% extends "workspace_settings_base.html" %}
+
+{% block settings_content %}
+  <section class="workspace-settings-card" aria-labelledby="workspace-permissions-card-title">
+    <div class="workspace-settings-card-header">
+      <div>
+        <h3 id="workspace-permissions-card-title">멤버 권한 예외</h3>
+        <p>역할 권한을 기준으로 개별 멤버에게 명시적으로 허용하거나 거부합니다. Owner와 Owner 전용 권한은 변경할 수 없습니다.</p>
+      </div>
+    </div>
+    {% set override_map = {} %}
+    {% for override in permission_matrix.overrides %}{% set _ = override_map.update({override.membership_id ~ ':' ~ override.code: override.effect}) %}{% endfor %}
+    {% if permission_matrix.members and permission_matrix.permissions %}
+    <h4 id="workspace-permission-matrix-title" class="workspace-permission-matrix-title">권한 예외 매트릭스</h4>
+    <div
+      class="permission-table-wrap"
+      data-permission-matrix
+      role="region"
+      tabindex="0"
+      aria-labelledby="workspace-permission-matrix-title"
+    >
+      <table class="permission-table">
+        <thead><tr><th>멤버</th><th>역할</th><th>권한</th><th>예외</th></tr></thead>
+        <tbody>
+        {% for member in permission_matrix.members %}
+          {% for permission in permission_matrix.permissions %}
+          {% set current = override_map.get(member.id ~ ':' ~ permission.code, '') %}
+          <tr>
+            <td><strong>{{ member.display_name }}</strong><br><small>{{ member.email }}</small></td>
+            <td>{{ member.role_key }}</td>
+            <td><code>{{ permission.code }}</code><br><small>{{ permission.description }}</small></td>
+            <td>
+              {% if member.system_role == 'OWNER' or permission.owner_only %}
+              <span class="workspace-settings-protected">보호됨</span>
+              {% else %}
+              <label class="sr-only" for="permission-{{ member.id }}-{{ loop.index }}">{{ member.display_name }}의 {{ permission.code }} 권한 예외</label>
+              <select id="permission-{{ member.id }}-{{ loop.index }}" data-permission-override data-workspace-id="{{ workspace.id }}" data-member-id="{{ member.id }}" data-permission-code="{{ permission.code }}" data-previous="{{ current }}">
+                <option value=""{% if not current %} selected{% endif %}>역할 기본값</option>
+                <option value="ALLOW"{% if current == 'ALLOW' %} selected{% endif %}>허용</option>
+                <option value="DENY"{% if current == 'DENY' %} selected{% endif %}>거부</option>
+              </select>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="workspace-settings-empty">표시할 멤버 또는 권한이 없습니다.</p>
+    {% endif %}
+    <p class="workspace-permission-status" role="status" aria-live="polite" data-permission-status></p>
+  </section>
+{% endblock %}

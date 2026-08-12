@@ -1,0 +1,47 @@
+{% extends "workspace_settings_base.html" %}
+
+{% block settings_content %}
+  <section
+    class="workspace-settings-card"
+    aria-labelledby="workspace-apps-title"
+    data-workspace-app-settings
+    data-workspace-id="{{ workspace.id }}"
+    data-user-id="{{ user_id }}"
+    data-pin-import-eligible="{{ 'true' if pin_import_eligible else 'false' }}"
+  >
+    <div class="workspace-settings-card-header">
+      <div>
+        <h3 id="workspace-apps-title">워크스페이스 앱</h3>
+        <p>활성화와 권한이 모두 허용된 앱만 워크스페이스 화면에 표시됩니다.</p>
+      </div>
+    </div>
+    <ul id="workspace-app-list" class="workspace-settings-list workspace-app-list">
+      {% for app in app_policies %}
+      <li class="workspace-settings-row workspace-app-row" data-app-key="{{ app.key }}">
+        <div class="workspace-settings-row-copy">
+          <strong>{{ app.display_name }}</strong>
+          <span>{{ app.key }}</span>
+        </div>
+        <div class="workspace-app-state">
+          <span class="workspace-settings-badge">{{ '활성화됨' if app.enabled else '비활성화됨' }}</span>
+          <span class="workspace-settings-badge">{{ '표시됨' if app.effective else '숨김' }}</span>
+          {% if app.key not in ('home', 'workspace') %}
+          <button type="button" data-app-toggle="{{ app.key }}" data-enabled="{{ 'true' if app.enabled else 'false' }}">{{ '비활성화' if app.enabled else '활성화' }}</button>
+          {% elif app.key == 'workspace' %}
+          <span class="workspace-settings-protected">시스템 앱</span>
+          {% else %}
+          <span class="workspace-settings-protected">필수 앱</span>
+          {% endif %}
+        </div>
+      </li>
+      {% else %}
+      <li class="workspace-settings-empty">관리할 앱이 없습니다.</li>
+      {% endfor %}
+    </ul>
+    <p id="app-settings-status" role="status" aria-live="polite"></p>
+  </section>
+{% endblock %}
+
+{% block settings_scripts %}
+  <script type="module" src="/static/shared/workspace-apps.js"></script>
+{% endblock %}

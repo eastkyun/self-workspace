@@ -1,0 +1,423 @@
+/* Shared Workspace settings layout. The page is the single vertical scroll owner
+   inside the fixed application shell. */
+.workspace-settings-page {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding: clamp(20px, 3vw, 40px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  color: var(--workspace-text, #202123);
+  scrollbar-gutter: stable;
+}
+
+.workspace-settings-page :where(h2, h3, h4, p, li, code, strong, small, span) {
+  overflow-wrap: anywhere;
+}
+
+.workspace-settings-hero,
+.workspace-settings-layout {
+  width: min(1120px, 100%);
+  min-width: 0;
+  margin-inline: auto;
+}
+
+.workspace-settings-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 8px 0 28px;
+  border-bottom: 1px solid var(--workspace-border, #e2e4e7);
+}
+
+.workspace-settings-hero > div { min-width: 0; }
+
+.workspace-settings-kicker {
+  margin: 0 0 8px;
+  color: var(--workspace-muted, #6b7280);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: .12em;
+}
+
+.workspace-settings-hero h2 {
+  margin: 0;
+  font-size: clamp(26px, 3vw, 36px);
+  letter-spacing: -.04em;
+}
+
+.workspace-settings-hero > div > p:last-child {
+  max-width: 680px;
+  margin: 10px 0 0;
+  color: var(--workspace-muted, #6b7280);
+  line-height: 1.6;
+}
+
+.workspace-settings-switcher {
+  display: grid;
+  min-width: 220px;
+  flex: 0 1 320px;
+  gap: 7px;
+  color: #475467;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.workspace-settings-switcher select,
+.workspace-settings-field input,
+.workspace-settings-field textarea,
+.workspace-settings-field select,
+[data-invitation-form] input,
+[data-invitation-form] select,
+[data-permission-override] {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #cfd6e4;
+  border-radius: 10px;
+  outline: none;
+  color: #172033;
+  background: #fff;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.workspace-settings-layout {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 40px;
+  padding: 32px 0 max(48px, env(safe-area-inset-bottom));
+}
+
+.workspace-settings-nav {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-self: start;
+  gap: 5px;
+}
+
+.workspace-settings-nav p {
+  margin: 0 10px 8px;
+  color: #98a2b3;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.workspace-settings-nav a {
+  overflow: hidden;
+  padding: 10px 12px;
+  border-radius: 9px;
+  color: #475467;
+  font-size: 14px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-settings-nav a:hover { color: #172033; background: #eef1f8; }
+.workspace-settings-nav a[aria-current="page"] { color: #3449b8; background: #e9edff; }
+
+.workspace-settings-content,
+.workspace-settings-stack {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 24px;
+}
+
+.workspace-settings-card {
+  min-width: 0;
+  border: 1px solid var(--workspace-border, #e0e5ee);
+  border-radius: 16px;
+  background: var(--workspace-surface, #fff);
+  box-shadow: 0 8px 30px rgb(28 39 67 / 6%);
+}
+
+.workspace-settings-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 28px;
+  border-bottom: 1px solid #e8ebf1;
+}
+
+.workspace-settings-card-header > div { min-width: 0; }
+
+.workspace-settings-card-header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.workspace-settings-card-header p {
+  margin: 7px 0 0;
+  color: var(--workspace-muted, #667085);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.workspace-settings-type,
+.workspace-settings-badge {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  flex: none;
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: #667085;
+  background: #f0f2f7;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.workspace-settings-card form,
+[data-invitation-form] {
+  display: grid;
+  min-width: 0;
+  max-width: none;
+  gap: 24px;
+  padding: 28px;
+}
+
+.workspace-settings-field,
+[data-invitation-form] label {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  color: #344054;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.workspace-settings-field > span small { margin-left: 4px; font-size: 11px; font-weight: 500; }
+.workspace-settings-field > small { color: var(--workspace-muted, #667085); font-size: 12px; font-weight: 400; line-height: 1.45; }
+.workspace-settings-field textarea { resize: vertical; line-height: 1.55; }
+
+.workspace-settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  gap: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e8ebf1;
+}
+
+.workspace-settings-actions [data-status] { margin: 0 auto 0 0; }
+
+[data-status],
+[data-permission-status],
+#app-settings-status {
+  min-width: 0;
+  color: var(--workspace-muted, #667085);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+[data-status]:empty,
+[data-permission-status]:empty,
+#app-settings-status:empty { min-height: 0; margin-block: 0; }
+
+.is-pending { color: #475467 !important; }
+.is-success { color: #137a4b !important; }
+.is-error { color: var(--workspace-danger, #b42318) !important; }
+
+.workspace-settings-actions button,
+[data-invitation-form] button,
+[data-app-toggle],
+.workspace-settings-home-link {
+  flex: none;
+  padding: 10px 16px;
+  border: 1px solid #4356c5;
+  border-radius: 9px;
+  color: #fff;
+  background: #4c5fd5;
+  font-weight: 700;
+}
+
+.workspace-settings-actions button:hover,
+[data-invitation-form] button:hover,
+[data-app-toggle]:hover,
+.workspace-settings-home-link:hover { background: #3f50bd; }
+
+button:disabled,
+select:disabled { cursor: wait; opacity: .65; }
+
+.workspace-settings-home-link {
+  padding: 8px 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* Members */
+.workspace-member-list,
+.workspace-settings-list,
+#workspace-app-list {
+  display: grid;
+  min-width: 0;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workspace-member-row,
+#workspace-app-list > li {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 28px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.workspace-member-row:last-child,
+#workspace-app-list > li:last-child { border-bottom: 0; }
+
+.workspace-settings-row-copy { min-width: 0; }
+
+.workspace-settings-row-copy :where(strong, span) { display: block; }
+.workspace-settings-row-copy span { margin-top: 4px; color: var(--workspace-muted, #667085); font-size: 13px; }
+
+.workspace-settings-empty {
+  margin: 0;
+  padding: 28px;
+  color: var(--workspace-muted, #667085);
+  text-align: center;
+}
+
+/* Apps */
+.workspace-app-row { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; }
+.workspace-app-state { display: flex; min-width: 0; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+[data-app-toggle] { min-width: 92px; }
+#app-settings-status,
+.workspace-permission-status { margin: 0; padding: 16px 28px 22px; }
+.workspace-settings-protected { color: var(--workspace-muted, #667085); font-size: 13px; font-weight: 700; }
+
+/* Roles */
+.workspace-role-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  padding: 24px 28px;
+}
+
+.workspace-role-card {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid #e4e8ef;
+  border-radius: 12px;
+  background: #fbfcfe;
+}
+
+.workspace-role-card h4 { margin: 0 0 12px; }
+.workspace-role-card ul { display: grid; min-width: 0; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.workspace-role-card code,
+.permission-table code { white-space: normal; word-break: break-word; }
+
+/* Permissions: horizontal overflow belongs only to this focusable region. */
+.permission-table-wrap {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.workspace-permission-matrix-title { margin: 0; padding: 20px 28px 12px; font-size: 15px; }
+
+.permission-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.permission-table th,
+.permission-table td {
+  max-width: 320px;
+  padding: 13px 16px;
+  border-bottom: 1px solid #e5e8ee;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.permission-table th {
+  color: #475467;
+  background: #f8f9fb;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.permission-table small { color: var(--workspace-muted, #606878); }
+.permission-table [data-permission-override] { min-width: 140px; }
+
+.permission-table-wrap:focus-visible,
+.workspace-settings-nav a:focus-visible,
+.workspace-settings-home-link:focus-visible,
+.workspace-settings-page button:focus-visible,
+.workspace-settings-page input:focus-visible,
+.workspace-settings-page textarea:focus-visible,
+.workspace-settings-page select:focus-visible {
+  outline: 3px solid var(--workspace-focus, rgb(16 163 127 / 38%));
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .workspace-settings-page { padding: 20px 16px 0; scrollbar-gutter: auto; }
+  .workspace-settings-hero { align-items: stretch; flex-direction: column; gap: 20px; padding-top: 2px; padding-bottom: 22px; }
+  .workspace-settings-switcher { min-width: 0; flex-basis: auto; }
+  .workspace-settings-layout { grid-template-columns: minmax(0, 1fr); gap: 20px; padding-top: 22px; }
+  .workspace-settings-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding-bottom: 5px;
+    scrollbar-width: thin;
+  }
+  .workspace-settings-nav p { display: none; }
+  .workspace-settings-nav a { flex: none; }
+  .workspace-role-grid { grid-template-columns: minmax(0, 1fr); }
+  .workspace-app-row { grid-template-columns: minmax(0, 1fr) auto !important; }
+}
+
+@media (max-width: 420px) {
+  .workspace-header:has(.workspace-settings-home-link) { gap: 6px; }
+  .workspace-header:has(.workspace-settings-home-link) .workspace-header-title { display: none; }
+  .workspace-global-actions:has(.workspace-settings-home-link) { gap: 6px; }
+  .workspace-settings-home-link { display: inline-flex; min-height: 38px; align-items: center; padding: 6px 9px; font-size: 12px; }
+  .workspace-settings-card-header { align-items: stretch; flex-direction: column; gap: 12px; padding: 20px; }
+  .workspace-settings-card form,
+  [data-invitation-form],
+  .workspace-role-grid { padding: 20px; }
+  .workspace-settings-type,
+  .workspace-settings-badge { align-self: flex-start; }
+  .workspace-settings-actions { align-items: stretch; flex-direction: column; }
+  .workspace-settings-actions [data-status] { margin: 0; }
+  .workspace-settings-actions button,
+  [data-invitation-form] button { width: 100%; }
+  .workspace-member-row,
+  #workspace-app-list > li { align-items: stretch; flex-direction: column; padding: 18px 20px; }
+  .workspace-app-row { display: flex !important; }
+  .workspace-app-state { width: 100%; align-items: stretch; justify-content: flex-start; }
+  .workspace-app-state .workspace-settings-badge,
+  .workspace-app-state .workspace-settings-protected { align-self: center; }
+  [data-app-toggle] { width: 100%; }
+  #app-settings-status,
+  .workspace-permission-status { padding-inline: 20px; }
+  .workspace-permission-matrix-title { padding-inline: 20px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-settings-page * { scroll-behavior: auto; transition: none; }
+}

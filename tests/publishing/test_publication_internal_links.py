@@ -134,7 +134,8 @@ async def test_portal_resolver_composes_registered_publication_routes(
             transport=ASGITransport(app=application),
             base_url="http://testserver",
         ) as client:
-            note = application.state.notes_service.create_note(
+            note = application.state.legacy_notes_service.create_note(
+                application.state.legacy_notes_context,
                 NoteCreate(
                     title="Workspace guide",
                     content="# Guide",
@@ -170,7 +171,7 @@ async def test_portal_resolver_composes_registered_publication_routes(
             "type": "manual",
             "target": "workspace-guide",
             "exists": True,
-            "href": "/manual/workspace-guide",
+            "href": f"/p/{publication['public_id']}/workspace-guide",
             "label": "Workspace guide",
         }
     ]

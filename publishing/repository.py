@@ -9,11 +9,19 @@ def row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
 
 
 def get_publication(
-    connection: sqlite3.Connection, publication_id: int
+    connection: sqlite3.Connection,
+    publication_id: int,
+    workspace_id: str | None = None,
 ) -> dict[str, Any] | None:
-    row = connection.execute(
-        "SELECT * FROM publications WHERE id = ?", (publication_id,)
-    ).fetchone()
+    if workspace_id is None:
+        row = connection.execute(
+            "SELECT * FROM publications WHERE id = ?", (publication_id,)
+        ).fetchone()
+    else:
+        row = connection.execute(
+            "SELECT * FROM publications WHERE id = ? AND workspace_id = ?",
+            (publication_id, workspace_id),
+        ).fetchone()
     return row_to_dict(row) if row else None
 
 
@@ -22,12 +30,64 @@ def get_publication_by_slug(
     *,
     type_id: str,
     slug: str,
+    workspace_id: str | None = None,
+    public_only: bool = False,
 ) -> dict[str, Any] | None:
+    clauses = ["type_id = ?", "slug = ?"]
+    parameters: list[Any] = [type_id, slug]
+    if workspace_id is not None:
+        clauses.append("workspace_id = ?")
+        parameters.append(workspace_id)
+    if public_only:
+        clauses.append("visibility = 'PUBLIC'")
     row = connection.execute(
-        "SELECT * FROM publications WHERE type_id = ? AND slug = ?",
-        (type_id, slug),
+        f"SELECT * FROM publications WHERE {' AND '.join(clauses)}",
+        parameters,
     ).fetchone()
     return row_to_dict(row) if row else None
+
+
+def get_publication_by_public_id(
+    connection: sqlite3.Connection, public_id: str
+) -> dict[str, Any] | None:
+    row = connection.execute(
+        "SELECT * FROM publications WHERE public_id = ? AND visibility = 'PUBLIC'",
+        (public_id,),
+    ).fetchone()
+    return row_to_dict(row) if row else None
+
+
+def get_publication_by_route_alias(
+    connection: sqlite3.Connection, route_path: str
+) -> dict[str, Any] | None:
+    row = connection.execute(
+        """SELECT p.* FROM publication_route_aliases AS alias
+        JOIN publications AS p ON p.id = alias.publication_id
+        WHERE alias.route_path = ? AND p.visibility = 'PUBLIC'""",
+        (route_path,),
+    ).fetchone()
+    return row_to_dict(row) if row else None
+
+
+def add_publication_route_aliases(
+    connection: sqlite3.Connection,
+    publication: dict[str, Any],
+    route_paths: tuple[str, ...],
+) -> None:
+    connection.executemany(
+        """INSERT INTO publication_route_aliases
+        (publication_id, workspace_id, route_path, created_at)
+        VALUES (?, ?, ?, ?)""",
+        (
+            (
+                publication["id"],
+                publication["workspace_id"],
+                route_path,
+                publication["created_at"],
+            )
+            for route_path in route_paths
+        ),
+    )
 
 
 def list_publications(
@@ -36,10 +96,12 @@ def list_publications(
     note_id: int | None = None,
     type_id: str | None = None,
     status: str | None = None,
+    workspace_id: str | None = None,
 ) -> list[dict[str, Any]]:
     clauses: list[str] = []
     parameters: list[Any] = []
     for column, value in (
+        ("workspace_id", workspace_id),
         ("note_id", note_id),
         ("type_id", type_id),
         ("status", status),
@@ -70,18 +132,32 @@ def create_publication(
     markdown: str,
     source_note_updated_at: str,
     created_at: str,
+    workspace_id: str | None = None,
+    created_by: str | None = None,
+    public_id: str | None = None,
 ) -> dict[str, Any]:
-    cursor = connection.execute(
-        """
-        INSERT INTO publications (
-            note_id, type_id, slug, title, summary, status,
-            latest_version, published_version, draft_version,
-            published_at, archived_at, created_at, updated_at
+    if workspace_id is None:
+        cursor = connection.execute(
+            """INSERT INTO publications (
+                note_id, type_id, slug, title, summary, status,
+                latest_version, published_version, draft_version,
+                published_at, archived_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, 'draft', 1, NULL, 1, NULL, NULL, ?, ?)""",
+            (note_id, type_id, slug, title, summary, created_at, created_at),
         )
-        VALUES (?, ?, ?, ?, ?, 'draft', 1, NULL, 1, NULL, NULL, ?, ?)
-        """,
-        (note_id, type_id, slug, title, summary, created_at, created_at),
-    )
+    else:
+        cursor = connection.execute(
+            """INSERT INTO publications (
+                note_id, type_id, slug, title, summary, status,
+                latest_version, published_version, draft_version,
+                published_at, archived_at, created_at, updated_at,
+                workspace_id, created_by, visibility, public_id)
+            VALUES (?, ?, ?, ?, ?, 'draft', 1, NULL, 1, NULL, NULL, ?, ?, ?, ?, 'PUBLIC', ?)""",
+            (
+                note_id, type_id, slug, title, summary, created_at, created_at,
+                workspace_id, created_by, public_id,
+            ),
+        )
     publication_id = cursor.lastrowid
     connection.execute(
         """
@@ -100,7 +176,7 @@ def create_publication(
             created_at,
         ),
     )
-    return get_publication(connection, publication_id)  # type: ignore[return-value]
+    return get_publication(connection, publication_id, workspace_id)  # type: ignore[return-value]
 
 
 def get_publication_version(
@@ -202,28 +278,30 @@ def update_publication_projection_and_pointers(
     published_at: str | None,
     archived_at: str | None,
     updated_at: str,
+    workspace_id: str | None = None,
 ) -> dict[str, Any] | None:
-    cursor = connection.execute(
-        """
-        UPDATE publications
-        SET title = ?, summary = ?, status = ?, latest_version = ?,
-            published_version = ?, draft_version = ?, published_at = ?,
-            archived_at = ?, updated_at = ?
-        WHERE id = ?
-        """,
-        (
-            title,
-            summary,
-            status,
-            latest_version,
-            published_version,
-            draft_version,
-            published_at,
-            archived_at,
-            updated_at,
-            publication_id,
-        ),
+    values = (
+        title, summary, status, latest_version, published_version,
+        draft_version, published_at, archived_at, updated_at, publication_id,
     )
+    if workspace_id is None:
+        cursor = connection.execute(
+            """UPDATE publications
+            SET title = ?, summary = ?, status = ?, latest_version = ?,
+                published_version = ?, draft_version = ?, published_at = ?,
+                archived_at = ?, updated_at = ?
+            WHERE id = ?""",
+            values,
+        )
+    else:
+        cursor = connection.execute(
+            """UPDATE publications
+            SET title = ?, summary = ?, status = ?, latest_version = ?,
+                published_version = ?, draft_version = ?, published_at = ?,
+                archived_at = ?, updated_at = ?
+            WHERE id = ? AND workspace_id = ?""",
+            (*values, workspace_id),
+        )
     if cursor.rowcount == 0:
         return None
-    return get_publication(connection, publication_id)
+    return get_publication(connection, publication_id, workspace_id)

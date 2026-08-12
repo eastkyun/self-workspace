@@ -1,0 +1,25 @@
+{% extends "workspace_settings_base.html" %}
+
+{% block settings_content %}
+  <section class="workspace-settings-card" aria-labelledby="workspace-roles-title" data-role-matrix>
+    <div class="workspace-settings-card-header">
+      <div>
+        <h3 id="workspace-roles-title">기본 역할 권한</h3>
+        <p>기본 역할은 읽기 전용입니다. 역할별로 부여된 권한을 확인할 수 있습니다.</p>
+      </div>
+      <span class="workspace-settings-type">읽기 전용</span>
+    </div>
+    <div class="workspace-role-grid">
+      {% for role in roles %}
+      <article class="workspace-role-card">
+        <h4>{{ role.name }}</h4>
+        <ul class="workspace-permission-code-list">
+          {% for permission in role.permissions %}<li><code>{{ permission }}</code></li>{% else %}<li>부여된 권한이 없습니다.</li>{% endfor %}
+        </ul>
+      </article>
+      {% else %}
+      <p class="workspace-settings-empty">표시할 역할이 없습니다.</p>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

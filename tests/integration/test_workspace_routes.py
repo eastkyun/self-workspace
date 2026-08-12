@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.calendar.app.main import SCHEMA_VERSION, initialize_database
+from apps.calendar.app.main import initialize_database
+from apps.calendar.migrations import TARGET_VERSION as CALENDAR_WORKSPACE_SCHEMA_VERSION
 from portal.main import create_app
 
 
@@ -29,6 +30,10 @@ def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) 
         portal_icon = client.get("/static/icons/calendar.svg")
         registry = client.get("/api/hub/apps")
         calendar_redirect = client.get("/apps/calendar", follow_redirects=False)
+        canonical_calendar_redirect = client.get(
+            "/w/11111111-1111-1111-1111-111111111111/calendar",
+            follow_redirects=False,
+        )
         calendar = client.get("/apps/calendar/")
         calendar_shell_stylesheet = client.get(
             "/apps/calendar/static/shared/shell.css"
@@ -40,8 +45,13 @@ def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) 
         )
         tasks = client.get("/apps/calendar/api/tasks")
         notes_redirect = client.get("/apps/notes", follow_redirects=False)
+        canonical_notes_redirect = client.get(
+            "/w/11111111-1111-1111-1111-111111111111/notes?note_id=7",
+            follow_redirects=False,
+        )
         notes = client.get("/apps/notes/")
         notes_new = client.get("/apps/notes/new")
+        unsafe_login = client.get("/login", params={"next": "//evil.example"})
         notes_stylesheet = client.get("/apps/notes/static/notes.css")
         notes_markdown_stylesheet = client.get(
             "/apps/notes/static/shared/markdown/markdown.css"
@@ -74,32 +84,36 @@ def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) 
     assert registry.status_code == 200
     assert registry.json()[0]["route"] == "/apps/calendar/"
     assert registry.json()[0]["display_name"] == "Calendar"
-    assert calendar_redirect.status_code in {307, 308}
-    assert calendar_redirect.headers["location"].endswith("/apps/calendar/")
+    assert calendar_redirect.status_code == 307
+    assert calendar_redirect.headers["location"] == "/login?next=%2Fapps%2Fcalendar"
+    assert canonical_calendar_redirect.status_code == 307
+    assert canonical_calendar_redirect.headers["location"] == (
+        "/login?next=%2Fw%2F11111111-1111-1111-1111-111111111111%2Fcalendar"
+    )
     assert calendar.status_code == 200
-    assert 'id="sidebar"' in calendar.text
-    assert 'class="workspace-header"' in calendar.text
-    assert calendar.text.count('aria-current="page"') == 1
-    assert 'data-app-id="calendar"' in calendar.text
-    assert 'id="calendar"' in calendar.text
+    assert "Log in · My Workspace" in calendar.text
     assert calendar_shell_stylesheet.status_code == 200
     assert calendar_shell_script.status_code == 200
     assert stylesheet.status_code == 200
     assert calendar_markdown_stylesheet.status_code == 200
-    assert tasks.status_code == 200
-    assert tasks.json() == []
-    assert notes_redirect.status_code in {307, 308}
-    assert notes_redirect.headers["location"].endswith("/apps/notes/")
+    assert tasks.status_code == 401
+    assert notes_redirect.status_code == 307
+    assert notes_redirect.headers["location"] == "/login?next=%2Fapps%2Fnotes"
+    assert canonical_notes_redirect.status_code == 307
+    assert canonical_notes_redirect.headers["location"] == (
+        "/login?next=%2Fw%2F11111111-1111-1111-1111-111111111111%2Fnotes%3Fnote_id%3D7"
+    )
     assert notes.status_code == 200
+    assert "Log in · My Workspace" in notes.text
+    assert 'data-success-url="/apps/notes/"' in notes.text
     assert notes_new.status_code == 200
-    assert 'data-current-app="notes"' in notes.text
-    assert notes.text.count('aria-current="page"') == 1
+    assert 'data-success-url="/apps/notes/new"' in notes_new.text
+    assert 'data-success-url="/"' in unsafe_login.text
     assert notes_stylesheet.status_code == 200
     assert notes_markdown_stylesheet.status_code == 200
     assert notes_markdown_module.status_code == 200
     assert notes_script.status_code == 200
-    assert notes_api.status_code == 200
-    assert notes_api.json() == []
+    assert notes_api.status_code == 404
     assert internal_links.status_code == 200
     assert internal_links.json() == [
         {
@@ -112,32 +126,38 @@ def test_portal_creates_new_database_and_serves_nested_calendar(tmp_path: Path) 
     ]
 
     with sqlite3.connect(database_path) as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+        assert (
+            connection.execute("PRAGMA user_version").fetchone()[0]
+            == CALENDAR_WORKSPACE_SCHEMA_VERSION
+        )
 
 
-def test_portal_calendar_and_notes_share_one_registry_snapshot(
+def test_portal_legacy_adapters_share_workspace_services_without_app_mounts(
     tmp_path: Path,
 ) -> None:
     application = create_app(
         tmp_path / "calendar.db",
         notes_database_path=tmp_path / "notes.db",
     )
-    calendar_mount = next(
-        route for route in application.routes if route.path == "/apps/calendar"
+    assert application.state.calendar_service.database_path == (
+        tmp_path / "calendar.db"
     )
-    notes_mount = next(
-        route for route in application.routes if route.path == "/apps/notes"
-    )
-
-    assert calendar_mount.app.state.app_registry is application.state.app_registry
-    assert notes_mount.app.state.app_registry is application.state.app_registry
     assert (
-        notes_mount.app.state.notes_service.source_resolver
+        application.state.legacy_notes_service.source_resolver
         is application.state.source_resolver
     )
+    assert any(route.path == "/apps/notes" for route in application.routes)
+    assert not any(
+        route.path == "/apps/notes" and hasattr(route.app, "state")
+        for route in application.routes
+    )
+    assert not any(
+        route.path == "/apps/calendar" and hasattr(route.app, "state")
+        for route in application.routes
+    )
 
 
-def test_internal_link_endpoint_resolves_notes_and_calendar_events(
+def test_legacy_internal_link_endpoint_hides_workspace_scoped_resources(
     tmp_path: Path,
 ) -> None:
     with TestClient(
@@ -146,29 +166,12 @@ def test_internal_link_endpoint_resolves_notes_and_calendar_events(
             notes_database_path=tmp_path / "notes.db",
         )
     ) as client:
-        event = client.post(
-            "/apps/calendar/api/tasks",
-            json={
-                "title": "연결 일정",
-                "start_at": "2026-07-28T09:00:00+09:00",
-                "due_at": "2026-07-28T10:00:00+09:00",
-            },
-        ).json()
-        note = client.post(
-            "/apps/notes/api/notes",
-            json={
-                "title": "연결 노트",
-                "content": "",
-                "note_type": "general",
-                "is_pinned": False,
-            },
-        ).json()
         response = client.post(
             "/api/internal-links/resolve",
             json={
                 "links": [
-                    {"type": "note", "target": str(note["id"])},
-                    {"type": "calendar", "target": str(event["id"])},
+                    {"type": "note", "target": "1"},
+                    {"type": "calendar", "target": "1"},
                 ]
             },
         )
@@ -177,33 +180,34 @@ def test_internal_link_endpoint_resolves_notes_and_calendar_events(
     assert response.json() == [
         {
             "type": "note",
-            "target": str(note["id"]),
-            "exists": True,
-            "href": f"/apps/notes/?note_id={note['id']}",
-            "label": "연결 노트",
+            "target": "1",
+            "exists": False,
+            "href": None,
+            "label": "note:1",
         },
         {
             "type": "calendar",
-            "target": str(event["id"]),
-            "exists": True,
-            "href": f"/apps/calendar/?event_id={event['id']}",
-            "label": "연결 일정",
+            "target": "1",
+            "exists": False,
+            "href": None,
+            "label": "calendar:1",
         },
     ]
 
 
-def test_portal_verifies_existing_v2_database_without_mutation(tmp_path: Path) -> None:
+def test_portal_rejects_existing_v2_database_without_mutation(tmp_path: Path) -> None:
     database_path = tmp_path / "calendar.db"
     initialize_database(database_path)
     before = sha256(database_path)
 
-    with TestClient(
-        create_app(
-            database_path,
-            notes_database_path=tmp_path / "notes.db",
-        )
-    ) as client:
-        assert client.get("/api/hub/apps").status_code == 200
+    with pytest.raises(RuntimeError, match="offline migration"):
+        with TestClient(
+            create_app(
+                database_path,
+                notes_database_path=tmp_path / "notes.db",
+            )
+        ):
+            pass
 
     assert sha256(database_path) == before
 
@@ -233,7 +237,7 @@ def test_portal_uses_calendar_database_environment(
         publication_types_path
     )
     with TestClient(application) as client:
-        assert client.get("/apps/calendar/api/tasks").json() == []
+        assert client.get("/apps/calendar/api/tasks").status_code == 401
     assert database_path.is_file()
     assert notes_database_path.is_file()
 
@@ -257,7 +261,7 @@ def test_portal_rejects_legacy_database_without_mutation(tmp_path: Path) -> None
     assert sha256(database_path) == before
 
 
-def test_calendar_frontend_uses_mount_relative_urls() -> None:
+def test_calendar_frontend_uses_explicit_workspace_api_and_static_bases() -> None:
     static_dir = Path("apps/calendar/app/static")
     template = Path("apps/calendar/app/templates/calendar.html").read_text(
         encoding="utf-8"
@@ -265,11 +269,12 @@ def test_calendar_frontend_uses_mount_relative_urls() -> None:
     styles = (static_dir / "styles.css").read_text(encoding="utf-8")
     script = (static_dir / "app.js").read_text(encoding="utf-8")
 
-    assert 'href="/static/' not in template
+    assert 'data-api-base="{{ calendar_api_base }}"' in template
+    assert 'href="/static/shared/markdown/markdown.css"' in template
     assert 'src="/static/' not in template
     assert 'url("/static/' not in styles
-    assert 'new URL("./", document.baseURI)' in script
-    assert 'request("/api/' not in script
+    assert 'const apiBase = calendarPage.dataset.apiBase' in script
+    assert 'from "/static/shared/markdown/index.js"' in script
 
 
 def test_portal_runtime_assets_do_not_reference_external_hosts() -> None:
@@ -290,3 +295,12 @@ def test_portal_runtime_assets_do_not_reference_external_hosts() -> None:
         assert "http://" not in source
         assert "https://" not in source
         assert "//cdn." not in source
+
+
+def test_hub_reuses_the_shared_shell_account_request() -> None:
+    shell_script = Path("shared/static/shell.js").read_text(encoding="utf-8")
+    hub_script = Path("portal/static/hub.js").read_text(encoding="utf-8")
+
+    assert "workspaceAccountPromise" in shell_script
+    assert "workspaceAccountPromise" in hub_script
+    assert "api/v1/users/me" not in hub_script

@@ -11,6 +11,9 @@ from publishing.contracts import PublicationType, RenderOptions, SlugPolicy
 
 _TYPE_ID_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
 _ROUTE_PATTERN = re.compile(r"^/[a-z][a-z0-9-]*(?:/[a-z][a-z0-9-]*)*$")
+_PUBLIC_ROUTE_PATTERN = re.compile(
+    r"^/p/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[a-z0-9][a-z0-9-]*$"
+)
 _LOCAL_ICON_PREFIX = "/static/icons/"
 _REQUIRED_HOOKS = (
     "render_options",
@@ -266,6 +269,9 @@ class PublicationTypeRegistry:
         if parsed.scheme or parsed.netloc:
             return None
         candidate = parsed.path
+        if _PUBLIC_ROUTE_PATTERN.fullmatch(candidate):
+            providers = self.get_all()
+            return providers[0] if providers else None
         for provider in self.get_all():
             prefix = provider.route_prefix
             if candidate == prefix or candidate.startswith(f"{prefix}/"):

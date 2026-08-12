@@ -8,7 +8,7 @@ from httpx import ASGITransport, AsyncClient
 from PIL import Image
 
 from apps.notes.app.schemas import NoteCreate, NoteUpdate
-from assets.database import database_connection, verify_database
+from assets.database import database_connection, verify_workspace_database
 from portal.main import create_app
 from publishing.database import database_connection as publishing_database_connection
 
@@ -77,7 +77,7 @@ async def test_asset_paths_are_injected_and_lifespan_verifies_database(
     assert not application.state.asset_database_path.exists()
 
     async with application.router.lifespan_context(application):
-        verify_database(application.state.asset_database_path)
+        verify_workspace_database(application.state.asset_database_path)
 
 
 async def test_upload_resolve_and_serve_normalized_image(client: AsyncClient) -> None:
@@ -177,8 +177,9 @@ async def test_reconcile_reloads_persisted_note_markdown_and_rejects_client_ids(
     client: AsyncClient,
 ) -> None:
     uploaded = (await upload(client)).json()
-    notes_service = client.workspace_app.state.notes_service
+    notes_service = client.workspace_app.state.legacy_notes_service
     note = notes_service.create_note(
+        client.workspace_app.state.legacy_notes_context,
         NoteCreate(
             title="Image note",
             content="No image yet",
@@ -187,6 +188,7 @@ async def test_reconcile_reloads_persisted_note_markdown_and_rejects_client_ids(
         )
     )
     notes_service.update_note(
+        client.workspace_app.state.legacy_notes_context,
         note["id"],
         NoteUpdate(
             title=note["title"],
@@ -237,7 +239,8 @@ async def test_reconcile_reads_immutable_publication_version_markdown(
     client: AsyncClient,
 ) -> None:
     uploaded = (await upload(client, session="publication-upload")).json()
-    note = client.workspace_app.state.notes_service.create_note(
+    note = client.workspace_app.state.legacy_notes_service.create_note(
+        client.workspace_app.state.legacy_notes_context,
         NoteCreate(
             title="Published image",
             content=f"![publication](image://{uploaded['id']})",
@@ -286,7 +289,8 @@ async def test_publication_create_reconciles_server_stored_markdown(
     client: AsyncClient,
 ) -> None:
     uploaded = (await upload(client, session="auto-publication")).json()
-    note = client.workspace_app.state.notes_service.create_note(
+    note = client.workspace_app.state.legacy_notes_service.create_note(
+        client.workspace_app.state.legacy_notes_context,
         NoteCreate(
             title="Auto reconcile",
             content=f"![stored](image://{uploaded['id']})",

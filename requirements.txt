@@ -1,1 +1,2 @@
 -r apps/calendar/requirements.txt
+argon2-cffi>=25.1,<26

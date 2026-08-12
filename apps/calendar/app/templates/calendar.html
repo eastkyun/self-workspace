@@ -2,18 +2,24 @@
 
 {% block page_head %}
     <meta name="description" content="월간 캘린더로 일정을 기록하고 관리하는 다이어리">
-    <link rel="stylesheet" href="./static/vendor/fullcalendar/7.0.2/skeleton.css">
-    <link rel="stylesheet" href="./static/vendor/fullcalendar/7.0.2/themes/classic/theme.css">
-    <link rel="stylesheet" href="./static/vendor/fullcalendar/7.0.2/themes/classic/palette.css">
-    <link rel="stylesheet" href="./static/shared/markdown/markdown.css">
-    <link rel="stylesheet" href="./static/styles.css">
+    <link rel="stylesheet" href="{{ calendar_static_base }}/vendor/fullcalendar/7.0.2/skeleton.css">
+    <link rel="stylesheet" href="{{ calendar_static_base }}/vendor/fullcalendar/7.0.2/themes/classic/theme.css">
+    <link rel="stylesheet" href="{{ calendar_static_base }}/vendor/fullcalendar/7.0.2/themes/classic/palette.css">
+    <link rel="stylesheet" href="/static/shared/markdown/markdown.css">
+    <link rel="stylesheet" href="{{ calendar_static_base }}/styles.css">
 {% endblock %}
 
 {% block content %}
   <div
     class="calendar-page"
+    data-workspace-await-ready
+    data-api-base="{{ calendar_api_base }}"
+    data-csrf-cookie-name="{{ calendar_csrf_cookie_name }}"
     data-notes-route="{{ workspace_path(notes_route) }}"
-    data-internal-link-endpoint="{{ workspace_path('/api/internal-links/resolve') }}"
+    data-notes-api-base="{{ notes_api_base|default(workspace_path(notes_route ~ 'api/notes')) }}"
+    data-internal-link-endpoint="{{ calendar_internal_link_endpoint|default(workspace_path('/api/internal-links/resolve')) }}"
+    data-user-state-base="{{ workspace_user_state_api|default('') }}"
+    data-app-route="{{ calendar_workspace_route|default(workspace_path('/apps/calendar/')) }}"
   >
     <header class="calendar-toolbar">
       <div class="calendar-identity">
@@ -138,6 +144,7 @@
             <h2 id="dialog-title">새 일정</h2>
           </div>
           <div class="dialog-header-actions">
+            <button class="button button-secondary" id="favorite-task-button" type="button" aria-pressed="false" hidden>즐겨찾기</button>
             <button class="button button-secondary" id="edit-task-button" type="button" hidden>편집</button>
             <button class="icon-button" id="close-dialog" type="button" aria-label="닫기">×</button>
           </div>
@@ -324,8 +331,5 @@
 {% endblock %}
 
 {% block page_scripts %}
-    <script src="./static/vendor/fullcalendar/7.0.2/fullcalendar.global.js"></script>
-    <script src="./static/vendor/fullcalendar/7.0.2/locales-all/global.js"></script>
-    <script src="./static/vendor/fullcalendar/7.0.2/themes/classic/global.js"></script>
-    <script type="module" src="./static/app.js"></script>
+    <script type="module" src="{{ calendar_static_base }}/app.js"></script>
 {% endblock %}

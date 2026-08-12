@@ -461,15 +461,9 @@ def test_serves_page_and_static_assets(client: TestClient):
     script = client.get("/static/app.js")
     adapter = client.get("/static/calendar-adapter.js")
     fullcalendar = client.get(
-        "/static/vendor/fullcalendar/7.0.2/fullcalendar.global.js"
-    )
-    locales = client.get(
-        "/static/vendor/fullcalendar/7.0.2/locales-all/global.js"
+        "/static/vendor/fullcalendar/7.0.2/daygrid.esm.js"
     )
     skeleton = client.get("/static/vendor/fullcalendar/7.0.2/skeleton.css")
-    classic_script = client.get(
-        "/static/vendor/fullcalendar/7.0.2/themes/classic/global.js"
-    )
     classic_theme = client.get(
         "/static/vendor/fullcalendar/7.0.2/themes/classic/theme.css"
     )
@@ -508,10 +502,8 @@ def test_serves_page_and_static_assets(client: TestClient):
     assert adapter.status_code == 200
     assert "taskToCalendarEvent" in adapter.text
     assert fullcalendar.status_code == 200
-    assert "FullCalendar (Vanilla JS) v7.0.2" in fullcalendar.text
-    assert locales.status_code == 200
+    assert "FullCalendar" in fullcalendar.text
     assert skeleton.status_code == 200
-    assert classic_script.status_code == 200
     assert classic_theme.status_code == 200
     assert classic_palette.status_code == 200
     assert license_file.status_code == 200

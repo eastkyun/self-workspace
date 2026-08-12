@@ -174,12 +174,15 @@ def test_event_deletion_preserves_link_snapshot_and_marks_orphan(
         assert connection.execute("SELECT COUNT(*) FROM note_links").fetchone()[0] == 1
 
 
-def test_note_delete_cascades_only_notes_internal_link(linked_client) -> None:
+def test_note_soft_delete_preserves_internal_link_for_restore(linked_client) -> None:
     client, calendar_path, notes_path = linked_client
     note = create_note(client, links=[calendar_link()])
     assert client.delete(f"/api/notes/{note['id']}").status_code == 204
 
     with sqlite3.connect(notes_path) as connection:
-        assert connection.execute("SELECT COUNT(*) FROM note_links").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM note_links").fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT deleted_at IS NOT NULL FROM notes WHERE id=?", (note["id"],)
+        ).fetchone()[0] == 1
     with sqlite3.connect(calendar_path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM tasks").fetchone()[0] == 1
