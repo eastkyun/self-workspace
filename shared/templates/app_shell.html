@@ -4,17 +4,17 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
-    <title>{{ page_title }} · My Workspace</title>
+    <title>{{ page_title }} · Nest</title>
     <link rel="stylesheet" href="{{ workspace_path('/static/shared/shell.css') }}">
     {% block page_head %}{% endblock %}
   </head>
-  <body class="workspace-body" data-current-app="{{ current_app_id }}" data-session-cookie="{{ session_cookie_name|default('my_workspace_session') }}">
+  <body class="workspace-body" data-current-app="{{ current_app_id }}" data-session-cookie="{{ session_cookie_name|default('my_workspace_session') }}" data-user-id="{{ user_id|default('') }}" data-workspace-id="{{ workspace_id|default(workspace.id if workspace is defined else '') }}">
     <div class="workspace-shell">
       <aside id="sidebar" class="workspace-sidebar" aria-label="Workspace 탐색">
         <div class="workspace-sidebar-header">
-          <a class="workspace-brand" href="{{ workspace_path('/') }}" aria-label="My Workspace 홈">
-            <span class="workspace-brand-mark" aria-hidden="true">M</span>
-            <span class="workspace-brand-copy">My Workspace</span>
+          <a class="workspace-brand" href="{{ workspace_path('/') }}" aria-label="Nest 홈">
+            <span class="workspace-brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" role="presentation"><path d="M7 17c2 6 16 6 18 0M9 13c3 5 11 5 14 0M12 10c2 3 6 3 8 0" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2.4"/></svg></span>
+            <span class="workspace-brand-copy">Nest</span>
           </a>
           <button
             id="sidebar-collapse"
@@ -33,7 +33,6 @@
         </div>
 
         <nav class="workspace-navigation" aria-label="Workspace 메뉴">
-          <p class="workspace-section-label">Workspace</p>
           <a
             class="workspace-nav-link{% if current_app_id == 'home' %} is-active{% endif %}"
             href="{{ workspace_path('/') }}"
@@ -63,6 +62,13 @@
         </nav>
 
         <div class="workspace-sidebar-management">
+          <p class="workspace-section-label">Workspace</p>
+          <div class="workspace-workspace-list" data-workspace-list>
+            {% for item in workspaces|default([]) %}
+            <a class="workspace-workspace-link{% if item.id == workspace_id %} is-active{% endif %}" href="/w/{{ item.id }}/home" data-workspace-id="{{ item.id }}" title="{{ item.name }}"><span>{{ item.name[:1] }}</span><strong>{{ item.name }}</strong></a>
+            {% endfor %}
+          </div>
+          <p class="workspace-workspace-status" data-workspace-status role="status" aria-live="polite"></p>
           <p class="workspace-section-label">Manage</p>
           <button
             class="workspace-nav-link workspace-launcher-trigger"
@@ -111,14 +117,14 @@
             </div>
             <div id="workspace-account" class="workspace-account" hidden>
               <button id="workspace-account-toggle" class="workspace-account-toggle" type="button" aria-expanded="false" aria-controls="workspace-account-menu">
-                <span id="workspace-account-avatar" aria-hidden="true">U</span>
+                <span class="workspace-account-avatar-wrap"><span id="workspace-account-avatar" aria-hidden="true">U</span><span id="workspace-invitations-badge" class="workspace-invitations-badge" data-invitations-badge hidden aria-label="받은 초대 있음"></span></span>
                 <span id="workspace-account-label">내 계정</span>
               </button>
               <div id="workspace-account-menu" class="workspace-account-menu" hidden>
                 <strong id="workspace-account-name"></strong>
                 <span id="workspace-account-email"></span>
-                <button id="workspace-profile-open" type="button">내 정보</button>
-                <a href="{{ workspace_path('/workspace-selector') }}">Workspace 전환</a>
+                <button id="workspace-invitations-open" class="workspace-invitations-menu-item" type="button"><span class="workspace-invitations-menu-badge" data-invitations-badge hidden aria-hidden="true"></span>받은 초대</button>
+                {% if workspace_id or workspace is defined %}<a href="{{ workspace_path('/w/' ~ (workspace_id or workspace.id) ~ '/settings') }}">설정</a>{% endif %}
                 <button id="workspace-logout" type="button">로그아웃</button>
               </div>
             </div>
@@ -178,15 +184,12 @@
       </div>
     </dialog>
 
-    <dialog id="workspace-profile-dialog" class="workspace-profile-dialog" aria-labelledby="workspace-profile-title">
-      <h2 id="workspace-profile-title">내 정보</h2>
-      <dl>
-        <div><dt>이름</dt><dd id="workspace-profile-name"></dd></div>
-        <div><dt>이메일</dt><dd id="workspace-profile-email"></dd></div>
-      </dl>
-      <button id="workspace-profile-close" type="button">닫기</button>
+    <dialog id="workspace-invitations-dialog" class="workspace-invitations-dialog" aria-labelledby="workspace-invitations-dialog-title">
+      <div class="workspace-invitations-dialog-header"><div><p class="workspace-eyebrow">INVITATIONS</p><h2 id="workspace-invitations-dialog-title">받은 초대</h2></div><button id="workspace-invitations-close" class="workspace-icon-button" type="button" aria-label="받은 초대 닫기">×</button></div>
+      <div id="workspace-invitations-dialog-list" class="workspace-invitations-dialog-list" aria-live="polite"><p class="workspace-invitations-dialog-loading">초대를 불러오는 중…</p></div>
     </dialog>
 
+    <script type="module" src="{{ workspace_path('/static/shared/avatar.js') }}"></script>
     <script type="module" src="{{ workspace_path('/static/shared/shell.js') }}"></script>
     {% block page_scripts %}{% endblock %}
   </body>

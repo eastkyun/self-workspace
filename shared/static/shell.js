@@ -25,10 +25,14 @@ const accountLabel = document.querySelector("#workspace-account-label");
 const accountAvatar = document.querySelector("#workspace-account-avatar");
 const accountName = document.querySelector("#workspace-account-name");
 const accountEmail = document.querySelector("#workspace-account-email");
-const profileDialog = document.querySelector("#workspace-profile-dialog");
+const invitationsDialog = document.querySelector("#workspace-invitations-dialog");
+const invitationBadges = [...document.querySelectorAll("[data-invitations-badge]")];
 const appLoading = document.querySelector("#workspace-app-loading");
 const workspaceMain = document.querySelector("#workspace-main");
+const workspaceList = document.querySelector("[data-workspace-list]");
+const workspaceStatus = document.querySelector("[data-workspace-status]");
 let appLoadingFallback = null;
+let workspaceSelectionPending = false;
 
 function finishAppLoading() {
   if (!appLoading || appLoading.hidden || appLoading.classList.contains("is-leaving")) return;
@@ -42,6 +46,54 @@ function finishAppLoading() {
 }
 
 globalThis.workspaceAppReady = finishAppLoading;
+
+async function loadWorkspaceList() {
+  if (!workspaceList) return;
+  try {
+    const response = await fetch(new URL("api/v1/workspaces", appRoot), {headers: {Accept: "application/json"}});
+    if (!response.ok) return;
+    const workspaces = await response.json();
+    workspaceList.replaceChildren(...workspaces.map((item) => {
+      const link = document.createElement("a"); link.className = `workspace-workspace-link${item.id === body.dataset.workspaceId ? " is-active" : ""}`; link.href = `/w/${encodeURIComponent(item.id)}/home`; link.title = item.name; link.dataset.workspaceId = item.id;
+      const mark = document.createElement("span"); mark.textContent = item.name.trim().charAt(0) || "W"; const name = document.createElement("strong"); name.textContent = item.name; link.append(mark, name); return link;
+    }));
+  } catch { /* navigation remains usable without the optional list */ }
+}
+loadWorkspaceList();
+
+workspaceList?.addEventListener("click", async (event) => {
+  const link = event.target.closest("a[data-workspace-id]");
+  if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  if (workspaceSelectionPending) return;
+  workspaceSelectionPending = true;
+  workspaceList.setAttribute("aria-busy", "true");
+  if (workspaceStatus) workspaceStatus.textContent = "";
+  try {
+    const response = await fetch(`/api/v1/workspaces/${encodeURIComponent(link.dataset.workspaceId)}/select`, {
+      method: "POST",
+      headers: {"X-CSRF-Token": csrfToken()},
+    });
+    if (!response.ok) throw new Error("workspace selection failed");
+    window.location.assign(link.href);
+  } catch {
+    if (workspaceStatus) workspaceStatus.textContent = "워크스페이스를 전환하지 못했습니다. 다시 시도해 주세요.";
+  } finally {
+    workspaceSelectionPending = false;
+    workspaceList.removeAttribute("aria-busy");
+  }
+});
+
+async function refreshInvitationBadge() {
+  if (!invitationBadges.length) return;
+  try {
+    const response = await fetch(new URL("api/v1/invitations", appRoot), {headers: {Accept: "application/json"}});
+    if (!response.ok) return;
+    const invitations = await response.json();
+    invitationBadges.forEach((badge) => { badge.hidden = invitations.length === 0; });
+  } catch { /* optional notification */ }
+}
+refreshInvitationBadge();
 
 if (document.querySelector("[data-workspace-await-ready]")) {
   appLoadingFallback = window.setTimeout(finishAppLoading, 15_000);
@@ -78,14 +130,14 @@ async function loadAccount() {
     const user = await response.json();
     const display = user.display_name || user.email;
     accountLabel.textContent = display;
-    accountAvatar.textContent = display.trim().charAt(0).toUpperCase() || "U";
+    const avatar = globalThis.workspaceAvatar;
+    accountAvatar.innerHTML = avatar ? avatar.avatarSvg(avatar.avatarSeed(user.id), 28) : (display.trim().charAt(0).toUpperCase() || "U");
     accountName.textContent = display;
     accountEmail.textContent = user.email;
-    document.querySelector("#workspace-profile-name").textContent = display;
-    document.querySelector("#workspace-profile-email").textContent = user.email;
-    rewriteWorkspaceAppLinks(user.last_workspace_id);
+    const activeWorkspaceId = body.dataset.workspaceId || user.last_workspace_id;
+    rewriteWorkspaceAppLinks(activeWorkspaceId);
     window.dispatchEvent(new CustomEvent("workspace:account-loaded", {
-      detail: { workspaceId: user.last_workspace_id },
+      detail: { workspaceId: activeWorkspaceId },
     }));
     account.hidden = false;
     return user;
@@ -100,18 +152,54 @@ accountToggle?.addEventListener("click", () => {
   accountMenu.hidden = !open;
   accountToggle.setAttribute("aria-expanded", String(open));
 });
-document.querySelector("#workspace-profile-open")?.addEventListener("click", () => {
-  accountMenu.hidden = true;
-  accountToggle.setAttribute("aria-expanded", "false");
-  profileDialog.showModal();
+document.addEventListener("click", (event) => {
+  if (!account?.hidden && !account?.contains(event.target)) {
+    accountMenu.hidden = true;
+    accountToggle?.setAttribute("aria-expanded", "false");
+  }
 });
-document.querySelector("#workspace-profile-close")?.addEventListener("click", () => profileDialog.close());
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && accountMenu && !accountMenu.hidden) {
+    accountMenu.hidden = true;
+    accountToggle?.setAttribute("aria-expanded", "false");
+    accountToggle?.focus();
+  }
+});
 document.querySelector("#workspace-logout")?.addEventListener("click", async () => {
   const response = await fetch(new URL("api/v1/auth/logout", appRoot), {
     method: "POST",
     headers: { "X-CSRF-Token": csrfToken() },
   });
   if (response.ok) window.location.assign(new URL("login", appRoot));
+});
+
+const renderInvitations = async () => {
+  const list = document.querySelector("#workspace-invitations-dialog-list");
+  if (!list) return;
+  try {
+    const response = await fetch(new URL("api/v1/invitations", appRoot), {headers: {Accept: "application/json"}});
+    if (!response.ok) throw new Error();
+    const invitations = await response.json();
+    list.replaceChildren();
+    if (!invitations.length) { list.innerHTML = '<div class="workspace-invitations-dialog-empty"><strong>새로운 초대가 없습니다.</strong><span>workspace 초대를 받으면 이곳에 표시됩니다.</span></div>'; return; }
+    for (const invitation of invitations) {
+      const item = document.createElement("article"); item.className = "workspace-invitations-dialog-item";
+      const copy = document.createElement("div"); const title = document.createElement("strong"); title.textContent = invitation.name; const detail = document.createElement("span"); detail.textContent = `${invitation.role_key} 권한 · ${new Date(invitation.expires_at).toLocaleDateString("ko-KR")}까지`; copy.append(title, detail);
+      const actions = document.createElement("div"); actions.className = "workspace-invitations-dialog-actions";
+      for (const action of ["accept", "reject"]) { const button = document.createElement("button"); button.dataset.action = action; button.dataset.invitationId = invitation.id; button.textContent = action === "accept" ? "참여" : "거절"; actions.append(button); }
+      item.append(copy, actions); list.append(item);
+    }
+  } catch { list.textContent = "초대 목록을 불러오지 못했습니다."; }
+};
+document.querySelector("#workspace-invitations-open")?.addEventListener("click", () => { accountMenu.hidden = true; accountToggle.setAttribute("aria-expanded", "false"); invitationsDialog?.showModal(); renderInvitations(); });
+document.querySelector("#workspace-invitations-close")?.addEventListener("click", () => invitationsDialog?.close());
+document.querySelector("#workspace-invitations-dialog-list")?.addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-action]"); if (!button) return;
+  button.disabled = true;
+  const response = await fetch(`/api/v1/invitations/received/${encodeURIComponent(button.dataset.invitationId)}/${button.dataset.action}`, {method: "POST", headers: {"X-CSRF-Token": csrfToken()}});
+  if (response.ok && button.dataset.action === "accept") { const body = await response.json(); refreshInvitationBadge(); window.location.assign(`/w/${encodeURIComponent(body.workspace_id)}/home`); return; }
+  if (response.ok) { button.closest(".workspace-invitations-dialog-item")?.remove(); refreshInvitationBadge(); return; }
+  button.disabled = false;
 });
 globalThis.workspaceAccountPromise = loadAccount();
 

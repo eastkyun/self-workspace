@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import {JSDOM} from "jsdom";
 import { workspaceAppRoute } from "../../portal/static/hub-state.js";
 import { migrateLegacyPins } from "../../shared/static/workspace-apps.js";
 
@@ -88,4 +89,78 @@ test("hub routes publishing through the selected workspace", () => {
 test("shared shell rewrites every tenant app including publishing", () => {
   const shellSource = fs.readFileSync("shared/static/shell.js", "utf8");
   assert.match(shellSource, /\["calendar", "notes", "publishing"\]/);
+});
+
+test("shared shell persists sidebar workspace selection before navigation", () => {
+  const shellSource = fs.readFileSync("shared/static/shell.js", "utf8");
+  assert.match(shellSource, /workspaceList\?\.addEventListener\("click"/);
+  assert.match(shellSource, /workspaces\/\$\{encodeURIComponent\(link\.dataset\.workspaceId\)\}\/select/);
+  assert.match(shellSource, /select`, \{\s*method: "POST",\s*headers: \{"X-CSRF-Token": csrfToken\(\)\}/);
+  assert.match(shellSource, /window\.location\.assign\(link\.href\)/);
+  assert.doesNotMatch(shellSource, /workspace selection failed[\s\S]{0,100}location\.reload/);
+});
+
+test("shared shell keeps canonical app links on the workspace in the current route", () => {
+  const shellSource = fs.readFileSync("shared/static/shell.js", "utf8");
+  assert.match(shellSource, /body\.dataset\.workspaceId \|\| user\.last_workspace_id/);
+  assert.match(shellSource, /rewriteWorkspaceAppLinks\(activeWorkspaceId\)/);
+});
+
+test("shared shell selects once and keeps app links on the route workspace", async () => {
+  const dom = new JSDOM(`<!doctype html><body data-workspace-id="workspace-b" data-session-cookie="my_workspace_session">
+    <aside id="sidebar"><div data-workspace-list></div><p data-workspace-status></p></aside>
+    <main id="workspace-main"></main>
+    <div id="workspace-guest-actions" hidden></div>
+    <div id="workspace-account" hidden><button id="workspace-account-toggle"></button><div id="workspace-account-menu" hidden></div><span id="workspace-account-label"></span><span id="workspace-account-avatar"></span><span id="workspace-account-name"></span><span id="workspace-account-email"></span></div>
+    <a data-app-id="notes"></a><a data-app-id="calendar"></a><a data-app-id="publishing"></a>
+  </body>`, {url: "http://testserver/w/workspace-b/home"});
+  const requests = [];
+  const fetchStub = async (input, options = {}) => {
+    const url = String(input);
+    requests.push({url, options});
+    if (url.endsWith("api/v1/workspaces")) return {ok: true, json: async () => [{id: "workspace-b", name: "B"}]};
+    if (url.endsWith("api/v1/invitations")) return {ok: true, json: async () => []};
+    if (url.endsWith("api/v1/users/me")) return {ok: true, json: async () => ({id: "user", email: "user@example.com", display_name: "User", last_workspace_id: "workspace-a"})};
+    if (url === "/api/v1/workspaces/workspace-b/select") return {ok: true};
+    if (url === "/api/v1/workspaces/unavailable/select") return {ok: false};
+    throw new Error(`unexpected request: ${url}`);
+  };
+  Object.assign(globalThis, {
+    window: dom.window,
+    document: dom.window.document,
+    localStorage: dom.window.localStorage,
+    CustomEvent: dom.window.CustomEvent,
+    fetch: fetchStub,
+    ResizeObserver: class { observe() {} },
+  });
+  dom.window.matchMedia = () => ({matches: false, addEventListener() {}});
+  dom.window.requestAnimationFrame = (callback) => callback();
+  dom.window.document.cookie = "my_workspace_session_csrf=csrf-token";
+  const browserErrors = [];
+  dom.window.addEventListener("error", (event) => browserErrors.push(event.error?.stack || event.message));
+
+  await import(`../../shared/static/shell.js?workspace-selection-test=${Date.now()}`);
+  await globalThis.workspaceAccountPromise;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  for (const appId of ["notes", "calendar", "publishing"]) {
+    assert.match(dom.window.document.querySelector(`[data-app-id="${appId}"]`).getAttribute("href"), /\/w\/workspace-b\//);
+  }
+  const workspaceLink = dom.window.document.querySelector("[data-workspace-list] [data-workspace-id='workspace-b']");
+  workspaceLink.href = "#selected";
+  workspaceLink.dispatchEvent(new dom.window.MouseEvent("click", {bubbles: true, cancelable: true, button: 0}));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  const selectionRequests = requests.filter(({url}) => url.endsWith("/select"));
+  assert.equal(selectionRequests.length, 1, JSON.stringify({requests, browserErrors}));
+  assert.equal(selectionRequests[0].options.method, "POST");
+  assert.equal(selectionRequests[0].options.headers["X-CSRF-Token"], "csrf-token");
+  assert.equal(dom.window.location.hash, "#selected");
+
+  workspaceLink.dataset.workspaceId = "unavailable";
+  workspaceLink.href = "#failed";
+  workspaceLink.dispatchEvent(new dom.window.MouseEvent("click", {bubbles: true, cancelable: true, button: 0}));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(dom.window.location.hash, "#selected");
+  assert.match(dom.window.document.querySelector("[data-workspace-status]").textContent, /전환하지 못했습니다/);
 });
