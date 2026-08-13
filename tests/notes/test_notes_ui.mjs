@@ -73,6 +73,9 @@ test("API adapter builds mounted relative CRUD requests", async () => {
     };
   };
   const api = createNotesApi("./api/notes", fetchImpl);
+  assert.equal(api.exportUrl(3, "docx"), "./api/notes/3/export?format=docx");
+  assert.equal(api.exportUrl(3, "pdf"), "./api/notes/3/export?format=pdf");
+  assert.throws(() => api.exportUrl(3, "html"), TypeError);
   await api.list({ query: "  hello  ", noteType: "general" });
   await api.create(emptyDraft());
   await api.update(3, emptyDraft("research_note"));
@@ -99,6 +102,13 @@ test("UI contains accessible list, editor, statuses, and dirty guard", () => {
   assert.match(template, /id="note-save-status"[^>]*aria-live="polite"/);
   assert.match(template, /id="note-view"[^>]*hidden/);
   assert.match(template, /id="edit-note"/);
+  assert.match(template, /id="export-note-docx"/);
+  assert.match(template, /id="export-note-pdf"/);
+  assert.match(template, /id="note-export-status"[^>]*aria-live="polite"/);
+  assert.match(template, /document-export-spinner/);
+  assert.match(script, /createExportController/);
+  assert.match(template, /static\/shared\/document-export\.css/);
+  assert.match(script, /api\.exportUrl\(state\.selectedNote\.id, "docx"\)/);
   assert.match(script, /const viewOpen = Boolean\(state\.selectedNote && !state\.editing\)/);
   assert.match(script, /listRequest/);
   assert.match(script, /selectionRequest/);

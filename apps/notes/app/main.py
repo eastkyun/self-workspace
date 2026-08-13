@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response, status
@@ -22,6 +22,16 @@ from apps.notes.app.service import (
 from shared.app_registry import AppRegistry, PORTAL_STATIC_DIR
 from shared.errors import APIError
 from shared.source_references import SourceReferenceResolver
+from shared.document_export import (
+    AssetResource,
+    DocumentExportService,
+    DocumentSnapshot,
+    ExportConversionFailed,
+    ExportResourceLimitExceeded,
+    ExportTimeout,
+    ExportUnavailable,
+    attachment_headers,
+)
 from shared.templating import SHARED_STATIC_DIR, create_templates, shell_context
 
 APP_DIR = Path(__file__).resolve().parent
@@ -56,6 +66,9 @@ def create_notes_router(
     require_workspace: ContextDependency,
     csrf: CsrfDependency | None = None,
     csrf_cookie_name: str | None = None,
+    document_export_service: DocumentExportService | None = None,
+    export_asset_loader: Callable[[WorkspaceContext, int], AssetResource | None]
+    | None = None,
 ) -> APIRouter:
     """Canonical workspace Notes UI/API router.
 
@@ -163,6 +176,45 @@ def create_notes_router(
             return service.get_note(context, note_id)
         except Exception as error:
             raise _translate(error) from error
+
+    @router.get(f"{api}/{{note_id}}/export")
+    def export_note(
+        note_id: int,
+        format: Literal["docx", "pdf"] = Query(...),
+        context: WorkspaceContext = Depends(require_workspace),
+    ) -> Response:
+        if document_export_service is None:
+            raise HTTPException(status_code=503, detail="Document export is unavailable")
+        try:
+            note = service.get_note(context, note_id)
+            exported = document_export_service.export(
+                DocumentSnapshot(
+                    title=note["title"],
+                    markdown=note["content"],
+                    date=note["updated_at"],
+                ),
+                format,
+                asset_loader=(
+                    (lambda asset_id: export_asset_loader(context, asset_id))
+                    if export_asset_loader is not None
+                    else None
+                ),
+            )
+        except (NoteNotFoundError, PermissionDenied, AppNotAvailable, WorkspaceNotAvailable) as error:
+            raise _translate(error) from error
+        except ExportResourceLimitExceeded as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        except ExportUnavailable as error:
+            raise HTTPException(status_code=503, detail="Document export is unavailable") from error
+        except ExportTimeout as error:
+            raise HTTPException(status_code=504, detail=str(error)) from error
+        except ExportConversionFailed as error:
+            raise HTTPException(status_code=500, detail="Document conversion failed") from error
+        return Response(
+            content=exported.content,
+            media_type=exported.media_type,
+            headers=attachment_headers(exported.filename),
+        )
 
     @router.put(f"{api}/{{note_id}}", response_model=NoteResponse)
     def update_note(request: Request, note_id: int, payload: NoteUpdate, context: WorkspaceContext = Depends(require_workspace)):

@@ -67,7 +67,7 @@ from assets.router import (
     create_public_asset_router,
     create_workspace_asset_router,
 )
-from assets.service import AssetService
+from assets.service import AssetNotFoundError, AssetService
 from assets.sources import WorkspaceMarkdownSourceReader
 from assets.storage import LocalFileStorage
 from apps.calendar.app.main import (
@@ -133,6 +133,7 @@ from shared.templating import (
     shell_context,
 )
 from shared.source_references import SourceReferenceResolver
+from shared.document_export import AssetResource, DocumentExportService, PandocRunner
 from shared.internal_links import (
     InternalLinkBatchRequest,
     InternalLinkResolverRegistry,
@@ -175,9 +176,23 @@ def create_app(
     app_registry: AppRegistry | None = None,
     quotes: Sequence[Quote] | None = None,
     quote_selector: QuoteSelector | None = None,
+    document_export_service: DocumentExportService | None = None,
 ) -> FastAPI:
     install_access_log_redaction()
     configuration = load_config()
+    export_config = configuration.document_export
+    resolved_document_export_service = document_export_service or DocumentExportService(
+        PandocRunner(
+            pandoc_path=export_config.pandoc_path,
+            xelatex_path=export_config.xelatex_path,
+            chromium_path=export_config.chromium_path,
+            pdf_engine=export_config.pdf_engine,
+            timeout_seconds=export_config.timeout_seconds,
+            cjk_font=export_config.cjk_font,
+            reference_docx=export_config.reference_docx,
+        ),
+        max_concurrent=export_config.max_concurrent,
+    )
     legacy_test_compatibility = any(
         value is not None
         for value in (
@@ -323,6 +338,20 @@ def create_app(
         ),
         default_context=notes_application.state.workspace_context,
     )
+
+    def load_workspace_export_asset(
+        context: WorkspaceContext, asset_id: int
+    ) -> AssetResource | None:
+        try:
+            asset = asset_service.get_asset(asset_id, context)
+        except AssetNotFoundError:
+            return None
+        if not asset_storage.exists(asset["storage_key"]):
+            return None
+        return AssetResource(
+            content=asset_storage.open(asset["storage_key"]),
+            media_type=asset["media_type"],
+        )
     auth_service = authentication_service or AuthenticationService(
         resolved_identity_database_path,
         policy=SessionPolicy(
@@ -544,6 +573,17 @@ def create_app(
                 "SELECT 1 FROM workspaces WHERE id = ? AND status = 'ACTIVE'",
                 (workspace_id,),
             ).fetchone() is not None
+
+    def load_published_export_asset(
+        publication_public_id: str, asset_id: int
+    ) -> AssetResource | None:
+        asset = resolve_published_asset(publication_public_id, asset_id)
+        if asset is None or not asset_storage.exists(asset["storage_key"]):
+            return None
+        return AssetResource(
+            content=asset_storage.open(asset["storage_key"]),
+            media_type=asset["media_type"],
+        )
     # Notes and Calendar links are workspace-scoped and must not be resolved by
     # a global, ID-only provider.  Their request-scoped providers are wired by
     # the canonical workspace endpoint below.
@@ -702,6 +742,8 @@ def create_app(
             require_workspace=require_workspace,
             csrf=notes_csrf,
             csrf_cookie_name=f"{configuration.session.cookie_name}_csrf",
+            document_export_service=resolved_document_export_service,
+            export_asset_loader=load_workspace_export_asset,
         )
     )
 
@@ -825,6 +867,8 @@ def create_app(
             is_workspace_publicly_available=is_workspace_publicly_available,
             include_management_api=legacy_test_compatibility,
             identity_database_path=resolved_identity_database_path,
+            document_export_service=resolved_document_export_service,
+            load_published_export_asset=load_published_export_asset,
         )
     )
     application.include_router(

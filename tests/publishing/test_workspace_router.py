@@ -6,6 +6,13 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from portal.main import create_app
+from shared.document_export import DocumentExportService
+
+
+class FakeDocumentRunner:
+    def convert(self, source, output, *, format, resource_path) -> None:
+        marker = b"PK\x03\x04" if format == "docx" else b"%PDF-1.7"
+        output.write_bytes(marker + source.read_bytes())
 
 
 def signup(client: TestClient, email: str) -> tuple[str, str]:
@@ -208,3 +215,61 @@ def test_public_asset_projection_allows_only_assets_in_published_version(tmp_pat
             f"/api/publications/public/{public_id}/assets/resolve",
             json={"ids": [asset_a["id"]]},
         ).json()[0]["exists"] is False
+
+
+def test_note_and_current_publication_version_can_be_exported(tmp_path):
+    app = create_app(
+        tmp_path / "calendar.db",
+        notes_database_path=tmp_path / "notes.db",
+        publishing_database_path=tmp_path / "publishing.db",
+        asset_database_path=tmp_path / "assets.db",
+        document_export_service=DocumentExportService(FakeDocumentRunner()),
+    )
+    with TestClient(app) as client:
+        workspace_id, csrf = signup(client, "exporter@example.com")
+        note = client.post(
+            f"/api/v1/workspaces/{workspace_id}/notes",
+            headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
+            json={"title": "한국어 보고서", "content": "# 본문\n\n첫 버전"},
+        ).json()
+
+        note_docx = client.get(
+            f"/api/v1/workspaces/{workspace_id}/notes/{note['id']}/export",
+            params={"format": "docx"},
+        )
+        assert note_docx.status_code == 200
+        assert note_docx.content.startswith(b"PK\x03\x04")
+        assert note_docx.headers["content-type"].startswith(
+            "application/vnd.openxmlformats-officedocument"
+        )
+        assert "filename*=UTF-8''" in note_docx.headers["content-disposition"]
+        assert client.get(
+            f"/api/v1/workspaces/{workspace_id}/notes/{note['id']}/export",
+            params={"format": "html"},
+        ).status_code == 422
+
+        publication = create_publication(
+            client, workspace_id, csrf, note["id"], "export-report"
+        ).json()
+        published = client.post(
+            f"/api/v1/workspaces/{workspace_id}/publications/{publication['id']}/publish",
+            headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
+        ).json()
+
+        public_pdf = client.get(
+            f"/api/publications/public/{published['public_id']}/export",
+            params={"format": "pdf"},
+        )
+        assert public_pdf.status_code == 200
+        assert public_pdf.content.startswith(b"%PDF-1.7")
+        assert public_pdf.headers["content-type"].startswith("application/pdf")
+
+        archived = client.post(
+            f"/api/v1/workspaces/{workspace_id}/publications/{publication['id']}/archive",
+            headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
+        )
+        assert archived.status_code == 200
+        assert client.get(
+            f"/api/publications/public/{published['public_id']}/export",
+            params={"format": "pdf"},
+        ).status_code == 404

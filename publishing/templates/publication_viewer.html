@@ -2,6 +2,7 @@
 
 {% block page_head %}
   <link rel="stylesheet" href="{{ workspace_path('/static/shared/markdown/markdown.css') }}">
+  <link rel="stylesheet" href="{{ workspace_path('/static/shared/document-export.css') }}">
   <link rel="stylesheet" href="{{ workspace_path('/static/publishing/publishing.css') }}">
 {% endblock %}
 
@@ -10,12 +11,16 @@
   <header class="publication-header">
     <div class="publication-document-actions">
       <a class="publication-back-link" href="{{ workspace_path('/publications/') }}">← Publications</a>
-      <button
-        id="publication-delete"
-        class="publication-delete-button"
-        type="button"
-        title="공개 목록에서 제거하고 immutable version은 보관합니다."
-      >발행물 삭제</button>
+      <div class="publication-action-group">
+        <button class="publication-export-link document-export-button" type="button" data-export-url="/api/publications/public/{{ publication.public_id }}/export?format=docx" data-export-filename="{{ publication_version.title }}.docx" data-export-label="Word"><span class="document-export-spinner" aria-hidden="true"></span><span>Word</span></button>
+        <button class="publication-export-link document-export-button" type="button" data-export-url="/api/publications/public/{{ publication.public_id }}/export?format=pdf" data-export-filename="{{ publication_version.title }}.pdf" data-export-label="PDF"><span class="document-export-spinner" aria-hidden="true"></span><span>PDF</span></button>
+        <button
+          id="publication-delete"
+          class="publication-delete-button"
+          type="button"
+          title="공개 목록에서 제거하고 immutable version은 보관합니다."
+        >발행물 삭제</button>
+      </div>
     </div>
     <p class="workspace-eyebrow">{{ publication_type.display_name }}</p>
     <h2>{{ publication_version.title }}</h2>

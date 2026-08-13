@@ -1,0 +1,145 @@
+:root {
+  --text: #172033;
+  --text-muted: #667085;
+  --surface: #fff;
+  --surface-muted: #f1f3f7;
+  --border: #d9dde5;
+  --accent: #357a68;
+  --accent-soft: #e9f4f0;
+  --radius-md: 12px;
+  color-scheme: light;
+}
+
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  background: #fff;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  background: #fff;
+  font-family: "Noto Sans CJK KR", "Noto Sans CJK JP", sans-serif;
+  font-size: 9pt;
+}
+
+.export-document {
+  min-height: calc(297mm - 24mm);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
+}
+
+.export-document__header {
+  margin-bottom: 6mm;
+  padding-bottom: 4mm;
+  border-bottom: 2px solid var(--accent);
+}
+
+.export-document__eyebrow {
+  margin: 0 0 1.5mm;
+  color: var(--accent);
+  font-size: 7pt;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+
+.export-document__header h1 {
+  margin: 0;
+  font-size: 19pt;
+  line-height: 1.2;
+  letter-spacing: -.025em;
+}
+
+.export-document__metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2mm 5mm;
+  margin-top: 2mm;
+  color: var(--text-muted);
+  font-size: 7.5pt;
+}
+
+.markdown-viewer h1 { font-size: 17pt; }
+.markdown-viewer h2 { font-size: 14pt; }
+.markdown-viewer h3 { font-size: 11.5pt; }
+
+.markdown-viewer h1,
+.markdown-viewer h2,
+.markdown-viewer h3,
+.markdown-viewer h4,
+.markdown-viewer h5,
+.markdown-viewer h6 {
+  margin-top: 1em;
+  margin-bottom: .4em;
+}
+
+.markdown-viewer h1,
+.markdown-viewer h2,
+.markdown-viewer h3 {
+  color: #1c4f43;
+}
+
+.markdown-viewer blockquote {
+  padding: 2mm 3mm;
+  border-left: 4px solid var(--accent);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: var(--accent-soft);
+}
+
+.markdown-viewer pre {
+  border: 1px solid #2b3851;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.markdown-viewer table {
+  display: table;
+  width: 100%;
+}
+
+.markdown-viewer th {
+  color: #16483c;
+  background: var(--accent-soft);
+}
+
+.markdown-viewer tr:nth-child(even) td {
+  background: #faf9f5;
+}
+
+.markdown-viewer img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 5mm auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.markdown-viewer input[type="checkbox"] {
+  width: 1em;
+  height: 1em;
+  margin: 0 .4em 0 0;
+  accent-color: var(--accent);
+  vertical-align: -.08em;
+}
+
+.markdown-viewer li { margin: .2em 0; }
+.markdown-viewer a { color: #2866a5; text-decoration-thickness: 1px; }
+
+.markdown-viewer blockquote,
+.markdown-viewer pre,
+.markdown-viewer table {
+  break-inside: auto;
+}

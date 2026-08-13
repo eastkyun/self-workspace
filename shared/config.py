@@ -69,12 +69,26 @@ class SecurityConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class DocumentExportConfig:
+    pandoc_path: str
+    xelatex_path: str
+    chromium_path: str
+    pdf_engine: str
+    cjk_font: str
+    timeout_seconds: int
+    max_concurrent: int
+    reference_docx: Path | None
+
+
+
+@dataclass(frozen=True, slots=True)
 class AppConfig:
     environment: str
     public_origin: str | None
     databases: DatabasePaths
     session: SessionConfig
     security: SecurityConfig
+    document_export: DocumentExportConfig
 
 
 def _value(source: Mapping[str, str], name: str) -> str | None:
@@ -272,12 +286,32 @@ def load_config(environ: Mapping[str, str] | None = None) -> AppConfig:
         login_max_failures=_positive_int(source, "LOGIN_RATE_LIMIT_MAX_FAILURES", 5),
         trusted_proxies=trusted_proxies,
     )
+    reference_docx_value = _value(source, "DOCUMENT_EXPORT_REFERENCE_DOCX")
+    document_export = DocumentExportConfig(
+        pandoc_path=_value(source, "DOCUMENT_EXPORT_PANDOC_PATH") or "pandoc",
+        xelatex_path=_value(source, "DOCUMENT_EXPORT_XELATEX_PATH") or "xelatex",
+        cjk_font=_value(source, "DOCUMENT_EXPORT_CJK_FONT") or "Noto Sans CJK KR",
+        chromium_path=_value(source, "DOCUMENT_EXPORT_CHROMIUM_PATH") or "chromium",
+        pdf_engine=(_value(source, "DOCUMENT_EXPORT_PDF_ENGINE") or "chromium").casefold(),
+        timeout_seconds=_positive_int(source, "DOCUMENT_EXPORT_TIMEOUT_SECONDS", 60),
+        max_concurrent=_positive_int(source, "DOCUMENT_EXPORT_MAX_CONCURRENT", 2),
+        reference_docx=(
+            Path(reference_docx_value).expanduser().resolve()
+            if reference_docx_value is not None
+            else None
+        ),
+    )
+    if document_export.pdf_engine not in {"chromium", "xelatex"}:
+        raise ConfigurationError(
+            "DOCUMENT_EXPORT_PDF_ENGINE must be chromium or xelatex"
+        )
     return AppConfig(
         environment=environment,
         public_origin=public_origin,
         databases=databases,
         session=session,
         security=security,
+        document_export=document_export,
     )
 
 
@@ -285,6 +319,7 @@ __all__ = [
     "AppConfig",
     "ConfigurationError",
     "DatabasePaths",
+    "DocumentExportConfig",
     "SecurityConfig",
     "SessionConfig",
     "load_config",

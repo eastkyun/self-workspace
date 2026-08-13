@@ -4,6 +4,7 @@ import {
   mountMarkdownViewer,
   resolveAssetImages,
 } from "../shared/markdown/index.js";
+import { createExportController } from "../shared/document-export.js";
 
 const sourceElement = document.querySelector("#publication-source");
 const container = document.querySelector("#publication-markdown");
@@ -12,6 +13,10 @@ const actionStatus = document.querySelector("#publication-action-status");
 
 if (sourceElement && container) {
   const payload = JSON.parse(sourceElement.textContent || "{}");
+  createExportController({
+    buttons: document.querySelectorAll(".publication-export-link"),
+    status: actionStatus,
+  });
   const assetIds = collectAssetImages(payload.markdown || "");
   const assetImageResolutions = assetIds.length
     ? await resolveAssetImages(assetIds, {
@@ -33,6 +38,7 @@ if (sourceElement && container) {
     );
     if (!confirmed) return;
     deleteButton.disabled = true;
+    actionStatus.classList.remove("is-error");
     actionStatus.textContent = "발행물을 보관하는 중…";
     try {
       const response = await fetch(payload.archiveEndpoint, {

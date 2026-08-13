@@ -48,6 +48,32 @@
   margin-bottom: 0;
 }
 
+.publication-action-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+
+.publication-export-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: .55rem .8rem;
+  border: 1px solid var(--workspace-border);
+  border-radius: .7rem;
+  color: var(--workspace-text);
+  background: var(--workspace-surface);
+  font-weight: 750;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.publication-export-link:hover,
+.publication-export-link:focus-visible {
+  border-color: var(--workspace-accent);
+}
+
 .publication-delete-button {
   min-height: 40px;
   padding: .55rem .8rem;

@@ -15,7 +15,7 @@ My Workspace는 Calendar, Notes, Publishing을 하나의 인증·권한·검색 
   항목과 활동 기록
 - **통합 검색**: 권한과 활성 앱 정책을 적용한 Notes·Calendar·Publishing 검색
 - **Calendar**: 일정·주제 관리, Markdown 상세 내용, Notes 연결과 회의 노트 생성
-- **Notes**: 문서 CRUD, 검색, 휴지통 복구, 내부 링크, 이미지 붙여넣기와 Publishing
+- **Notes**: 문서 CRUD, 검색, 휴지통 복구, 내부 링크, 이미지 붙여넣기, DOCX/PDF 내보내기와 Publishing
 - **Publishing**: immutable version snapshot, 공개 뷰어, 복원·보관, Publication Type
   관리
 - **공통 UX**: 반응형 Sidebar/App Launcher, 계정 메뉴, 접근 가능한 SVG 로딩 상태,
@@ -30,6 +30,7 @@ My Workspace는 Calendar, Notes, Publishing을 하나의 인증·권한·검색 
 - Vanilla JavaScript ES modules
 - FullCalendar 7.0.2, Marked 18.0.7, DOMPurify 3.4.12
 - Pytest, Node test runner, Playwright
+- Pandoc, XeLaTeX, Noto CJK font — DOCX/PDF 내보내기
 
 ## 프로젝트 구조
 
@@ -114,9 +115,19 @@ Workspace가 함께 생성되며, 로그인 후 Workspace 선택 화면을 거�
 | `PUBLICATION_TYPES_PATH` | `instance/publishing/types.json` | 선언형 Publication Type 저장소 |
 | `SESSION_COOKIE_SECURE` | `false` | 운영 환경에서는 반드시 `true` |
 | `TRUSTED_PROXIES` | 비어 있음 | 신뢰할 reverse proxy IP/CIDR 목록 |
+| `DOCUMENT_EXPORT_PANDOC_PATH` | `pandoc` | Pandoc 실행 파일 이름 또는 절대경로 |
+| `DOCUMENT_EXPORT_XELATEX_PATH` | `xelatex` | PDF 생성용 XeLaTeX 실행 파일 이름 또는 절대경로 |
+| `DOCUMENT_EXPORT_CHROMIUM_PATH` | `chromium` | GUI 스타일 PDF 생성용 Chromium 실행 파일 이름 또는 절대경로 |
+| `DOCUMENT_EXPORT_PDF_ENGINE` | `chromium` | `chromium`은 웹 스타일, `xelatex`는 문서 중심 PDF 생성 |
+| `DOCUMENT_EXPORT_CJK_FONT` | `Noto Sans CJK KR` | PDF에 사용할 설치된 한국어 글꼴 |
+| `DOCUMENT_EXPORT_TIMEOUT_SECONDS` | `60` | 변환 1건의 제한 시간 |
+| `DOCUMENT_EXPORT_MAX_CONCURRENT` | `2` | 프로세스당 동시 변환 상한 |
+| `DOCUMENT_EXPORT_REFERENCE_DOCX` | 비어 있음 | 선택적 Pandoc DOCX reference file 절대경로 |
 
 `TODO_DB_PATH`는 Calendar DB의 레거시 호환 변수이며 `CALENDAR_DB_PATH`가 우선합니다.
 운영 환경에서는 DB 경로를 절대경로로 지정하는 것을 권장합니다.
+문서 내보내기 설치와 장애 코드는 [Document export 운영 문서](docs/document-export.md)를
+참고하세요. 변환기가 없어도 앱은 시작되며 내보내기 요청만 `503`을 반환합니다.
 
 ## 기존 데이터 Bootstrap과 Migration
 
@@ -205,4 +216,5 @@ PYTHONDONTWRITEBYTECODE=1 \
 - [Publishing architecture](docs/publishing-architecture.md)
 - [Publication Type 확장](docs/publication-type-extension.md)
 - [Workspace 이미지와 Publishing](docs/publishing-images.md)
+- [DOCX/PDF 문서 내보내기](docs/document-export.md)
 - [SQLite 백업과 복원](docs/database-backup-restore.md)

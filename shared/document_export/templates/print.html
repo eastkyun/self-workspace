@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>$if(title)$$title$$else$Document$endif$</title>
+$for(css)$
+  <link rel="stylesheet" href="$css$">
+$endfor$
+</head>
+<body>
+  <article class="export-document">
+    <header class="export-document__header">
+$if(title)$
+      <p class="export-document__eyebrow">MY WORKSPACE</p>
+      <h1>$title$</h1>
+$endif$
+      <div class="export-document__metadata">
+$if(author)$<span>$author$</span>$endif$
+$if(date)$<time>$date$</time>$endif$
+      </div>
+    </header>
+    <main class="markdown-viewer">
+      <div class="markdown-viewer__content">
+$body$
+      </div>
+    </main>
+  </article>
+</body>
+</html>

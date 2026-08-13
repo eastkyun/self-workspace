@@ -30,6 +30,14 @@ def test_missing_environment_uses_existing_paths_and_security_defaults() -> None
     assert config.session.absolute_ttl_seconds == 604_800
     assert config.session.cookie_secure is False
     assert config.security.trusted_proxies == ()
+    assert config.document_export.pandoc_path == "pandoc"
+    assert config.document_export.xelatex_path == "xelatex"
+    assert config.document_export.chromium_path == "chromium"
+    assert config.document_export.pdf_engine == "chromium"
+    assert config.document_export.cjk_font == "Noto Sans CJK KR"
+    assert config.document_export.timeout_seconds == 60
+    assert config.document_export.max_concurrent == 2
+    assert config.document_export.reference_docx is None
 
 
 def test_current_database_environment_names_and_calendar_legacy_fallback(
@@ -74,6 +82,9 @@ def test_calendar_environment_name_takes_precedence_over_legacy_name() -> None:
         ("SESSION_MAX_ACTIVE_PER_USER", "0"),
         ("SESSION_COOKIE_SECURE", "sometimes"),
         ("SESSION_COOKIE_NAME", "bad cookie"),
+        ("DOCUMENT_EXPORT_TIMEOUT_SECONDS", "0"),
+        ("DOCUMENT_EXPORT_MAX_CONCURRENT", "many"),
+        ("DOCUMENT_EXPORT_PDF_ENGINE", "printer"),
     ],
 )
 def test_invalid_environment_values_fail_closed(name: str, value: str) -> None:
@@ -89,6 +100,32 @@ def test_absolute_session_ttl_cannot_be_shorter_than_idle_ttl() -> None:
                 "SESSION_ABSOLUTE_TTL_SECONDS": "3599",
             }
         )
+
+
+def test_document_export_environment_is_validated(tmp_path: Path) -> None:
+    reference = tmp_path / "reference.docx"
+    config = load_config(
+        {
+            "DOCUMENT_EXPORT_PANDOC_PATH": "/opt/pandoc",
+            "DOCUMENT_EXPORT_XELATEX_PATH": "/opt/xelatex",
+            "DOCUMENT_EXPORT_CHROMIUM_PATH": "/opt/chromium",
+            "DOCUMENT_EXPORT_PDF_ENGINE": "xelatex",
+            "DOCUMENT_EXPORT_CJK_FONT": "Noto Serif CJK KR",
+            "DOCUMENT_EXPORT_TIMEOUT_SECONDS": "45",
+            "DOCUMENT_EXPORT_MAX_CONCURRENT": "3",
+            "DOCUMENT_EXPORT_REFERENCE_DOCX": str(reference),
+        }
+    )
+
+    assert config.document_export.pandoc_path == "/opt/pandoc"
+    assert config.document_export.xelatex_path == "/opt/xelatex"
+    assert config.document_export.chromium_path == "/opt/chromium"
+    assert config.document_export.pdf_engine == "xelatex"
+    assert config.document_export.cjk_font == "Noto Serif CJK KR"
+    assert config.document_export.timeout_seconds == 45
+    assert config.document_export.max_concurrent == 3
+    assert config.document_export.reference_docx == reference.resolve()
+
 
 
 def test_production_defaults_to_secure_cookie_and_rejects_insecure_override() -> None:

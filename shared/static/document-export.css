@@ -1,0 +1,36 @@
+.document-export-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.document-export-button:disabled {
+  cursor: wait;
+  opacity: .68;
+}
+
+.document-export-spinner {
+  display: none;
+  width: .85em;
+  height: .85em;
+  flex: 0 0 auto;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: document-export-spin .7s linear infinite;
+}
+
+.document-export-button.is-loading .document-export-spinner {
+  display: inline-block;
+}
+
+@keyframes document-export-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .document-export-spinner { animation-duration: 1.5s; }
+}

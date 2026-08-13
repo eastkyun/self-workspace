@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from publishing import repository
@@ -37,6 +37,16 @@ from publishing.type_manifests import (
 from publishing.types import default_publication_types
 from shared.app_registry import AppRegistry
 from shared.templating import create_templates, shell_context
+from shared.document_export import (
+    AssetResource,
+    DocumentExportService,
+    DocumentSnapshot,
+    ExportConversionFailed,
+    ExportResourceLimitExceeded,
+    ExportTimeout,
+    ExportUnavailable,
+    attachment_headers,
+)
 from access.context import WorkspaceContext
 from access.errors import AppNotAvailable, PermissionDenied
 from access.service import AuthorizationService
@@ -186,6 +196,9 @@ def create_publishing_router(
     is_workspace_publicly_available: Callable[[str], bool] | None = None,
     include_management_api: bool = True,
     identity_database_path: Path | None = None,
+    document_export_service: DocumentExportService | None = None,
+    load_published_export_asset: Callable[[str, int], AssetResource | None]
+    | None = None,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -673,11 +686,61 @@ def create_publishing_router(
     ):
         return render_publication(request, public_id=public_id, slug=slug)
 
+    @router.get("/api/publications/public/{public_id}/export")
+    def export_publication(
+        public_id: str,
+        format: Literal["docx", "pdf"] = Query(...),
+    ) -> Response:
+        if document_export_service is None:
+            raise HTTPException(status_code=503, detail="Document export is unavailable")
+        try:
+            content = service.get_public_content(public_id=public_id)
+            publication = content.publication
+            if (
+                is_workspace_publicly_available is not None
+                and not is_workspace_publicly_available(publication["workspace_id"])
+            ):
+                raise PublicationNotFoundError(public_id)
+            version = content.version
+            exported = document_export_service.export(
+                DocumentSnapshot(
+                    title=version["title"],
+                    markdown=version["markdown"],
+                    summary=version["summary"],
+                    version=f"v{version['version']}",
+                    date=publication.get("published_at") or "",
+                ),
+                format,
+                asset_loader=(
+                    (lambda asset_id: load_published_export_asset(public_id, asset_id))
+                    if load_published_export_asset is not None
+                    else None
+                ),
+            )
+        except PublicationNotFoundError as error:
+            raise HTTPException(status_code=404, detail="Publication not found") from error
+        except ExportResourceLimitExceeded as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        except ExportUnavailable as error:
+            raise HTTPException(status_code=503, detail="Document export is unavailable") from error
+        except ExportTimeout as error:
+            raise HTTPException(status_code=504, detail=str(error)) from error
+        except ExportConversionFailed as error:
+            raise HTTPException(status_code=500, detail="Document conversion failed") from error
+        return Response(
+            content=exported.content,
+            media_type=exported.media_type,
+            headers=attachment_headers(exported.filename, public=True),
+        )
+
     if not include_management_api:
         router.routes[:] = [
             route
             for route in router.routes
-            if not getattr(route, "path", "").startswith("/api/")
+            if (
+                not getattr(route, "path", "").startswith("/api/")
+                or getattr(route, "path", "").startswith("/api/publications/public/")
+            )
         ]
     return router
 

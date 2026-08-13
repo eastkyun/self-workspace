@@ -20,3 +20,10 @@ test("publication viewer exposes reversible delete semantics", () => {
   assert.match(script, /window\.location\.assign/);
   assert.doesNotMatch(script, /https?:\/\//);
 });
+
+test("publication viewer exposes DOCX and PDF export actions", () => {
+  assert.match(template, /\/api\/publications\/public\/\{\{ publication\.public_id \}\}\/export\?format=docx/);
+  assert.match(template, /\/api\/publications\/public\/\{\{ publication\.public_id \}\}\/export\?format=pdf/);
+  assert.match(template, /document-export-spinner/);
+  assert.match(script, /createExportController/);
+});

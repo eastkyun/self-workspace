@@ -31,6 +31,7 @@ import {
   suggestPublicationSlug,
 } from "/static/publishing/publish-dialog.js";
 import { createWorkspaceUserState } from "/static/shared/workspace-user-state.js";
+import { createExportController } from "/static/shared/document-export.js";
 
 const root = document.querySelector("#notes-app");
 
@@ -69,6 +70,9 @@ if (root) {
     editButton: root.querySelector("#edit-note"),
     publishButton: root.querySelector("#publish-note"),
     favoriteButton: root.querySelector("#favorite-note"),
+    exportDocx: root.querySelector("#export-note-docx"),
+    exportPdf: root.querySelector("#export-note-pdf"),
+    exportStatus: root.querySelector("#note-export-status"),
     viewTitle: root.querySelector("#note-view-title"),
     viewType: root.querySelector("#note-view-type"),
     viewUpdated: root.querySelector("#note-view-updated"),
@@ -207,6 +211,12 @@ if (root) {
     elements.error.textContent = "";
   }
 
+  createExportController({
+    buttons: [elements.exportDocx, elements.exportPdf],
+    status: elements.exportStatus,
+    onError: showError,
+  });
+
   async function syncFavorite(note) {
     if (!userState || !elements.favoriteButton) return;
     const items = await userState.favorites();
@@ -295,6 +305,10 @@ if (root) {
     elements.viewType.textContent = noteTypeLabel(state.selectedNote.note_type);
     elements.viewUpdated.textContent = `${new Date(state.selectedNote.updated_at).toLocaleString("ko-KR")} 수정`;
     elements.viewUpdated.dateTime = state.selectedNote.updated_at;
+    elements.exportDocx.dataset.exportUrl = api.exportUrl(state.selectedNote.id, "docx");
+    elements.exportDocx.dataset.exportFilename = `${state.selectedNote.title}.docx`;
+    elements.exportPdf.dataset.exportUrl = api.exportUrl(state.selectedNote.id, "pdf");
+    elements.exportPdf.dataset.exportFilename = `${state.selectedNote.title}.pdf`;
     const source = state.selectedNote.content;
     const references = collectInternalLinks(source);
     const assetIds = collectAssetImages(source);
@@ -655,6 +669,8 @@ if (root) {
       state.creating = false;
       state.editing = false;
       state.pendingSource = null;
+      elements.exportStatus.textContent = "";
+      elements.exportStatus.classList.remove("is-error");
       setDraft(note);
       renderList();
       if (updateHistory) updateLocation(note.id);

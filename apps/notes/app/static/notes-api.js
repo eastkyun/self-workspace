@@ -24,6 +24,12 @@ export function createNotesApi(baseUrl, fetchImpl = fetch, csrfToken = () => "")
   }
 
   return {
+    exportUrl(noteId, format) {
+      if (!['docx', 'pdf'].includes(format)) {
+        throw new TypeError("unsupported document export format");
+      }
+      return `${baseUrl}/${noteId}/export?format=${format}`;
+    },
     list({ query = "", noteType = "" } = {}) {
       const params = new URLSearchParams();
       if (query.trim()) params.set("q", query.trim());

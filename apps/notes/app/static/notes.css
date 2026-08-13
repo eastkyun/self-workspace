@@ -264,6 +264,20 @@
   box-shadow: var(--workspace-shadow-lg);
 }
 
+.note-export-status {
+  color: var(--workspace-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.note-export-status:empty {
+  display: none;
+}
+
+.note-export-status.is-error {
+  color: var(--workspace-danger);
+}
+
 .publish-dialog {
   width: min(calc(100% - 2rem), 44rem);
   max-height: min(90dvh, 50rem);
