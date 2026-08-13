@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import inspect
 from typing import Literal
 from uuid import uuid4
 
@@ -25,6 +26,13 @@ class JobRuntime:
         if self._closed:
             return
         self._closed = True
+        for descriptor in self.registry.descriptors():
+            adapter = self.registry.get(descriptor.key)
+            close = getattr(adapter, "close", None)
+            if close is not None:
+                result = close()
+                if inspect.isawaitable(result):
+                    await result
 
 
 def create_job_runtime(

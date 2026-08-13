@@ -8,6 +8,7 @@ from job_platform import JobRepository, JobSchedule, JobTypeRegistry, ScheduleKi
 from job_platform.database import connect, initialize_database
 from job_platform.errors import JobValidationError
 from web_collector.adapter import WebCollectionAdapter
+from web_collector.browser import BrowserCollection, BrowserOperationError
 from web_collector.database import initialize_database as initialize_web_collection_database
 from web_collector.database import verify_web_collection_schema
 
@@ -64,3 +65,44 @@ def test_web_collection_schema_and_type_row_are_atomic_and_tenant_scoped(tmp_pat
 def test_web_collection_config_fails_closed(payload):
     with pytest.raises(JobValidationError):
         WebCollectionAdapter().validate_config(payload)
+
+
+class FakeBrowser:
+    async def collect(self, url, selector):
+        return BrowserCollection(
+            final_url=url,
+            content_html="<article><h1>공지</h1><p>본문</p></article>",
+            content_text="공지\n본문",
+            page_title="페이지 제목",
+        )
+
+    async def close(self):
+        return None
+
+
+class FailingBrowser(FakeBrowser):
+    async def collect(self, url, selector):
+        raise BrowserOperationError("SELECTOR_NOT_UNIQUE")
+
+
+def test_adapter_test_converts_bounded_markdown_preview():
+    adapter = WebCollectionAdapter(execution_enabled=True, browser_manager=FakeBrowser())
+    config = adapter.validate_config({"url": "https://example.com/", "selector": "main"})
+
+    outcome = __import__("asyncio").run(adapter.test(object(), config))
+
+    assert outcome.success is True
+    assert outcome.code == "SELECTOR_VERIFIED"
+    assert outcome.diagnostics["markdown_preview"] == "# 공지\n\n본문"
+    assert len(outcome.diagnostics["content_hash"]) == 64
+
+
+def test_adapter_test_returns_safe_browser_error_code():
+    adapter = WebCollectionAdapter(execution_enabled=True, browser_manager=FailingBrowser())
+    config = adapter.validate_config({"url": "https://example.com/", "selector": "main"})
+
+    outcome = __import__("asyncio").run(adapter.test(object(), config))
+
+    assert outcome.success is False
+    assert outcome.code == "SELECTOR_NOT_UNIQUE"
+    assert outcome.diagnostics == {}

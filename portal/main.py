@@ -145,6 +145,7 @@ from job_platform.handlers import JobTypeRegistry
 from job_platform.router import STATIC_DIR as JOBS_STATIC_DIR, create_jobs_router
 from job_platform.runtime import create_job_runtime
 from web_collector.adapter import STATIC_DIR as WEB_COLLECTOR_STATIC_DIR, WebCollectionAdapter
+from web_collector.browser import BrowserManager
 from web_collector.database import verify_web_collection_schema
 
 PORTAL_DIR = Path(__file__).resolve().parent
@@ -410,7 +411,16 @@ def create_app(
             databases=replace(configuration.databases, jobs=resolved_jobs_database_path),
         )
         job_type_registry = JobTypeRegistry(
-            [WebCollectionAdapter(execution_enabled=configuration.jobs.web_collection_enabled)]
+            [
+                WebCollectionAdapter(
+                    execution_enabled=configuration.jobs.web_collection_enabled,
+                    browser_manager=(
+                        BrowserManager()
+                        if configuration.jobs.web_collection_enabled
+                        else None
+                    ),
+                )
+            ]
         )
         job_runtime = create_job_runtime(
             jobs_configuration,

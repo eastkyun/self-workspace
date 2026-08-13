@@ -90,9 +90,12 @@ class JobWorker:
             else:
                 operation = adapter.execute(context)
             task = asyncio.create_task(operation)
+            heartbeat_interval = min(
+                self.heartbeat_seconds, self.repository.lease_seconds / 3
+            )
             try:
                 while True:
-                    done, _ = await asyncio.wait({task}, timeout=self.heartbeat_seconds)
+                    done, _ = await asyncio.wait({task}, timeout=heartbeat_interval)
                     if task in done:
                         outcome = task.result()
                         break
