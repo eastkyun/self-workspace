@@ -358,6 +358,9 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
 }
+.publication-card-author, .publication-author { color: var(--workspace-muted); font-size: 12px; }
+.publication-card-author { margin: 10px 0 0; }
+.publication-author { margin: 12px 0 0; }
 
 .publication-card-footer {
   margin-top: auto;

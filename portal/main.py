@@ -602,7 +602,7 @@ def create_app(
         yield
 
     application = FastAPI(
-        title="My Workspace",
+        title="Nest",
         version="1.0.0",
         lifespan=lifespan,
     )
@@ -783,6 +783,7 @@ def create_app(
             authorization=authorization_service,
             app_registry=registry,
             type_manifest_store=publication_type_manifest_store,
+            identity_database_path=resolved_identity_database_path,
         )
     )
     application.include_router(
@@ -823,6 +824,7 @@ def create_app(
             type_manifest_store=publication_type_manifest_store,
             is_workspace_publicly_available=is_workspace_publicly_available,
             include_management_api=legacy_test_compatibility,
+            identity_database_path=resolved_identity_database_path,
         )
     )
     application.include_router(
@@ -870,12 +872,15 @@ def create_app(
     @application.get("/", include_in_schema=False)
     async def index(request: Request):
         try:
-            auth_service.authenticate(
+            authenticated = auth_service.authenticate(
                 request.cookies.get(configuration.session.cookie_name)
             )
         except AuthenticationRequired:
-            return render_hub(request)
+            return RedirectResponse("/login", status_code=303)
         else:
+            workspace_id = authenticated.last_workspace_id
+            if workspace_id:
+                return RedirectResponse(f"/w/{workspace_id}/home", status_code=303)
             return RedirectResponse("/workspace-selector", status_code=303)
 
     @application.get("/hub", include_in_schema=False)

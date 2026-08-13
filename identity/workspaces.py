@@ -33,6 +33,8 @@ from identity.primitives import new_uuid, normalize_email, utc_now
 
 logger = logging.getLogger(__name__)
 
+MAX_WORKSPACES_PER_TYPE = 5
+
 
 class WorkspaceError(RuntimeError):
     pass
@@ -139,11 +141,22 @@ class WorkspaceService:
             )
         return [dict(row) for row in rows]
 
+    def creation_counts(self, user: AuthenticatedUser) -> dict[str, int]:
+        with database_connection(self.database_path) as tx:
+            rows = tx.query(
+                "SELECT type, COUNT(*) AS count FROM workspaces "
+                "WHERE created_by=? AND status='ACTIVE' GROUP BY type",
+                (user.id,),
+            )
+        counts = {"TEAM": 0, "PERSONAL": 0}
+        counts.update({row["type"]: row["count"] for row in rows})
+        return counts
+
     def get_workspace(self, user: AuthenticatedUser, workspace_id: str) -> dict[str, object]:
         with database_connection(self.database_path) as tx:
             context = self._actor_context(tx, user.id, workspace_id)
             row = tx.execute(
-                "SELECT id, type, name, description, logo_asset_id, timezone, created_at, updated_at FROM workspaces "
+                "SELECT id, type, name, description, logo_asset_id, timezone, created_by, created_at, updated_at FROM workspaces "
                 "WHERE id=? AND status='ACTIVE'", (workspace_id,),
             ).fetchone()
         if row is None:
@@ -206,6 +219,7 @@ class WorkspaceService:
             active_user = tx.execute("SELECT 1 FROM users WHERE id=? AND status='ACTIVE'", (user.id,)).fetchone()
             if active_user is None:
                 raise WorkspaceNotFound("user not found")
+            self._enforce_creation_limit(tx, user.id, "TEAM")
             tx.execute(
                 "INSERT INTO workspaces VALUES (?, 'TEAM', ?, ?, NULL, ?, 'ACTIVE', ?, ?, ?, NULL)",
                 (workspace_id, name, description.strip(), timezone_name, user.id, stamp, stamp),
@@ -213,6 +227,35 @@ class WorkspaceService:
             self._seed_workspace(tx, workspace_id, user.id, membership_id, stamp)
             _audit(tx, workspace_id, user.id, "workspace.created", "workspace", workspace_id, {"type": "TEAM"}, stamp)
         return self.get_workspace(user, workspace_id)
+
+    def create_personal(self, user: AuthenticatedUser, name: str, timezone_name: str = "Asia/Seoul") -> dict[str, object]:
+        name = name.strip()
+        if not name:
+            raise ValueError("workspace name is required")
+        timezone_name = _timezone_name(timezone_name)
+        stamp = _stamp(self.clock())
+        workspace_id, membership_id = new_uuid(), new_uuid()
+        with database_connection(self.database_path) as tx:
+            active_user = tx.execute("SELECT 1 FROM users WHERE id=? AND status='ACTIVE'", (user.id,)).fetchone()
+            if active_user is None:
+                raise WorkspaceNotFound("user not found")
+            self._enforce_creation_limit(tx, user.id, "PERSONAL")
+            tx.execute(
+                "INSERT INTO workspaces VALUES (?, 'PERSONAL', ?, '', NULL, ?, 'ACTIVE', ?, ?, ?, NULL)",
+                (workspace_id, name, timezone_name, user.id, stamp, stamp),
+            )
+            self._seed_workspace(tx, workspace_id, user.id, membership_id, stamp)
+            _audit(tx, workspace_id, user.id, "workspace.created", "workspace", workspace_id, {"type": "PERSONAL"}, stamp)
+        return self.get_workspace(user, workspace_id)
+
+    @staticmethod
+    def _enforce_creation_limit(tx, user_id: str, workspace_type: str) -> None:
+        count = tx.execute(
+            "SELECT COUNT(*) AS count FROM workspaces WHERE created_by=? AND type=? AND status='ACTIVE'",
+            (user_id, workspace_type),
+        ).fetchone()["count"]
+        if count >= MAX_WORKSPACES_PER_TYPE:
+            raise WorkspaceConflict(f"workspace limit reached for {workspace_type.lower()} ({MAX_WORKSPACES_PER_TYPE})")
 
     def _require_permission(self, tx, context: WorkspaceContext, permission_code: str) -> None:
         try:
@@ -244,6 +287,9 @@ class WorkspaceService:
         stamp = _stamp(self.clock())
         with database_connection(self.database_path) as tx:
             context = self._actor_context(tx, user.id, workspace_id)
+            owner = tx.execute("SELECT created_by FROM workspaces WHERE id=? AND status='ACTIVE'", (workspace_id,)).fetchone()
+            if owner is None or owner["created_by"] != user.id:
+                raise WorkspaceForbidden("only the workspace creator can delete it")
             self._require_permission(tx, context, "workspace.delete")
             tx.execute("UPDATE workspace_invitations SET status='CANCELED', updated_at=? WHERE workspace_id=? AND status='PENDING'", (stamp, workspace_id))
             tx.execute("UPDATE workspaces SET status='DELETED', deleted_at=?, updated_at=? WHERE id=? AND status='ACTIVE'", (stamp, stamp, workspace_id))
@@ -382,6 +428,48 @@ class WorkspaceService:
         if conflict:
             raise WorkspaceConflict(conflict)
         return result
+
+    def list_received_invitations(self, user: AuthenticatedUser) -> list[dict[str, object]]:
+        now = _stamp(self.clock())
+        with database_connection(self.database_path) as tx:
+            tx.execute(
+                "UPDATE workspace_invitations SET status='EXPIRED', updated_at=? "
+                "WHERE email_normalized=? AND status='PENDING' AND expires_at<=?",
+                (now, user.email, now),
+            )
+            rows = tx.query(
+                "SELECT invitation.id, invitation.workspace_id, invitation.role_key, invitation.expires_at, workspace.name "
+                "FROM workspace_invitations AS invitation JOIN workspaces AS workspace ON workspace.id=invitation.workspace_id "
+                "WHERE invitation.email_normalized=? AND invitation.status='PENDING' AND workspace.status='ACTIVE' "
+                "ORDER BY invitation.created_at DESC, invitation.id",
+                (user.email,),
+            )
+        return [dict(row) for row in rows]
+
+    def _consume_received(self, user: AuthenticatedUser, invitation_id: str, final_status: str) -> dict[str, object] | None:
+        now = self.clock(); stamp = _stamp(now)
+        with database_connection(self.database_path) as tx:
+            row = tx.execute(
+                "SELECT invitation.*, workspace.status AS workspace_status FROM workspace_invitations AS invitation "
+                "JOIN workspaces AS workspace ON workspace.id=invitation.workspace_id WHERE invitation.id=? AND invitation.email_normalized=?",
+                (invitation_id, user.email),
+            ).fetchone()
+            if row is None or row["workspace_status"] != "ACTIVE": raise WorkspaceNotFound("invitation not found")
+            if row["status"] != "PENDING": raise WorkspaceConflict("invitation is no longer active")
+            if now >= _parse(row["expires_at"]):
+                tx.execute("UPDATE workspace_invitations SET status='EXPIRED', updated_at=? WHERE id=?", (stamp, invitation_id))
+                raise WorkspaceConflict("invitation expired")
+            if final_status == "ACCEPTED":
+                role = tx.execute("SELECT id FROM roles WHERE workspace_id=? AND key=? AND status='ACTIVE'", (row["workspace_id"], row["role_key"])).fetchone()
+                if role is None: raise WorkspaceConflict("invitation role unavailable")
+                membership_id = new_uuid()
+                tx.execute("UPDATE workspace_invitations SET status='ACCEPTED', accepted_by=?, updated_at=? WHERE id=?", (user.id, stamp, invitation_id))
+                tx.execute("INSERT INTO workspace_members VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?, ?)", (membership_id, row["workspace_id"], user.id, role["id"], stamp, stamp, stamp))
+                _audit(tx, row["workspace_id"], user.id, "invitation.accepted", "invitation", invitation_id, {"membership_id": membership_id}, stamp)
+                return {"workspace_id": row["workspace_id"], "membership_id": membership_id}
+            tx.execute("UPDATE workspace_invitations SET status='REJECTED', updated_at=? WHERE id=?", (stamp, invitation_id))
+            _audit(tx, row["workspace_id"], user.id, "invitation.rejected", "invitation", invitation_id, {}, stamp)
+            return None
 
     def accept_invitation(self, user: AuthenticatedUser, token: str) -> dict[str, object]:
         return self._consume(user, token, "ACCEPTED") or {}

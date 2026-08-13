@@ -35,6 +35,7 @@ def shell_context(
     current_app_id: str,
     page_title: str,
     path_for: Callable[[str], str] | None = None,
+    workspace_id: str | None = None,
 ) -> dict[str, Any]:
     registered_apps = registry.get_enabled()
     navigation_apps = registry.get_navigation()
@@ -50,4 +51,5 @@ def shell_context(
         "current_app_name": current_app.display_name if current_app else "App Hub",
         "page_title": page_title,
         "workspace_path": path_for,
+        "workspace_id": workspace_id,
     }

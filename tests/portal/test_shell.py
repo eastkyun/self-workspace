@@ -80,7 +80,7 @@ def test_shared_shell_renders_navigation_and_content(tmp_path: Path) -> None:
     assert 'id="content"' in response.text
     assert 'id="workspace-guest-actions"' in response.text
     assert 'id="workspace-account-menu"' in response.text
-    assert 'id="workspace-profile-dialog"' in response.text
+    assert 'id="workspace-profile-dialog"' not in response.text
     assert 'id="workspace-logout"' in response.text
     assert "<iframe" not in response.text
 
@@ -112,7 +112,7 @@ def test_header_popovers_and_modal_use_a_predictable_layer_order() -> None:
     assert "--workspace-layer-scrim: 20" in stylesheet
     assert "--workspace-layer-sidebar: 30" in stylesheet
     assert "z-index: var(--workspace-layer-header)" in stylesheet
-    assert ".workspace-profile-dialog::backdrop" in stylesheet
+    assert ".workspace-profile-dialog::backdrop" not in stylesheet
 
 
 def test_shared_shell_provides_an_accessible_reduced_motion_loader() -> None:

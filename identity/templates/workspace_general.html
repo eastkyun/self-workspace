@@ -32,4 +32,28 @@
         </div>
       </form>
   </section>
+  <section class="workspace-settings-card" aria-labelledby="workspace-create-title">
+    <div class="workspace-settings-card-header"><div><h3 id="workspace-create-title">새 워크스페이스 만들기</h3><p>팀과 개인 워크스페이스는 계정당 각각 {{ workspace_creation_limit }}개까지 만들 수 있습니다.</p></div></div>
+    <form data-workspace-create-form>
+      <label class="workspace-settings-field"><span>이름</span><input name="name" maxlength="120" required></label>
+      <label class="workspace-settings-field"><span>유형</span><select name="type"><option value="TEAM">팀</option><option value="PERSONAL">개인</option></select></label>
+      <p>팀 {{ workspace_creation_counts.TEAM }}/{{ workspace_creation_limit }} · 개인 {{ workspace_creation_counts.PERSONAL }}/{{ workspace_creation_limit }}</p>
+      <div class="workspace-settings-actions"><p role="status" aria-live="polite" data-create-status></p><button type="submit" data-create-button>만들기</button></div>
+    </form>
+  </section>
+  {% if workspace.created_by == user_id %}
+  <section class="workspace-settings-card workspace-settings-danger-card" aria-labelledby="workspace-delete-title">
+    <div class="workspace-settings-card-header"><div><p class="workspace-danger-kicker">DANGER ZONE</p><h3 id="workspace-delete-title">워크스페이스 삭제</h3><p>이 workspace를 삭제하면 모든 멤버의 접근이 종료되고 대기 중인 초대가 취소됩니다.</p></div></div>
+    <div class="workspace-settings-danger-content"><p>삭제는 되돌릴 수 없습니다. 정말 더 이상 사용하지 않을 때만 진행하세요.</p><button type="button" data-workspace-delete-open>삭제 진행</button><p role="status" aria-live="polite" data-delete-status></p></div>
+  </section>
+  <dialog class="workspace-delete-dialog" data-workspace-delete-dialog aria-labelledby="workspace-delete-dialog-title">
+    <form method="dialog" data-workspace-delete-dialog-form>
+      <p class="workspace-danger-kicker">DANGER ZONE</p><h3 id="workspace-delete-dialog-title">“{{ workspace.name }}” 삭제</h3>
+      <p>삭제하면 멤버, 앱 설정, 초대가 이 workspace에서 더 이상 활성 상태로 유지되지 않습니다.</p>
+      <label class="workspace-settings-field"><span>확인하려면 workspace 이름을 입력하세요</span><input data-workspace-delete-confirm autocomplete="off" placeholder="{{ workspace.name }}"></label>
+      <div class="workspace-delete-dialog-actions"><button type="button" data-workspace-delete-cancel>취소</button><button type="submit" data-workspace-delete data-workspace-id="{{ workspace.id }}" disabled>영구 삭제</button></div>
+      <p role="status" aria-live="polite" data-delete-dialog-status></p>
+    </form>
+  </dialog>
+  {% endif %}
 {% endblock %}

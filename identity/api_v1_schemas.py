@@ -11,6 +11,7 @@ class _V1Model(BaseModel):
 
 
 class TeamCreateRequest(_V1Model):
+    type: Literal["TEAM", "PERSONAL"] = "TEAM"
     name: str
     description: str = ""
     timezone: str = "Asia/Seoul"

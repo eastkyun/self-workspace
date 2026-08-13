@@ -91,6 +91,7 @@ def create_notes_router(
                 current_app_id="notes",
                 page_title="Notes",
                 path_for=lambda path: canonical_routes.get(path, path),
+                workspace_id=workspace_id,
             )
             | {
                 "notes_mode": mode,

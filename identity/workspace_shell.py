@@ -58,12 +58,15 @@ def create_workspace_shell_router(
         context = {
             "request": request,
             "workspace": workspace,
+            "workspace_id": workspace_id,
             "workspaces": workspaces,
             "user_id": user.id,
             "session_cookie_name": config.session.cookie_name,
             "pin_import_eligible": workspace["type"] == "PERSONAL" and next(
                 (item["id"] for item in workspaces if item["type"] == "PERSONAL"), None
             ) == workspace_id,
+            "workspace_creation_counts": service.creation_counts(user),
+            "workspace_creation_limit": 5,
         }
         resolved = service.resolve_context(user.id, workspace_id)
         snapshot = effective_apps.authorization.permission_snapshot(resolved)
@@ -118,6 +121,7 @@ def create_workspace_shell_router(
         return context
 
     settings_metadata = {
+        "profile": ("내 프로필", "계정 이름과 이메일 정보를 관리합니다."),
         "general": ("일반 설정", "워크스페이스의 기본 정보와 시간대 기준을 관리합니다."),
         "members": ("멤버", "워크스페이스에 참여한 멤버를 확인하고 새 멤버를 초대합니다."),
         "apps": ("앱", "워크스페이스에서 사용할 앱과 표시 상태를 관리합니다."),
@@ -146,10 +150,7 @@ def create_workspace_shell_router(
         workspaces = service.list_workspaces(user)
         if not workspaces:
             raise APIError(status_code=404, code="workspace_not_found", message="Resource not found")
-        selected = next(
-            (item for item in workspaces if item["id"] == user.last_workspace_id),
-            workspaces[0],
-        )
+        selected = next((item for item in workspaces if item["id"] == user.last_workspace_id), workspaces[0])
         return RedirectResponse(f"/w/{selected['id']}/home", status_code=303)
 
     @router.get("/w/{workspace_id}/home", response_class=HTMLResponse, include_in_schema=False)
@@ -210,6 +211,13 @@ def create_workspace_shell_router(
         if not context["can_manage_settings"]:
             raise APIError(status_code=403, code="permission_denied", message="Action forbidden")
         return templates.TemplateResponse(request, "workspace_general.html", context)
+
+    @router.get("/w/{workspace_id}/settings/profile", response_class=HTMLResponse, include_in_schema=False)
+    def profile_settings(workspace_id: str, request: Request):
+        user = current_user(request)
+        context = settings_context(request, user, workspace_id, "profile")
+        context["profile"] = {"display_name": user.display_name, "email": user.email}
+        return templates.TemplateResponse(request, "workspace_profile.html", context)
 
     @router.get("/w/{workspace_id}/settings/members", response_class=HTMLResponse, include_in_schema=False)
     def member_settings(workspace_id: str, request: Request):
@@ -272,5 +280,10 @@ def create_workspace_shell_router(
                 "session_cookie_name": config.session.cookie_name,
             },
         )
+
+    @router.get("/invitations", response_class=HTMLResponse, include_in_schema=False)
+    def received_invitations_page(request: Request):
+        current_user(request)
+        return templates.TemplateResponse(request, "workspace_invitations.html", {"request": request, "session_cookie_name": config.session.cookie_name})
 
     return router

@@ -142,6 +142,13 @@ def create_auth_router(service: AuthenticationService, config: AppConfig) -> API
     expected_origin = config.public_origin
     cookie_name = config.session.cookie_name
 
+    def auth_context(request: Request, *, page_title: str, current_app_name: str = "Nest") -> dict[str, object]:
+        return {
+            "request": request, "page_title": page_title, "current_app_id": "auth",
+            "current_app_name": current_app_name, "session_cookie_name": cookie_name,
+            "navigation_apps": (), "launcher_apps": (), "workspace_path": lambda path: path,
+        }
+
     def safe_return_path(value: str | None) -> str:
         if not value or not value.startswith("/") or value.startswith("//"):
             return "/workspace-selector"
@@ -167,20 +174,20 @@ def create_auth_router(service: AuthenticationService, config: AppConfig) -> API
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"page_title": "Log in", "login_success_url": safe_return_path(next)},
+            auth_context(request, page_title="Log in") | {"login_success_url": safe_return_path(next)},
         )
 
     @router.get("/signup", response_class=HTMLResponse, include_in_schema=False)
     def signup_page(request: Request):
-        return templates.TemplateResponse(request, "signup.html", {"page_title": "Sign up"})
+        return templates.TemplateResponse(request, "signup.html", auth_context(request, page_title="Sign up"))
 
     @router.get("/forgot-password", response_class=HTMLResponse, include_in_schema=False)
     def forgot_password_page(request: Request):
-        return templates.TemplateResponse(request, "forgot_password.html", {"page_title": "Reset password"})
+        return templates.TemplateResponse(request, "forgot_password.html", auth_context(request, page_title="Reset password"))
 
     @router.get("/reset-password", response_class=HTMLResponse, include_in_schema=False)
     def reset_password_page(request: Request):
-        return templates.TemplateResponse(request, "reset_password.html", {"page_title": "Choose a new password"})
+        return templates.TemplateResponse(request, "reset_password.html", auth_context(request, page_title="Choose a new password"))
 
     @router.post("/api/v1/auth/signup", status_code=201)
     def signup(payload: SignupRequest, request: Request, response: Response):

@@ -1,0 +1,20 @@
+{% extends "workspace_settings_base.html" %}
+
+{% block settings_content %}
+<section class="workspace-settings-card" aria-labelledby="profile-title">
+  <div class="workspace-settings-card-header"><div><h3 id="profile-title">내 프로필</h3><p>모든 워크스페이스에서 사용하는 계정 정보를 관리합니다.</p></div></div>
+  <form data-profile-form>
+    <div class="workspace-profile-avatar-row">
+      <div class="workspace-profile-avatar" data-avatar-preview aria-label="프로필 아이콘 미리보기"></div>
+      <div><strong>프로필 아이콘</strong><p>계정에 사용할 아이콘을 자동으로 생성합니다.</p><button class="workspace-profile-avatar-button" type="button" data-avatar-regenerate>아이콘 바꾸기</button></div>
+    </div>
+    <label class="workspace-settings-field"><span>이름</span><input name="display_name" value="{{ profile.display_name }}" maxlength="120" required></label>
+    <div class="workspace-settings-field workspace-settings-readonly" aria-label="이메일">
+      <span>이메일</span>
+      <strong>{{ profile.email }}</strong>
+      <small>이메일은 현재 프로필 설정에서 변경할 수 없습니다.</small>
+    </div>
+    <div class="workspace-settings-actions"><p role="status" aria-live="polite" data-profile-status></p><button type="submit">변경사항 저장</button></div>
+  </form>
+</section>
+{% endblock %}

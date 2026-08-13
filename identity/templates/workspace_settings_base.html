@@ -4,10 +4,6 @@
   <link rel="stylesheet" href="/static/shared/workspace-settings.css">
 {% endblock %}
 
-{% block global_actions %}
-  <a class="workspace-settings-home-link" href="/w/{{ workspace.id }}/home" aria-label="홈으로">홈으로</a>
-{% endblock %}
-
 {% block content %}
 <div class="workspace-settings-page" data-workspace-settings>
   <header class="workspace-settings-hero">
@@ -29,6 +25,7 @@
   <div class="workspace-settings-layout">
     <nav class="workspace-settings-nav" aria-label="Workspace settings">
       <p>설정</p>
+      <a{% if settings_section == 'profile' %} aria-current="page"{% endif %} href="/w/{{ workspace.id }}/settings/profile">내 프로필</a>
       {% if can_manage_settings %}<a{% if settings_section == 'general' %} aria-current="page"{% endif %} href="/w/{{ workspace.id }}/settings/general">일반</a>{% endif %}
       <a{% if settings_section == 'members' %} aria-current="page"{% endif %} href="/w/{{ workspace.id }}/settings/members">멤버</a>
       {% if can_manage_apps %}<a{% if settings_section == 'apps' %} aria-current="page"{% endif %} href="/w/{{ workspace.id }}/settings/apps">앱</a>{% endif %}
@@ -44,6 +41,7 @@
 {% endblock %}
 
 {% block page_scripts %}
+  <script type="module" src="/static/shared/avatar.js"></script>
   <script src="/static/shared/workspace-settings.js" defer></script>
   {% block settings_scripts %}{% endblock %}
 {% endblock %}

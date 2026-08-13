@@ -774,6 +774,7 @@ def create_calendar_router(
                 current_app_id="calendar",
                 page_title="Calendar",
                 path_for=lambda path: canonical_routes.get(path, path),
+                workspace_id=workspace_id,
             )
             | {
                 "notes_route": notes_app.route,
@@ -1210,6 +1211,7 @@ def create_app(
                 registry,
                 current_app_id="calendar",
                 page_title="Calendar",
+                workspace_id=None,
             )
             | {
                 "notes_route": notes_app.route,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
@@ -184,8 +185,17 @@ def create_publishing_router(
     type_manifest_store: PublicationTypeManifestStore,
     is_workspace_publicly_available: Callable[[str], bool] | None = None,
     include_management_api: bool = True,
+    identity_database_path: Path | None = None,
 ) -> APIRouter:
     router = APIRouter()
+
+    def author_for(publication: dict[str, Any]) -> dict[str, str] | None:
+        if identity_database_path is None or not publication.get("created_by"):
+            return None
+        with sqlite3.connect(identity_database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            row = connection.execute("SELECT display_name, email_normalized FROM users WHERE id=?", (publication["created_by"],)).fetchone()
+        return dict(row) if row is not None else None
 
     def refresh_type_registry() -> None:
         registry.replace_providers(
@@ -535,6 +545,7 @@ def create_publishing_router(
                 ).display_name,
                 "type_icon": registry.require(publication["type_id"]).icon,
                 "href": f"/p/{publication['public_id']}/{publication['slug']}",
+                "author": author_for(publication),
             }
             for publication in publications
         ]
@@ -627,6 +638,7 @@ def create_publishing_router(
         context.update(
             {
                 "publication": publication,
+                "publication_author": author_for(publication),
                 "publication_version": version,
                 "publication_type": provider,
                 "render_options": _render_options(provider),
@@ -684,10 +696,19 @@ def create_workspace_publishing_router(
     authorization: AuthorizationService | None = None,
     app_registry: AppRegistry | None = None,
     type_manifest_store: PublicationTypeManifestStore | None = None,
+    identity_database_path: Path | None = None,
 ) -> APIRouter:
     """Authenticated, tenant-scoped Publishing management API."""
     router = APIRouter()
     api = "/api/v1/workspaces/{workspace_id}/publications"
+
+    def author_for(publication: dict[str, Any]) -> dict[str, str] | None:
+        if identity_database_path is None or not publication.get("created_by"):
+            return None
+        with sqlite3.connect(identity_database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            row = connection.execute("SELECT display_name, email_normalized FROM users WHERE id=?", (publication["created_by"],)).fetchone()
+        return dict(row) if row is not None else None
 
     def mutate(request: Request) -> None:
         if csrf is not None:
@@ -727,6 +748,7 @@ def create_workspace_publishing_router(
                     "type_display_name": registry.require(publication["type_id"]).display_name,
                     "type_icon": registry.require(publication["type_id"]).icon,
                     "href": f"/p/{publication['public_id']}/{publication['slug']}",
+                    "author": author_for(publication),
                 }
                 for publication in publications
             ]
@@ -744,6 +766,7 @@ def create_workspace_publishing_router(
                 current_app_id="publishing",
                 page_title="Publications",
                 path_for=lambda path: canonical_routes.get(path, path),
+                workspace_id=workspace_id,
             )
             page["current_app_name"] = "Publications"
             page["publications"] = cards
@@ -774,6 +797,7 @@ def create_workspace_publishing_router(
                 current_app_id="publishing",
                 page_title="Publication Types",
                 path_for=lambda path: canonical_routes.get(path, path),
+                workspace_id=workspace_id,
             )
             page["current_app_name"] = "Publication Types"
             page["publication_type_api_endpoint"] = (

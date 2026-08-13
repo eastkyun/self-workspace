@@ -40,6 +40,8 @@ def _workspace_error(error: Exception) -> APIError:
     if isinstance(error, WorkspaceForbidden):
         return APIError(status_code=403, code="workspace_forbidden", message="Action forbidden")
     if isinstance(error, WorkspaceConflict):
+        if str(error).startswith("workspace limit reached"):
+            return APIError(status_code=409, code="workspace_limit_reached", message=str(error))
         return APIError(status_code=409, code="workspace_conflict", message=str(error))
     return APIError(status_code=422, code="validation_error", message="Request validation failed")
 
@@ -93,6 +95,8 @@ def create_workspace_router(
     @router.post("/workspaces", status_code=201)
     def create_workspace(payload: TeamCreateRequest, request: Request):
         authenticated = user(request); unsafe(request, authenticated)
+        if payload.type == "PERSONAL":
+            return call(lambda: service.create_personal(authenticated, payload.name, payload.timezone))
         return call(lambda: service.create_team(authenticated, payload.name, payload.description, payload.timezone))
 
     @router.get("/workspaces/{workspace_id}")
@@ -140,6 +144,20 @@ def create_workspace_router(
     def inspect_invitation(token: str, request: Request):
         authenticated = user(request)
         return call(lambda: service.inspect_invitation(authenticated, token))
+
+    @router.get("/invitations")
+    def list_received_invitations(request: Request):
+        return service.list_received_invitations(user(request))
+
+    @router.post("/invitations/received/{invitation_id}/accept", status_code=201)
+    def accept_received_invitation(invitation_id: str, request: Request):
+        authenticated = user(request); unsafe(request, authenticated)
+        return call(lambda: service._consume_received(authenticated, invitation_id, "ACCEPTED"))
+
+    @router.post("/invitations/received/{invitation_id}/reject", status_code=204)
+    def reject_received_invitation(invitation_id: str, request: Request):
+        authenticated = user(request); unsafe(request, authenticated)
+        call(lambda: service._consume_received(authenticated, invitation_id, "REJECTED"))
 
     @router.post("/invitations/{token}/accept", status_code=201)
     def accept_invitation(token: str, request: Request):

@@ -54,6 +54,7 @@
           <a class="publication-card-link" href="{{ workspace_path(publication.href) }}">{{ publication.title }}</a>
         </h3>
         <p class="publication-card-summary">{{ publication.summary or "요약 없이 발행된 문서입니다." }}</p>
+        {% if publication.author %}<p class="publication-card-author">{{ publication.author.display_name }} · {{ publication.author.email_normalized }}</p>{% endif %}
         <footer class="publication-card-footer">
           <span>{{ publication.published_at }}</span>
           <span aria-hidden="true">읽기 →</span>

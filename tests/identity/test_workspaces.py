@@ -286,6 +286,21 @@ def test_team_creation_is_atomic_and_selector_rechecks_active_membership(workspa
         workspaces.create_team(owner, "Invalid timezone", timezone_name="Not/A_Zone")
 
 
+def test_workspace_creation_limits_are_independent_per_type(workspace_system):
+    _, workspaces, _, _, _ = workspace_system
+    _, owner = _signup(workspace_system[0], "limit-owner@example.com")
+    for index in range(3):
+        workspaces.create_team(owner, f"Team {index}")
+        workspaces.create_personal(owner, f"Personal {index}")
+    workspaces.create_team(owner, "Team 3")
+    workspaces.create_team(owner, "Team 4")
+    workspaces.create_personal(owner, "Personal 4")
+    with pytest.raises(WorkspaceConflict, match="workspace limit reached"):
+        workspaces.create_team(owner, "Team 5")
+    with pytest.raises(WorkspaceConflict, match="workspace limit reached"):
+        workspaces.create_personal(owner, "Personal 5")
+
+
 def test_invitation_hash_one_use_expiry_duplicate_and_personal_rejection(workspace_system):
     authentication, workspaces, database, clock, notifications = workspace_system
     owner_credentials, owner = _signup(authentication, "owner@example.com")

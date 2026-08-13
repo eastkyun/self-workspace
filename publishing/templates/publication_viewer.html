@@ -22,6 +22,7 @@
     {% if publication_version.summary %}
       <p class="publication-summary">{{ publication_version.summary }}</p>
     {% endif %}
+    {% if publication_author %}<p class="publication-author">작성자 {{ publication_author.display_name }} · {{ publication_author.email_normalized }}</p>{% endif %}
     <dl class="publication-meta">
       <div>
         <dt>Version</dt>

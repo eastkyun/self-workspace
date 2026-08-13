@@ -70,6 +70,70 @@
     }
   });
 
+  const deleteDialog = document.querySelector("[data-workspace-delete-dialog]");
+  const deleteConfirm = document.querySelector("[data-workspace-delete-confirm]");
+  const deleteButton = document.querySelector("[data-workspace-delete]");
+  document.querySelector("[data-workspace-delete-open]")?.addEventListener("click", () => { deleteDialog?.showModal(); deleteConfirm?.focus(); });
+  document.querySelector("[data-workspace-delete-cancel]")?.addEventListener("click", () => deleteDialog?.close());
+  deleteConfirm?.addEventListener("input", () => { if (deleteButton) deleteButton.disabled = !deleteConfirm.value.trim() || deleteConfirm.value.trim() !== deleteConfirm.placeholder; });
+  deleteButton?.addEventListener("click", async (event) => {
+    event.preventDefault();
+    const button = event.currentTarget;
+    const status = document.querySelector("[data-delete-dialog-status]");
+    button.disabled = true;
+    setStatus(status, "삭제 중…", "pending");
+    try {
+      await send(`/api/v1/workspaces/${encodeURIComponent(button.dataset.workspaceId)}`, "DELETE");
+      window.location.assign("/workspace-selector");
+    } catch (error) { button.disabled = false; setStatus(status, error.message, "error"); }
+  });
+
+  document.querySelector("[data-profile-form]")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const status = form.querySelector("[data-profile-status]");
+    try {
+      await send("/api/v1/users/me", "PATCH", Object.fromEntries(new FormData(form)));
+      setStatus(status, "프로필을 저장했습니다.", "success");
+      window.dispatchEvent(new CustomEvent("workspace:account-profile-updated"));
+    } catch (error) { setStatus(status, error.message, "error"); }
+  });
+
+  const avatarPreview = document.querySelector("[data-avatar-preview]");
+  const avatarButton = document.querySelector("[data-avatar-regenerate]");
+  const avatarUserId = document.body.dataset.userId;
+  const renderAvatar = () => {
+    if (!avatarPreview || !avatarUserId || !globalThis.workspaceAvatar) return;
+    avatarPreview.innerHTML = globalThis.workspaceAvatar.avatarSvg(globalThis.workspaceAvatar.avatarSeed(avatarUserId), 96);
+  };
+  renderAvatar();
+  avatarButton?.addEventListener("click", () => {
+    if (!avatarUserId || !globalThis.workspaceAvatar) return;
+    globalThis.workspaceAvatar.setAvatarSeed(avatarUserId, `${avatarUserId}:${Date.now()}:${Math.random()}`);
+    renderAvatar();
+    window.dispatchEvent(new CustomEvent("workspace:avatar-updated"));
+  });
+
+  document.querySelector("[data-workspace-create-form]")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const status = form.querySelector("[data-create-status]");
+    const button = form.querySelector("[data-create-button]");
+    if (form.dataset.submitting === "true") return;
+    form.dataset.submitting = "true";
+    if (button) button.disabled = true;
+    setStatus(status, "만드는 중…", "pending");
+    try {
+      const response = await send("/api/v1/workspaces", "POST", Object.fromEntries(new FormData(form)));
+      const workspace = await response.json();
+      window.location.assign(`/w/${encodeURIComponent(workspace.id)}/home`);
+    } catch (error) {
+      setStatus(status, error.message, "error");
+      if (button) button.disabled = false;
+      delete form.dataset.submitting;
+    }
+  });
+
   document.querySelector("[data-invitation-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.currentTarget;

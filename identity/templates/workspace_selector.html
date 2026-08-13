@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Workspace 선택</title></head>
+<body>
+<main>
+  <h1>Workspace</h1>
+  <section aria-label="내 Workspace">
+    {% for item in workspaces %}
+    <a href="/w/{{ item.id }}/home"{% if item.id == selected_id %} aria-current="page"{% endif %}>{{ item.name }} ({{ item.type }})</a>
+    {% endfor %}
+  </section>
+</main>
+</body>
+</html>

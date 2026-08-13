@@ -42,7 +42,7 @@ _SAFE_DETAIL_KEYS = frozenset(
     }
 )
 _AUTHENTICATED_UI_PATH = re.compile(
-    r"^(?:/w/[^/]+/(?:notes(?:/new)?|calendar|publications|home|search|settings/(?:general|members|apps|roles|permissions))|/apps/publishing)/?$"
+r"^(?:/w/[^/]+/(?:notes(?:/new)?|calendar|publications|home|search|settings/(?:profile|general|members|apps|roles|permissions))|/apps/publishing)/?$"
 )
 
 

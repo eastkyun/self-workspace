@@ -723,18 +723,16 @@ class AppRegistry:
         return tuple(app for app in self._apps if app.enabled)
 
     def get_navigation(self) -> tuple[AppManifest, ...]:
-        return tuple(
-            app
-            for app in self._apps
-            if app.enabled and app.navigation_visible
-        )
+        return tuple(sorted(
+            (app for app in self._apps if app.enabled and app.navigation_visible),
+            key=lambda app: (app.order, app.id),
+        ))
 
     def get_launcher(self) -> tuple[AppManifest, ...]:
-        return tuple(
-            app
-            for app in self._apps
-            if app.enabled and app.launcher_visible
-        )
+        return tuple(sorted(
+            (app for app in self._apps if app.enabled and app.launcher_visible),
+            key=lambda app: (app.order, app.id),
+        ))
 
     def get_app(self, app_id: str) -> AppManifest | None:
         return self._app_by_id.get(app_id)

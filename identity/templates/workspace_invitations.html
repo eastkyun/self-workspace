@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width">
+  <title>받은 초대 · Nest</title>
+  <link rel="stylesheet" href="/static/shared/shell.css">
+  <link rel="stylesheet" href="/static/shared/workspace-settings.css">
+</head>
+<body class="workspace-body workspace-invitations-body" data-session-cookie="{{ session_cookie_name }}">
+  <main class="workspace-invitations-page">
+    <header class="workspace-invitations-hero">
+      <div><p class="workspace-settings-kicker">WORKSPACE INVITATIONS</p><h1>받은 초대</h1><p>나를 초대한 workspace를 확인하고 참여할 수 있습니다.</p></div>
+      <a class="workspace-invitations-back" href="/workspace-selector">Workspace 목록</a>
+    </header>
+    <section class="workspace-invitations-content" aria-labelledby="invitation-list-title">
+      <div class="workspace-invitations-heading"><h2 id="invitation-list-title">참여할 수 있는 workspace</h2><span data-invitation-count></span></div>
+      <div data-received-invitations aria-live="polite"><div class="workspace-invitations-loading"><span class="workspace-invitations-spinner"></span><span>초대를 불러오는 중…</span></div></div>
+    </section>
+  </main>
+  <script src="/static/shared/workspace-invitations.js" defer></script>
+</body>
+</html>

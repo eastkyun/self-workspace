@@ -74,7 +74,7 @@ PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers \
 또는 직접 실행할 수 있습니다.
 
 ```bash
-.venv/bin/python -m uvicorn portal.main:app --reload
+.venv/bin/python -m uvicorn portal.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 브라우저에서 <http://127.0.0.1:8000/>을 열고 회원가입합니다. 회원가입 시 첫
