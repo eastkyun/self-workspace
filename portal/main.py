@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 
@@ -139,13 +140,19 @@ from shared.internal_links import (
     InternalLinkResolverRegistry,
     InternalLinkResult,
 )
+from job_platform.application import JobApplicationService
+from job_platform.handlers import JobTypeRegistry
+from job_platform.router import STATIC_DIR as JOBS_STATIC_DIR, create_jobs_router
+from job_platform.runtime import create_job_runtime
+from web_collector.adapter import STATIC_DIR as WEB_COLLECTOR_STATIC_DIR, WebCollectionAdapter
+from web_collector.database import verify_web_collection_schema
 
 PORTAL_DIR = Path(__file__).resolve().parent
 STATIC_DIR = PORTAL_DIR / "static"
 PORTAL_TEMPLATES_DIR = PORTAL_DIR / "templates"
 templates = create_templates(PORTAL_TEMPLATES_DIR)
 RUNTIME_APP_KEYS = frozenset(
-    {"home", "notes", "calendar", "search", "publishing", "assets", "workspace"}
+    {"home", "notes", "calendar", "search", "publishing", "assets", "workspace", "jobs"}
 )
 
 
@@ -177,6 +184,7 @@ def create_app(
     quotes: Sequence[Quote] | None = None,
     quote_selector: QuoteSelector | None = None,
     document_export_service: DocumentExportService | None = None,
+    jobs_database_path: str | Path | None = None,
 ) -> FastAPI:
     install_access_log_redaction()
     configuration = load_config()
@@ -200,6 +208,7 @@ def create_app(
             notes_database_path,
             publishing_database_path,
             asset_database_path,
+            jobs_database_path,
         )
     )
     resolved_database_path = resolve_database_path(
@@ -263,6 +272,12 @@ def create_app(
         ).resolve()
     else:
         resolved_asset_database_path = configuration.databases.assets
+    if jobs_database_path is not None:
+        resolved_jobs_database_path = Path(jobs_database_path).expanduser().resolve()
+    elif any(value is not None for value in (database_path, notes_database_path, publishing_database_path, asset_database_path)):
+        resolved_jobs_database_path = (resolved_notes_database_path.parent / "jobs.db").resolve()
+    else:
+        resolved_jobs_database_path = configuration.databases.jobs
     resolved_asset_blob_root = (
         Path(asset_blob_root).expanduser().resolve()
         if asset_blob_root is not None
@@ -381,6 +396,28 @@ def create_app(
         clock=auth_service.clock,
     )
     authorization_service = AuthorizationService(resolved_identity_database_path)
+    job_runtime = None
+    jobs_service = None
+    if configuration.jobs.enabled:
+        verify_notes_database(
+            resolved_notes_database_path,
+            require_current=True,
+            require_idempotency=True,
+        )
+        verify_web_collection_schema(resolved_jobs_database_path)
+        jobs_configuration = replace(
+            configuration,
+            databases=replace(configuration.databases, jobs=resolved_jobs_database_path),
+        )
+        job_type_registry = JobTypeRegistry(
+            [WebCollectionAdapter(execution_enabled=configuration.jobs.web_collection_enabled)]
+        )
+        job_runtime = create_job_runtime(
+            jobs_configuration,
+            registry=job_type_registry,
+            mode="web",
+        )
+        jobs_service = JobApplicationService(job_runtime.repository, job_type_registry)
     app_catalog_service = AppCatalogService(resolved_identity_database_path)
     workspace_app_policy = WorkspaceAppPolicyService(
         resolved_identity_database_path, authorization_service
@@ -639,7 +676,11 @@ def create_app(
                 )
             )
         publication_type_registry.validate_stored_type_ids(stored_type_ids)
-        yield
+        try:
+            yield
+        finally:
+            if job_runtime is not None:
+                await job_runtime.close()
 
     application = FastAPI(
         title="Nest",
@@ -675,6 +716,7 @@ def create_app(
     application.state.asset_storage = asset_storage
     application.state.asset_service = asset_service
     application.state.authorization_service = authorization_service
+    application.state.job_runtime = job_runtime
     application.state.app_catalog_service = app_catalog_service
     application.state.workspace_app_policy = workspace_app_policy
     application.state.effective_workspace_apps = effective_workspace_apps
@@ -692,6 +734,16 @@ def create_app(
         "/static/notes",
         StaticFiles(directory=NOTES_STATIC_DIR),
         name="notes-static",
+    )
+    application.mount(
+        "/static/jobs",
+        StaticFiles(directory=JOBS_STATIC_DIR),
+        name="jobs-static",
+    )
+    application.mount(
+        "/static/web-collector",
+        StaticFiles(directory=WEB_COLLECTOR_STATIC_DIR),
+        name="web-collector-static",
     )
     application.mount(
         "/apps/notes/static/shared",
@@ -746,6 +798,17 @@ def create_app(
             export_asset_loader=load_workspace_export_asset,
         )
     )
+    if jobs_service is not None:
+        application.include_router(
+            create_jobs_router(
+                service=jobs_service,
+                authorization=authorization_service,
+                require_workspace=require_workspace,
+                csrf=notes_csrf,
+                csrf_cookie_name=f"{configuration.session.cookie_name}_csrf",
+                app_registry=registry,
+            )
+        )
 
     def require_legacy_notes_workspace(request: Request) -> WorkspaceContext:
         try:

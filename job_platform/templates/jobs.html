@@ -1,0 +1,34 @@
+{% extends "app_shell.html" %}
+
+{% block page_head %}
+  <link rel="stylesheet" href="/static/jobs/jobs.css">
+{% endblock %}
+
+{% block content %}
+<section id="jobs-app" class="jobs-app" data-workspace-await-ready data-api-base="{{ jobs_api_base }}" data-csrf-cookie-name="{{ jobs_csrf_cookie_name }}">
+  <header class="jobs-header">
+    <div><p class="workspace-eyebrow">AUTOMATION</p><h2>Jobs</h2></div>
+    <button id="jobs-new" class="jobs-primary" type="button">새 Job</button>
+  </header>
+  <p id="jobs-status" role="status" aria-live="polite">Jobs를 불러오는 중입니다.</p>
+  <div class="jobs-layout">
+    <section aria-labelledby="jobs-list-title">
+      <h3 id="jobs-list-title">작업 목록</h3>
+      <div id="jobs-list" class="jobs-list"></div>
+    </section>
+    <form id="jobs-form" class="jobs-form" hidden>
+      <h3>Job 설정</h3>
+      <label>이름<input id="job-name" maxlength="120" required></label>
+      <fieldset><legend>Job Type</legend><div id="job-types" class="job-types"></div></fieldset>
+      <label>실행 방식<select id="job-schedule-kind"><option value="MANUAL">수동</option><option value="INTERVAL">주기</option><option value="CRON">Cron</option></select></label>
+      <label id="job-expression-field" hidden>표현식<input id="job-schedule-expression"></label>
+      <label id="job-timezone-field" hidden>시간대<input id="job-timezone" value="Asia/Seoul"></label>
+      <div id="job-type-editor"></div>
+      <p id="job-form-status" role="status" aria-live="polite"></p>
+      <div class="jobs-actions"><button type="button" id="job-cancel">취소</button><button class="jobs-primary" type="submit">저장</button></div>
+    </form>
+  </div>
+</section>
+{% endblock %}
+
+{% block page_scripts %}<script type="module" src="/static/jobs/jobs.js"></script>{% endblock %}

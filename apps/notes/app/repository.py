@@ -28,6 +28,41 @@ def get_deleted_note(
     return row_to_dict(row) if row else None
 
 
+def get_note_for_idempotency_key(
+    connection: sqlite3.Connection, workspace_id: str, key: str
+) -> dict[str, Any] | None:
+    row = connection.execute(
+        """
+        SELECT notes.*
+        FROM note_idempotency_keys
+        JOIN notes
+          ON notes.workspace_id = note_idempotency_keys.workspace_id
+         AND notes.id = note_idempotency_keys.note_id
+        WHERE note_idempotency_keys.workspace_id = ?
+          AND note_idempotency_keys.key = ?
+        """,
+        (workspace_id, key),
+    ).fetchone()
+    return row_to_dict(row) if row else None
+
+
+def create_idempotency_key(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    *,
+    key: str,
+    note_id: int,
+    created_at: str,
+) -> None:
+    connection.execute(
+        """
+        INSERT INTO note_idempotency_keys (workspace_id, key, note_id, created_at)
+        VALUES (?, ?, ?, ?)
+        """,
+        (workspace_id, key, note_id, created_at),
+    )
+
+
 def create_note(
     connection: sqlite3.Connection,
     workspace_id: str,

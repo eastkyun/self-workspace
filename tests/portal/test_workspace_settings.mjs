@@ -86,9 +86,9 @@ test("hub routes publishing through the selected workspace", () => {
   );
 });
 
-test("shared shell rewrites every tenant app including publishing", () => {
+test("shared shell rewrites every tenant app including Jobs", () => {
   const shellSource = fs.readFileSync("shared/static/shell.js", "utf8");
-  assert.match(shellSource, /\["calendar", "notes", "publishing"\]/);
+  assert.match(shellSource, /\["calendar", "notes", "publishing", "jobs"\]/);
 });
 
 test("shared shell persists sidebar workspace selection before navigation", () => {
@@ -112,7 +112,7 @@ test("shared shell selects once and keeps app links on the route workspace", asy
     <main id="workspace-main"></main>
     <div id="workspace-guest-actions" hidden></div>
     <div id="workspace-account" hidden><button id="workspace-account-toggle"></button><div id="workspace-account-menu" hidden></div><span id="workspace-account-label"></span><span id="workspace-account-avatar"></span><span id="workspace-account-name"></span><span id="workspace-account-email"></span></div>
-    <a data-app-id="notes"></a><a data-app-id="calendar"></a><a data-app-id="publishing"></a>
+    <a data-app-id="notes"></a><a data-app-id="calendar"></a><a data-app-id="publishing"></a><a data-app-id="jobs"></a>
   </body>`, {url: "http://testserver/w/workspace-b/home"});
   const requests = [];
   const fetchStub = async (input, options = {}) => {
@@ -143,7 +143,7 @@ test("shared shell selects once and keeps app links on the route workspace", asy
   await globalThis.workspaceAccountPromise;
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  for (const appId of ["notes", "calendar", "publishing"]) {
+  for (const appId of ["notes", "calendar", "publishing", "jobs"]) {
     assert.match(dom.window.document.querySelector(`[data-app-id="${appId}"]`).getAttribute("href"), /\/w\/workspace-b\//);
   }
   const workspaceLink = dom.window.document.querySelector("[data-workspace-list] [data-workspace-id='workspace-b']");

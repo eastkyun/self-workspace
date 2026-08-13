@@ -77,6 +77,14 @@ class NotesService:
             context, "notes.read_all", app_key="notes"
         )
 
+    def require_create(self, context: WorkspaceContext) -> None:
+        """Fail before collection work when the actor cannot create Notes."""
+        snapshot = self._require_read(context)
+        if not self.authorization.authorize(
+            context, "notes.create", snapshot=snapshot
+        ):
+            raise PermissionDenied("permission denied")
+
     def _require_resource_action(
         self,
         context: WorkspaceContext,
@@ -142,10 +150,19 @@ class NotesService:
             raise NoteNotFoundError(note_id)
         return note
 
-    def create_note(self, context: WorkspaceContext, payload: NoteCreate) -> dict[str, Any]:
-        snapshot = self._require_read(context)
-        if not self.authorization.authorize(context, "notes.create", snapshot=snapshot):
-            raise PermissionDenied("permission denied")
+    def create_note(
+        self,
+        context: WorkspaceContext,
+        payload: NoteCreate,
+        *,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
+        self.require_create(context)
+        if idempotency_key is not None:
+            if not idempotency_key or idempotency_key.strip() != idempotency_key:
+                raise ValueError("idempotency key must not be empty or padded")
+            if len(idempotency_key) > 255:
+                raise ValueError("idempotency key must not exceed 255 characters")
         timestamp = self._timestamp()
         resolved_links = [self._resolve_source(context, link) for link in payload.links]
         references = [
@@ -154,30 +171,74 @@ class NotesService:
         ]
         if len(references) != len(set(references)):
             raise DuplicateLinkError("Note contains duplicate source links")
+        created = True
         with database_connection(self.database_path) as connection:
-            note = repository.create_note(
-                connection,
-                context.workspace_id,
-                actor_id=context.user_id,
-                title=payload.title,
-                content=payload.content,
-                note_type=payload.note_type,
-                is_pinned=payload.is_pinned,
-                created_at=timestamp,
-                updated_at=timestamp,
-            )
-            for source in resolved_links:
-                repository.create_link(
+            if idempotency_key is not None:
+                # Serialize the read/create pair. SQLite then makes a retry in
+                # another process observe the committed key instead of
+                # creating a second Note.
+                connection.execute("BEGIN IMMEDIATE")
+                existing = repository.get_note_for_idempotency_key(
+                    connection, context.workspace_id, idempotency_key
+                )
+                if existing is not None:
+                    note = existing
+                    created = False
+                else:
+                    note = repository.create_note(
+                        connection,
+                        context.workspace_id,
+                        actor_id=context.user_id,
+                        title=payload.title,
+                        content=payload.content,
+                        note_type=payload.note_type,
+                        is_pinned=payload.is_pinned,
+                        created_at=timestamp,
+                        updated_at=timestamp,
+                    )
+                    for source in resolved_links:
+                        repository.create_link(
+                            connection,
+                            context.workspace_id,
+                            note_id=note["id"],
+                            source_app=source.reference.source_app,
+                            source_type=source.reference.source_type,
+                            source_id=source.reference.source_id,
+                            source_title_snapshot=source.title,
+                            created_at=timestamp,
+                        )
+                    repository.create_idempotency_key(
+                        connection,
+                        context.workspace_id,
+                        key=idempotency_key,
+                        note_id=note["id"],
+                        created_at=timestamp,
+                    )
+            else:
+                note = repository.create_note(
                     connection,
                     context.workspace_id,
-                    note_id=note["id"],
-                    source_app=source.reference.source_app,
-                    source_type=source.reference.source_type,
-                    source_id=source.reference.source_id,
-                    source_title_snapshot=source.title,
+                    actor_id=context.user_id,
+                    title=payload.title,
+                    content=payload.content,
+                    note_type=payload.note_type,
+                    is_pinned=payload.is_pinned,
                     created_at=timestamp,
+                    updated_at=timestamp,
                 )
-        self._activity(context, "notes.created", note)
+                for source in resolved_links:
+                    repository.create_link(
+                        connection,
+                        context.workspace_id,
+                        note_id=note["id"],
+                        source_app=source.reference.source_app,
+                        source_type=source.reference.source_type,
+                        source_id=source.reference.source_id,
+                        source_title_snapshot=source.title,
+                        created_at=timestamp,
+                    )
+        if created:
+            self._activity(context, "notes.created", note)
         return note
 
     def update_note(

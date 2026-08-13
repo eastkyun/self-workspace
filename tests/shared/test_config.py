@@ -38,6 +38,12 @@ def test_missing_environment_uses_existing_paths_and_security_defaults() -> None
     assert config.document_export.timeout_seconds == 60
     assert config.document_export.max_concurrent == 2
     assert config.document_export.reference_docx is None
+    assert config.databases.jobs.name == "jobs.db"
+    assert config.jobs.enabled is False
+    assert config.jobs.web_collection_enabled is False
+    assert config.jobs.minimum_interval_seconds == 300
+    assert config.jobs.lease_seconds == 60
+    assert config.jobs.heartbeat_seconds == 20
 
 
 def test_current_database_environment_names_and_calendar_legacy_fallback(
@@ -126,6 +132,27 @@ def test_document_export_environment_is_validated(tmp_path: Path) -> None:
     assert config.document_export.max_concurrent == 3
     assert config.document_export.reference_docx == reference.resolve()
 
+
+def test_jobs_environment_is_fail_closed_and_validated(tmp_path: Path) -> None:
+    config = load_config(
+        {
+            "JOBS_DB_PATH": str(tmp_path / "jobs.db"),
+            "JOBS_ENABLED": "true",
+            "JOBS_WEB_COLLECTION_ENABLED": "false",
+            "JOBS_MINIMUM_INTERVAL_SECONDS": "600",
+            "JOBS_LEASE_SECONDS": "90",
+            "JOBS_HEARTBEAT_SECONDS": "30",
+            "JOBS_BROWSER_CONCURRENCY": "1",
+        }
+    )
+    assert config.databases.jobs == (tmp_path / "jobs.db").resolve()
+    assert config.jobs.enabled is True
+    assert config.jobs.web_collection_enabled is False
+    assert config.jobs.minimum_interval_seconds == 600
+    with pytest.raises(ConfigurationError, match="at least 300"):
+        load_config({"JOBS_MINIMUM_INTERVAL_SECONDS": "299"})
+    with pytest.raises(ConfigurationError, match="shorter"):
+        load_config({"JOBS_LEASE_SECONDS": "20", "JOBS_HEARTBEAT_SECONDS": "20"})
 
 
 def test_production_defaults_to_secure_cookie_and_rejects_insecure_override() -> None:

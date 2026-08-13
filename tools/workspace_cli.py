@@ -16,6 +16,7 @@ from tools.staging_migrations import (
     stage_domains,
     verify_staging,
 )
+from tools.notes_v3_upgrade import upgrade_notes_v3
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -26,6 +27,8 @@ def _parser() -> argparse.ArgumentParser:
     for name in ("stage-domains", "verify-staging", "prepare-cutover"):
         command = commands.add_parser(name)
         command.add_argument("--manifest", type=Path, default=Path(os.environ.get("WORKSPACE_MIGRATION_MANIFEST_PATH", DEFAULT_MANIFEST_PATH)))
+    notes_v3 = commands.add_parser("upgrade-notes-v3")
+    notes_v3.add_argument("--database", type=Path, required=True)
     return parser
 
 
@@ -56,6 +59,17 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
     args = _parser().parse_args(arguments)
+    if args.command == "upgrade-notes-v3":
+        try:
+            result = upgrade_notes_v3(args.database)
+        except (RuntimeError, OSError, ValueError) as error:
+            print(f"upgrade-notes-v3 failed: {error}", file=sys.stderr)
+            return 1
+        print(f"database={result.database}")
+        print(f"changed={str(result.changed).lower()}")
+        if result.backup is not None:
+            print(f"backup={result.backup}")
+        return 0
     if args.command in {"stage-domains", "verify-staging", "prepare-cutover"}:
         try:
             if args.command == "stage-domains":

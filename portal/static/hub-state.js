@@ -16,7 +16,7 @@ export function decodePinnedIds(serialized, apps) {
 }
 
 export function workspaceAppRoute(app, workspaceId) {
-  if (workspaceId && ["calendar", "notes", "publishing"].includes(app.id)) {
+  if (workspaceId && ["calendar", "notes", "publishing", "jobs"].includes(app.id)) {
     const slug = app.id === "publishing" ? "publications" : app.id;
     return `/w/${workspaceId}/${slug}`;
   }

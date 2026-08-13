@@ -20,8 +20,8 @@ from workspace_platform.app_policy import AppPolicyConflict, AppPolicyNotFound, 
 from identity.workspaces import WorkspaceService
 
 
-MANIFEST_KEYS = frozenset({"home", "notes", "calendar", "search", "publishing", "assets", "workspace"})
-RUNTIME_KEYS = frozenset({"home", "notes", "calendar", "search", "publishing", "assets", "workspace"})
+MANIFEST_KEYS = frozenset({"home", "notes", "calendar", "search", "publishing", "assets", "workspace", "jobs"})
+RUNTIME_KEYS = frozenset({"home", "notes", "calendar", "search", "publishing", "assets", "workspace", "jobs"})
 
 
 def _seed(tmp_path):

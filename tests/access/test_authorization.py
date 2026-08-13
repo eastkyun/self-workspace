@@ -21,7 +21,7 @@ from workspace_platform.app_catalog import AppCatalogService
 from workspace_platform.effective_apps import EffectiveWorkspaceApps
 
 
-RUNTIME_KEYS = frozenset({"home", "notes", "calendar", "search", "publishing", "assets", "workspace"})
+RUNTIME_KEYS = frozenset({"home", "notes", "calendar", "search", "publishing", "assets", "workspace", "jobs"})
 
 
 def _system(tmp_path):

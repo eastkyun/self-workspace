@@ -25,7 +25,7 @@ from workspace_platform.dashboard import (
 )
 
 
-RUNTIME_KEYS = frozenset({"home", "notes", "calendar", "search", "publishing", "assets", "workspace"})
+RUNTIME_KEYS = frozenset({"home", "notes", "calendar", "search", "publishing", "assets", "workspace", "jobs"})
 EMPTY_SCHEMA = {"type": "object", "properties": {}, "additionalProperties": False}
 
 

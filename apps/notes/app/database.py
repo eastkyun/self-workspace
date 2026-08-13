@@ -9,7 +9,7 @@ from typing import Iterator
 APP_DIR = Path(__file__).resolve().parent
 WORKSPACE_ROOT = APP_DIR.parents[2]
 DEFAULT_DB_PATH = WORKSPACE_ROOT / "instance" / "notes" / "notes.db"
-NOTES_SCHEMA_VERSION = 2
+NOTES_SCHEMA_VERSION = 3
 
 REQUIRED_COLUMNS = {
     "notes": {
@@ -44,6 +44,13 @@ REQUIRED_INDEXES = {
     "idx_note_links_source",
     "idx_note_links_workspace_source",
 }
+IDEMPOTENCY_REQUIRED_COLUMNS = {
+    "workspace_id", "key", "note_id", "created_at"
+}
+IDEMPOTENCY_REQUIRED_INDEXES = {
+    "idx_notes_workspace_id",
+    "idx_note_idempotency_note",
+}
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS notes (
@@ -76,6 +83,23 @@ CREATE TABLE IF NOT EXISTS note_links (
     FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE,
     UNIQUE(workspace_id, note_id, source_app, source_type, source_id)
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_notes_workspace_id
+ON notes(workspace_id, id);
+
+CREATE TABLE IF NOT EXISTS note_idempotency_keys (
+    workspace_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    note_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(workspace_id, key),
+    FOREIGN KEY(workspace_id, note_id)
+        REFERENCES notes(workspace_id, id) ON DELETE CASCADE,
+    CHECK(length(key) BETWEEN 1 AND 255)
+);
+
+CREATE INDEX IF NOT EXISTS idx_note_idempotency_note
+ON note_idempotency_keys(workspace_id, note_id);
 
 CREATE INDEX IF NOT EXISTS idx_notes_listing
 ON notes(is_pinned DESC, updated_at DESC, id DESC);
@@ -195,7 +219,10 @@ def initialize_legacy_database(database_path: str | Path) -> Path:
 
 
 def verify_database(
-    database_path: str | Path, *, require_current: bool = False
+    database_path: str | Path,
+    *,
+    require_current: bool = False,
+    require_idempotency: bool = False,
 ) -> None:
     path = Path(database_path)
     if not path.is_file():
@@ -214,10 +241,10 @@ def verify_database(
         if foreign_key_errors:
             raise RuntimeError("Notes database foreign_key_check failed")
         version = connection.execute("PRAGMA user_version").fetchone()[0]
-        if version not in {1, NOTES_SCHEMA_VERSION}:
+        if version not in {1, 2, NOTES_SCHEMA_VERSION}:
             raise RuntimeError(
                 f"unsupported Notes database version: {version}; "
-                f"expected 1 or {NOTES_SCHEMA_VERSION}"
+                f"expected 1, 2, or {NOTES_SCHEMA_VERSION}"
             )
         if version == 1:
             tables = {
@@ -309,6 +336,45 @@ def verify_database(
             raise RuntimeError(
                 f"Notes database is missing indexes: {sorted(missing_indexes)}"
             )
+        if version == 2 and require_idempotency:
+            raise RuntimeError(
+                "Notes database v2 requires the explicit stopped-service v3 upgrade"
+            )
+        if version == NOTES_SCHEMA_VERSION:
+            if "note_idempotency_keys" not in tables:
+                raise RuntimeError(
+                    "Notes database is missing table: note_idempotency_keys"
+                )
+            idempotency_columns = {
+                row[1]
+                for row in connection.execute(
+                    "PRAGMA table_info(note_idempotency_keys)"
+                )
+            }
+            if missing := IDEMPOTENCY_REQUIRED_COLUMNS - idempotency_columns:
+                raise RuntimeError(
+                    "Notes database table note_idempotency_keys is missing columns: "
+                    f"{sorted(missing)}"
+                )
+            if missing := IDEMPOTENCY_REQUIRED_INDEXES - indexes:
+                raise RuntimeError(
+                    f"Notes database is missing indexes: {sorted(missing)}"
+                )
+            idempotency_foreign_keys = connection.execute(
+                "PRAGMA foreign_key_list(note_idempotency_keys)"
+            ).fetchall()
+            referenced_columns = {
+                (row[3], row[4], row[6].upper())
+                for row in idempotency_foreign_keys
+                if row[2] == "notes"
+            }
+            if referenced_columns != {
+                ("workspace_id", "workspace_id", "CASCADE"),
+                ("note_id", "id", "CASCADE"),
+            }:
+                raise RuntimeError(
+                    "Notes database has incompatible idempotency foreign key"
+                )
         note_columns = {
             row[1]: row
             for row in connection.execute("PRAGMA table_info(notes)")

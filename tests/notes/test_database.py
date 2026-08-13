@@ -27,12 +27,19 @@ def test_initializes_independent_notes_schema(tmp_path: Path) -> None:
             for row in connection.execute(
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             )
-        } >= {"notes", "note_links"}
+        } >= {"notes", "note_links", "note_idempotency_keys"}
         foreign_keys = connection.execute(
             "PRAGMA foreign_key_list(note_links)"
         ).fetchall()
         assert len(foreign_keys) == 1
         assert foreign_keys[0][2] == "notes"
+        idempotency_foreign_keys = connection.execute(
+            "PRAGMA foreign_key_list(note_idempotency_keys)"
+        ).fetchall()
+        assert {(row[3], row[4]) for row in idempotency_foreign_keys} == {
+            ("workspace_id", "workspace_id"),
+            ("note_id", "id"),
+        }
         assert "calendar" not in path.read_bytes().decode("latin1").lower()
 
 

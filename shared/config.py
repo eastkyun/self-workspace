@@ -24,6 +24,7 @@ DEFAULT_PUBLISHING_DB_PATH = (
 )
 DEFAULT_ASSET_DB_PATH = WORKSPACE_ROOT / "instance" / "assets" / "assets.db"
 DEFAULT_IDENTITY_DB_PATH = WORKSPACE_ROOT / "instance" / "identity" / "identity.db"
+DEFAULT_JOBS_DB_PATH = WORKSPACE_ROOT / "instance" / "jobs" / "jobs.db"
 DEFAULT_PUBLICATION_TYPES_PATH = (
     WORKSPACE_ROOT / "instance" / "publishing" / "types.json"
 )
@@ -47,6 +48,7 @@ class DatabasePaths:
     assets: Path
     identity: Path
     publication_types: Path
+    jobs: Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +82,15 @@ class DocumentExportConfig:
     reference_docx: Path | None
 
 
+@dataclass(frozen=True, slots=True)
+class JobsConfig:
+    enabled: bool
+    web_collection_enabled: bool
+    minimum_interval_seconds: int
+    lease_seconds: int
+    heartbeat_seconds: int
+    browser_concurrency: int
+
 
 @dataclass(frozen=True, slots=True)
 class AppConfig:
@@ -89,6 +100,7 @@ class AppConfig:
     session: SessionConfig
     security: SecurityConfig
     document_export: DocumentExportConfig
+    jobs: JobsConfig
 
 
 def _value(source: Mapping[str, str], name: str) -> str | None:
@@ -221,6 +233,7 @@ def load_config(environ: Mapping[str, str] | None = None) -> AppConfig:
         publication_types=_path(
             source, "PUBLICATION_TYPES_PATH", DEFAULT_PUBLICATION_TYPES_PATH
         ),
+        jobs=_path(source, "JOBS_DB_PATH", DEFAULT_JOBS_DB_PATH),
     )
 
     cookie_name = _value(source, "SESSION_COOKIE_NAME") or "my_workspace_session"
@@ -305,6 +318,21 @@ def load_config(environ: Mapping[str, str] | None = None) -> AppConfig:
         raise ConfigurationError(
             "DOCUMENT_EXPORT_PDF_ENGINE must be chromium or xelatex"
         )
+    minimum_interval = _positive_int(source, "JOBS_MINIMUM_INTERVAL_SECONDS", 300)
+    if minimum_interval < 300:
+        raise ConfigurationError("JOBS_MINIMUM_INTERVAL_SECONDS must be at least 300")
+    lease_seconds = _positive_int(source, "JOBS_LEASE_SECONDS", 60)
+    heartbeat_seconds = _positive_int(source, "JOBS_HEARTBEAT_SECONDS", 20)
+    if heartbeat_seconds >= lease_seconds:
+        raise ConfigurationError("JOBS_HEARTBEAT_SECONDS must be shorter than JOBS_LEASE_SECONDS")
+    jobs = JobsConfig(
+        enabled=_boolean(source, "JOBS_ENABLED", False),
+        web_collection_enabled=_boolean(source, "JOBS_WEB_COLLECTION_ENABLED", False),
+        minimum_interval_seconds=minimum_interval,
+        lease_seconds=lease_seconds,
+        heartbeat_seconds=heartbeat_seconds,
+        browser_concurrency=_positive_int(source, "JOBS_BROWSER_CONCURRENCY", 2),
+    )
     return AppConfig(
         environment=environment,
         public_origin=public_origin,
@@ -312,6 +340,7 @@ def load_config(environ: Mapping[str, str] | None = None) -> AppConfig:
         session=session,
         security=security,
         document_export=document_export,
+        jobs=jobs,
     )
 
 
@@ -320,6 +349,7 @@ __all__ = [
     "ConfigurationError",
     "DatabasePaths",
     "DocumentExportConfig",
+    "JobsConfig",
     "SecurityConfig",
     "SessionConfig",
     "load_config",

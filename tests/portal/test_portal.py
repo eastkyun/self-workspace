@@ -68,11 +68,11 @@ def test_portal_compresses_large_responses(tmp_path: Path) -> None:
 
 
 
-def test_default_registry_loads_calendar_and_notes_apps() -> None:
+def test_default_registry_loads_workspace_apps() -> None:
     app_registry = AppRegistry.load_default()
 
     assert [app.id for app in app_registry.get_all()] == [
-        "calendar", "notes", "publishing", "assets", "home", "search", "workspace"
+        "calendar", "notes", "publishing", "assets", "jobs", "home", "search", "workspace"
     ]
     assert app_registry.get_app("calendar").route == "/apps/calendar/"
     assert app_registry.get_app("calendar").navigation_visible is True

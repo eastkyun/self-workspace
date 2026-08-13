@@ -102,13 +102,13 @@ if (document.querySelector("[data-workspace-await-ready]")) {
 }
 
 function canonicalAppRoute(appId, workspaceId) {
-  if (!workspaceId || !["calendar", "notes", "publishing"].includes(appId)) return null;
+  if (!workspaceId || !["calendar", "notes", "publishing", "jobs"].includes(appId)) return null;
   const slug = appId === "publishing" ? "publications" : appId;
   return new URL(`w/${workspaceId}/${slug}`, appRoot).pathname;
 }
 
 function rewriteWorkspaceAppLinks(workspaceId) {
-  for (const appId of ["calendar", "notes", "publishing"]) {
+  for (const appId of ["calendar", "notes", "publishing", "jobs"]) {
     const route = canonicalAppRoute(appId, workspaceId);
     if (!route) continue;
     for (const item of document.querySelectorAll(`[data-app-id="${appId}"]`)) {

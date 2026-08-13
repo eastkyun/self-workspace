@@ -450,6 +450,112 @@
       }
     },
     {
+      "id": "jobs",
+      "name": "jobs",
+      "display_name": "Jobs",
+      "description": "예약 작업과 웹 콘텐츠 수집을 관리합니다.",
+      "icon": "/static/icons/jobs.svg",
+      "route": "/apps/jobs/",
+      "category": "development",
+      "enabled": false,
+      "default_pinned": false,
+      "navigation_visible": true,
+      "launcher_visible": true,
+      "order": 40,
+      "version": "0.1.0",
+      "kind": "internal",
+      "search_keywords": [
+        "automation",
+        "schedule",
+        "collection",
+        "자동화",
+        "수집"
+      ],
+      "platform": {
+        "key": "jobs",
+        "builtin": true,
+        "status": "ACTIVE",
+        "routes": {
+          "ui": "/w/{workspace_id}/jobs",
+          "api_v1": "/api/v1/workspaces/{workspace_id}/jobs",
+          "public": null
+        },
+        "sidebar": {
+          "visible": true,
+          "label": "Jobs",
+          "order": 40
+        },
+        "launcher": true,
+        "home_card": true,
+        "permissions": [
+          {
+            "code": "jobs.read_all",
+            "name": "jobs.read_all",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "jobs.create",
+            "name": "jobs.create",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "jobs.update_own",
+            "name": "jobs.update_own",
+            "description": "",
+            "supports_own": true,
+            "owner_only": false
+          },
+          {
+            "code": "jobs.update_all",
+            "name": "jobs.update_all",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "jobs.delete_own",
+            "name": "jobs.delete_own",
+            "description": "",
+            "supports_own": true,
+            "owner_only": false
+          },
+          {
+            "code": "jobs.delete_all",
+            "name": "jobs.delete_all",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          },
+          {
+            "code": "jobs.manage",
+            "name": "jobs.manage",
+            "description": "",
+            "supports_own": false,
+            "owner_only": false
+          }
+        ],
+        "settings_schema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "widgets": [],
+        "capabilities": {
+          "search": false,
+          "dashboard": false,
+          "internal_links": false
+        },
+        "default_enabled": {
+          "personal": false,
+          "team": false
+        }
+      }
+    },
+    {
       "id": "publishing",
       "name": "publishing",
       "display_name": "Published",

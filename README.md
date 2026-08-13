@@ -123,11 +123,20 @@ Workspace가 함께 생성되며, 로그인 후 Workspace 선택 화면을 거�
 | `DOCUMENT_EXPORT_TIMEOUT_SECONDS` | `60` | 변환 1건의 제한 시간 |
 | `DOCUMENT_EXPORT_MAX_CONCURRENT` | `2` | 프로세스당 동시 변환 상한 |
 | `DOCUMENT_EXPORT_REFERENCE_DOCX` | 비어 있음 | 선택적 Pandoc DOCX reference file 절대경로 |
+| `JOBS_DB_PATH` | `instance/jobs/jobs.db` | Job 정의·실행 이력 DB |
+| `JOBS_ENABLED` | `false` | Jobs API/UI/worker runtime 활성화 |
+| `JOBS_WEB_COLLECTION_ENABLED` | `false` | 보안 게이트 완료 후 Web Collection 실행 활성화 |
+| `JOBS_MINIMUM_INTERVAL_SECONDS` | `300` | 예약 실행 최소 간격 |
+| `JOBS_LEASE_SECONDS` | `60` | worker run lease 길이 |
+| `JOBS_HEARTBEAT_SECONDS` | `20` | 실행 중 heartbeat 간격 |
+| `JOBS_BROWSER_CONCURRENCY` | `2` | 향후 browser context 동시 실행 상한 |
 
 `TODO_DB_PATH`는 Calendar DB의 레거시 호환 변수이며 `CALENDAR_DB_PATH`가 우선합니다.
 운영 환경에서는 DB 경로를 절대경로로 지정하는 것을 권장합니다.
 문서 내보내기 설치와 장애 코드는 [Document export 운영 문서](docs/document-export.md)를
 참고하세요. 변환기가 없어도 앱은 시작되며 내보내기 요청만 `503`을 반환합니다.
+Jobs 설치, 안전 기본값과 worker 명령은 [Job Platform 운영 문서](docs/job-platform.md)를
+참고하세요. Jobs 및 Web Collection은 기본적으로 비활성화됩니다.
 
 ## 기존 데이터 Bootstrap과 Migration
 

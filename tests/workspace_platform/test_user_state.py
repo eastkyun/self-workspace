@@ -25,7 +25,7 @@ from workspace_platform.user_state_resources import ResourceResolution, Workspac
 from workspace_platform.user_state_router import ResourceStateRequest
 
 
-RUNTIME_KEYS = frozenset({"home", "notes", "calendar", "search", "publishing", "assets", "workspace"})
+RUNTIME_KEYS = frozenset({"home", "notes", "calendar", "search", "publishing", "assets", "workspace", "jobs"})
 
 
 def _system(tmp_path):
