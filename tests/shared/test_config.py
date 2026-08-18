@@ -44,6 +44,7 @@ def test_missing_environment_uses_existing_paths_and_security_defaults() -> None
     assert config.jobs.minimum_interval_seconds == 300
     assert config.jobs.lease_seconds == 60
     assert config.jobs.heartbeat_seconds == 20
+    assert config.jobs.openai_timeout_seconds == 180
 
 
 def test_current_database_environment_names_and_calendar_legacy_fallback(
@@ -143,12 +144,16 @@ def test_jobs_environment_is_fail_closed_and_validated(tmp_path: Path) -> None:
             "JOBS_LEASE_SECONDS": "90",
             "JOBS_HEARTBEAT_SECONDS": "30",
             "JOBS_BROWSER_CONCURRENCY": "1",
+            "JOBS_OPENAI_MODEL": "gpt-5.6-luna",
+            "JOBS_OPENAI_TIMEOUT_SECONDS": "75",
         }
     )
     assert config.databases.jobs == (tmp_path / "jobs.db").resolve()
     assert config.jobs.enabled is True
     assert config.jobs.web_collection_enabled is False
     assert config.jobs.minimum_interval_seconds == 600
+    assert config.jobs.openai_model == "gpt-5.6-luna"
+    assert config.jobs.openai_timeout_seconds == 75
     with pytest.raises(ConfigurationError, match="at least 300"):
         load_config({"JOBS_MINIMUM_INTERVAL_SECONDS": "299"})
     with pytest.raises(ConfigurationError, match="shorter"):

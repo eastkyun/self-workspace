@@ -5,29 +5,111 @@
 {% endblock %}
 
 {% block content %}
-<section id="jobs-app" class="jobs-app" data-workspace-await-ready data-api-base="{{ jobs_api_base }}" data-csrf-cookie-name="{{ jobs_csrf_cookie_name }}">
+<section id="jobs-app" class="jobs-app" data-workspace-await-ready data-api-base="{{ jobs_api_base }}" data-workspace-id="{{ workspace_id }}" data-csrf-cookie-name="{{ jobs_csrf_cookie_name }}">
   <header class="jobs-header">
-    <div><p class="workspace-eyebrow">AUTOMATION</p><h2>Jobs</h2></div>
-    <button id="jobs-new" class="jobs-primary" type="button">새 Job</button>
+    <div class="jobs-heading-copy">
+      <p class="workspace-eyebrow">AUTOMATION</p>
+      <h2>Jobs</h2>
+      <p>반복되는 수집 작업을 예약하고, 변경된 내용을 Notes에 차곡차곡 남기세요.</p>
+    </div>
+    <div class="jobs-header-actions">
+      <button id="jobs-formatters" class="jobs-secondary" type="button">정리 방식 관리</button>
+      <button id="jobs-new" class="jobs-primary" type="button"><span aria-hidden="true">＋</span> 새 Job</button>
+    </div>
   </header>
-  <p id="jobs-status" role="status" aria-live="polite">Jobs를 불러오는 중입니다.</p>
+  <section class="jobs-overview" aria-label="Job 현황">
+    <div><span>전체</span><strong id="jobs-count-all">-</strong></div>
+    <div><span>활성</span><strong id="jobs-count-active">-</strong></div>
+    <div><span>확인 필요</span><strong id="jobs-count-attention">-</strong></div>
+    <div><span>Worker</span><strong id="jobs-worker-state" class="jobs-worker-state">확인 중</strong></div>
+    <p id="jobs-status" role="status" aria-live="polite">Jobs를 불러오는 중입니다.</p>
+  </section>
   <div class="jobs-layout">
-    <section aria-labelledby="jobs-list-title">
-      <h3 id="jobs-list-title">작업 목록</h3>
+    <section class="jobs-list-pane" aria-labelledby="jobs-list-title">
+      <header class="jobs-section-heading">
+        <div><h3 id="jobs-list-title">작업 목록</h3><p>테스트를 통과한 작업만 활성화할 수 있습니다.</p></div>
+      </header>
       <div id="jobs-list" class="jobs-list"></div>
     </section>
-    <form id="jobs-form" class="jobs-form" hidden>
-      <h3>Job 설정</h3>
-      <label>이름<input id="job-name" maxlength="120" required></label>
-      <fieldset><legend>Job Type</legend><div id="job-types" class="job-types"></div></fieldset>
-      <label>실행 방식<select id="job-schedule-kind"><option value="MANUAL">수동</option><option value="INTERVAL">주기</option><option value="CRON">Cron</option></select></label>
-      <label id="job-expression-field" hidden>표현식<input id="job-schedule-expression"></label>
-      <label id="job-timezone-field" hidden>시간대<input id="job-timezone" value="Asia/Seoul"></label>
-      <div id="job-type-editor"></div>
-      <p id="job-form-status" role="status" aria-live="polite"></p>
-      <div class="jobs-actions"><button type="button" id="job-cancel">취소</button><button class="jobs-primary" type="submit">저장</button></div>
-    </form>
   </div>
+  <dialog id="jobs-create-dialog" class="jobs-create-dialog" aria-labelledby="job-form-title">
+    <form id="jobs-form" class="jobs-form">
+      <header class="jobs-form-header">
+        <div><p id="job-form-eyebrow" class="workspace-eyebrow">NEW AUTOMATION</p><h3 id="job-form-title">새 Job 만들기</h3><p id="job-form-description">수집 대상과 실행 일정을 한 번에 설정합니다.</p></div>
+        <button type="button" id="job-cancel" class="jobs-icon-button" aria-label="Job 설정 닫기">×</button>
+      </header>
+      <ol class="jobs-form-progress" aria-label="Job 설정 단계">
+        <li><span>1</span>이름</li><li><span>2</span>수집 대상</li><li><span>3</span>실행 일정</li>
+      </ol>
+      <div class="jobs-form-scroll">
+        <section class="jobs-form-section">
+          <div class="jobs-form-section-heading"><span>1</span><div><h4>기본 정보</h4><p>목록에서 알아보기 쉬운 이름을 사용하세요.</p></div></div>
+          <label>이름<input id="job-name" maxlength="120" required placeholder="예: 제품 공지 수집"></label>
+        </section>
+        <section class="jobs-form-section">
+          <div class="jobs-form-section-heading"><span>2</span><div><h4>수집 방식</h4><p>Job Type을 선택하고 수집 대상을 지정하세요.</p></div></div>
+          <fieldset><legend class="jobs-visually-hidden">Job Type</legend><div id="job-types" class="job-types"></div></fieldset>
+          <p id="job-type-lock-note" class="job-type-lock-note" hidden>편집할 때는 Job Type을 바꿀 수 없습니다. 다른 방식이 필요하면 새 Job을 만드세요.</p>
+          <div id="job-type-editor"></div>
+        </section>
+        <section class="jobs-form-section">
+          <div class="jobs-form-section-heading"><span>3</span><div><h4>실행 일정</h4><p>필요할 때만 실행하거나 반복 일정을 지정하세요.</p></div></div>
+          <label>실행 방식<select id="job-schedule-kind"><option value="MANUAL">필요할 때 직접 실행</option><option value="INTERVAL">일정 간격으로 반복</option><option value="CRON">Cron 일정 사용</option></select></label>
+          <label id="job-expression-field" hidden>표현식<input id="job-schedule-expression" placeholder="예: 300 또는 0 9 * * 1-5"></label>
+          <label id="job-timezone-field" hidden>시간대<input id="job-timezone" value="Asia/Seoul"></label>
+        </section>
+      </div>
+      <p id="job-form-status" role="status" aria-live="polite"></p>
+      <div class="jobs-actions"><span id="job-form-hint">저장 후 테스트를 통과하면 활성화할 수 있습니다.</span><button class="jobs-secondary" type="button" data-action="cancel-form">취소</button><button id="job-submit" class="jobs-primary" type="submit">초안 저장</button></div>
+    </form>
+  </dialog>
+  <dialog id="jobs-archive-dialog" class="jobs-confirm-dialog" aria-labelledby="job-confirm-title">
+    <form id="job-archive-form" class="jobs-confirm-form">
+      <div class="jobs-confirm-mark" aria-hidden="true">!</div>
+      <div><p id="job-confirm-eyebrow" class="workspace-eyebrow">ARCHIVE JOB</p><h3 id="job-confirm-title">Job을 보관할까요?</h3></div>
+      <p id="job-confirm-message"><strong id="job-archive-name"></strong><span id="job-confirm-copy">은 더 이상 실행되지 않고, 대기 중인 실행은 취소됩니다. 실행 이력은 유지됩니다.</span></p>
+      <p id="job-archive-status" class="jobs-confirm-status" role="status" aria-live="polite"></p>
+      <div class="jobs-confirm-actions"><button id="job-archive-cancel" class="jobs-secondary" type="button">취소</button><button id="job-archive-submit" class="jobs-danger" type="submit">보관하기</button></div>
+    </form>
+  </dialog>
+  <dialog id="jobs-history-dialog" class="jobs-history-dialog" aria-labelledby="jobs-history-title">
+    <section class="jobs-history-shell">
+      <header class="jobs-history-header">
+        <div><p class="workspace-eyebrow">RUN HISTORY</p><h3 id="jobs-history-title" tabindex="-1">실행 이력</h3></div>
+        <button id="jobs-history-close" type="button" class="jobs-icon-button" aria-label="실행 이력 닫기">×</button>
+      </header>
+      <div class="jobs-history-body">
+        <p id="jobs-history-status" role="status" aria-live="polite"></p>
+        <div id="jobs-history-list"></div>
+      </div>
+    </section>
+  </dialog>
+  <dialog id="jobs-formatter-dialog" class="jobs-formatter-dialog" aria-labelledby="jobs-formatter-title">
+    <section class="jobs-formatter-shell">
+      <header class="jobs-history-header">
+        <div><p class="workspace-eyebrow">NOTE FORMATTERS</p><h3 id="jobs-formatter-title" tabindex="-1">정리 방식 관리</h3></div>
+        <button id="jobs-formatter-close" type="button" class="jobs-icon-button" aria-label="정리 방식 관리 닫기">×</button>
+      </header>
+      <div class="jobs-formatter-body">
+        <aside class="jobs-formatter-list-pane">
+          <div class="jobs-formatter-list-heading"><strong>사용자 정리 방식</strong><button id="jobs-formatter-new" type="button">＋ 새 방식</button></div>
+          <p>원문 Markdown과 기본 금융시장 브리핑은 항상 제공됩니다.</p>
+          <div id="jobs-formatter-list" class="jobs-formatter-list"></div>
+        </aside>
+        <form id="jobs-formatter-form" class="jobs-formatter-form">
+          <div><p id="jobs-formatter-eyebrow" class="workspace-eyebrow">NEW FORMATTER</p><h4 id="jobs-formatter-form-title">새 정리 방식</h4></div>
+          <label>이름<input id="jobs-formatter-name" maxlength="80" required placeholder="예: 주간 시장 요약"></label>
+          <label>OpenAI 모델<input id="jobs-formatter-model" maxlength="120" required value="gpt-5.6-luna"></label>
+          <label class="jobs-formatter-instructions">정리 지침<textarea id="jobs-formatter-instructions" maxlength="30000" required placeholder="수집 원문을 어떤 Markdown 문서로 정리할지 지시하세요."></textarea></label>
+          <p id="jobs-formatter-status" role="status" aria-live="polite"></p>
+          <div class="jobs-formatter-actions">
+            <button id="jobs-formatter-delete" class="jobs-danger-link" type="button" hidden>삭제</button>
+            <button class="jobs-primary" type="submit">저장</button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </dialog>
 </section>
 {% endblock %}
 

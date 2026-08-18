@@ -90,6 +90,8 @@ class JobsConfig:
     lease_seconds: int
     heartbeat_seconds: int
     browser_concurrency: int
+    openai_model: str
+    openai_timeout_seconds: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -332,6 +334,10 @@ def load_config(environ: Mapping[str, str] | None = None) -> AppConfig:
         lease_seconds=lease_seconds,
         heartbeat_seconds=heartbeat_seconds,
         browser_concurrency=_positive_int(source, "JOBS_BROWSER_CONCURRENCY", 2),
+        openai_model=_value(source, "JOBS_OPENAI_MODEL") or "gpt-5.6-luna",
+        openai_timeout_seconds=_positive_int(
+            source, "JOBS_OPENAI_TIMEOUT_SECONDS", 180
+        ),
     )
     return AppConfig(
         environment=environment,

@@ -12,7 +12,7 @@ from identity.router import _auth_error
 from identity.workspaces import WorkspaceConflict, WorkspaceNotFound, WorkspaceService
 from shared.config import AppConfig
 from shared.errors import APIError
-from shared.templating import create_templates
+from shared.templating import create_templates, project_workspace_shell_apps
 from workspace_platform.app_policy import (
     AppPolicyForbidden,
     AppPolicyNotFound,
@@ -80,24 +80,9 @@ def create_workspace_shell_router(
             "/apps/calendar/": f"/w/{workspace_id}/calendar",
             "/apps/publishing/": f"/w/{workspace_id}/publications",
         }
+        context.update(project_workspace_shell_apps(app_items, workspace_id))
         context.update(
             {
-                "apps": app_items,
-                "navigation_apps": [
-                    {
-                        "id": app.key, "kind": "internal", "route": app.route.replace("{workspace_id}", workspace_id),
-                        "icon": app.icon, "display_name": app.display_name,
-                    }
-                    for app in app_items if app.sidebar_visible
-                ],
-                "launcher_apps": [
-                    {
-                        "id": app.key, "kind": "internal", "route": app.route.replace("{workspace_id}", workspace_id),
-                        "icon": app.icon, "display_name": app.display_name,
-                        "default_pinned": app.key in {"notes", "calendar"},
-                    }
-                    for app in app_items if app.launcher_visible
-                ],
                 "current_app_id": "home",
                 "current_app_name": workspace["name"],
                 "page_title": workspace["name"],

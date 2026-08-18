@@ -32,7 +32,13 @@ from shared.document_export import (
     ExportUnavailable,
     attachment_headers,
 )
-from shared.templating import SHARED_STATIC_DIR, create_templates, shell_context
+from shared.templating import (
+    SHARED_STATIC_DIR,
+    authorized_workspace_shell_context,
+    create_templates,
+    shell_context,
+)
+from workspace_platform.effective_apps import EffectiveWorkspaceApps
 
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
@@ -69,6 +75,7 @@ def create_notes_router(
     document_export_service: DocumentExportService | None = None,
     export_asset_loader: Callable[[WorkspaceContext, int], AssetResource | None]
     | None = None,
+    effective_apps: EffectiveWorkspaceApps | None = None,
 ) -> APIRouter:
     """Canonical workspace Notes UI/API router.
 
@@ -88,17 +95,26 @@ def create_notes_router(
         if csrf is not None:
             csrf(request)
 
-    def render(request: Request, workspace_id: str, mode: str):
+    def render(request: Request, context: WorkspaceContext, mode: str):
+        workspace_id = context.workspace_id
         canonical_routes = {
             "/": f"/w/{workspace_id}/home",
             "/apps/notes/": f"/w/{workspace_id}/notes",
             "/apps/calendar/": f"/w/{workspace_id}/calendar",
             "/apps/publishing/": f"/w/{workspace_id}/publications",
         }
-        return templates.TemplateResponse(
-            request,
-            "notes.html",
-            shell_context(
+        page = (
+            authorized_workspace_shell_context(
+                request,
+                app_registry,
+                current_app_id="notes",
+                page_title="Notes",
+                workspace_context=context,
+                effective_apps=effective_apps,
+                path_for=lambda path: canonical_routes.get(path, path),
+            )
+            if effective_apps is not None
+            else shell_context(
                 request,
                 app_registry,
                 current_app_id="notes",
@@ -106,6 +122,11 @@ def create_notes_router(
                 path_for=lambda path: canonical_routes.get(path, path),
                 workspace_id=workspace_id,
             )
+        )
+        return templates.TemplateResponse(
+            request,
+            "notes.html",
+            page
             | {
                 "notes_mode": mode,
                 "notes_api_base": f"/api/v1/workspaces/{workspace_id}/notes",
@@ -125,7 +146,7 @@ def create_notes_router(
             service.authorization.require(context, "notes.read_all", app_key="notes")
         except Exception as error:
             raise _translate(error) from error
-        return render(request, workspace_id, "browse")
+        return render(request, context, "browse")
 
     @router.get("/w/{workspace_id}/notes/new", include_in_schema=False)
     def new_note(request: Request, workspace_id: str, context: WorkspaceContext = Depends(require_workspace)):
@@ -137,7 +158,7 @@ def create_notes_router(
                 raise PermissionDenied("permission denied")
         except Exception as error:
             raise _translate(error) from error
-        return render(request, workspace_id, "new")
+        return render(request, context, "new")
 
     api = "/api/v1/workspaces/{workspace_id}/notes"
 

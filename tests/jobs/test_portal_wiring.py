@@ -22,6 +22,7 @@ def test_portal_wires_jobs_only_when_explicitly_enabled(tmp_path, monkeypatch):
     paths = {route.path for route in app.routes}
     assert "/w/{workspace_id}/jobs" in paths
     assert "/api/v1/workspaces/{workspace_id}/jobs" in paths
+    assert "/api/v1/workspaces/{workspace_id}/jobs/formatters" in paths
     assert "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/run" in paths
     assert app.state.job_runtime is not None
 

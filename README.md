@@ -65,11 +65,20 @@ PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers \
 ## 실행
 
 기본 개발 설정은 코드에 포함되어 있습니다. 설정을 명시하려면 `.env.example`을
-참고해 환경 변수를 export하세요. 애플리케이션이 `.env` 파일을 자동으로 읽는다고
-가정하지 않습니다.
+참고하세요. `start.sh`는 저장소 루트의 `.env`를 읽어 웹 서버와 선택적 Jobs
+worker에 동일하게 전달합니다. Uvicorn이나 CLI를 직접 실행할 때는 환경 변수를
+직접 export해야 합니다.
 
 ```bash
 ./start.sh
+```
+
+`JOBS_ENABLED`와 `JOBS_WEB_COLLECTION_ENABLED`를 모두 활성화한 개발 환경에서는
+`start.sh`가 웹 서버와 Jobs worker를 함께 시작하고, 종료 신호도 두 프로세스에
+전달합니다. worker만 별도로 실행하려면 다음 명령을 사용합니다.
+
+```bash
+.venv/bin/python -m tools.jobs worker --poll-seconds 30
 ```
 
 또는 직접 실행할 수 있습니다.
@@ -91,6 +100,7 @@ Workspace가 함께 생성되며, 로그인 후 Workspace 선택 화면을 거�
 /w/{workspace_id}/notes
 /w/{workspace_id}/publications
 /w/{workspace_id}/publications/types
+/w/{workspace_id}/jobs
 /w/{workspace_id}/search
 /w/{workspace_id}/settings/*
 ```
@@ -130,13 +140,18 @@ Workspace가 함께 생성되며, 로그인 후 Workspace 선택 화면을 거�
 | `JOBS_LEASE_SECONDS` | `60` | worker run lease 길이 |
 | `JOBS_HEARTBEAT_SECONDS` | `20` | 실행 중 heartbeat 간격 |
 | `JOBS_BROWSER_CONCURRENCY` | `2` | 향후 browser context 동시 실행 상한 |
+| `OPENAI_API_KEY` | 비어 있음 | AI 정리 방식을 선택한 Web Collection Worker 전용 API 키 |
+| `JOBS_OPENAI_MODEL` | `gpt-5.6-luna` | 기본 금융시장 브리핑 Responses API 모델 |
+| `JOBS_OPENAI_TIMEOUT_SECONDS` | `180` | AI 정리 API 호출 제한 시간 |
 
 `TODO_DB_PATH`는 Calendar DB의 레거시 호환 변수이며 `CALENDAR_DB_PATH`가 우선합니다.
 운영 환경에서는 DB 경로를 절대경로로 지정하는 것을 권장합니다.
 문서 내보내기 설치와 장애 코드는 [Document export 운영 문서](docs/document-export.md)를
 참고하세요. 변환기가 없어도 앱은 시작되며 내보내기 요청만 `503`을 반환합니다.
 Jobs 설치, 안전 기본값과 worker 명령은 [Job Platform 운영 문서](docs/job-platform.md)를
-참고하세요. Jobs 및 Web Collection은 기본적으로 비활성화됩니다.
+참고하세요. systemd/cron/Windows 스케줄러와 production resource gate는
+[Jobs 운영 가이드](docs/jobs-operations.md)에 있습니다. Jobs 및 Web Collection은
+기본적으로 비활성화됩니다.
 
 ## 기존 데이터 Bootstrap과 Migration
 

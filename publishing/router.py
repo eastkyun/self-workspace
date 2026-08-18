@@ -36,7 +36,12 @@ from publishing.type_manifests import (
 )
 from publishing.types import default_publication_types
 from shared.app_registry import AppRegistry
-from shared.templating import create_templates, shell_context
+from shared.templating import (
+    authorized_workspace_shell_context,
+    create_templates,
+    shell_context,
+)
+from workspace_platform.effective_apps import EffectiveWorkspaceApps
 from shared.document_export import (
     AssetResource,
     DocumentExportService,
@@ -760,6 +765,7 @@ def create_workspace_publishing_router(
     app_registry: AppRegistry | None = None,
     type_manifest_store: PublicationTypeManifestStore | None = None,
     identity_database_path: Path | None = None,
+    effective_apps: EffectiveWorkspaceApps | None = None,
 ) -> APIRouter:
     """Authenticated, tenant-scoped Publishing management API."""
     router = APIRouter()
@@ -823,13 +829,25 @@ def create_workspace_publishing_router(
                 "/publications/": f"/w/{workspace_id}/publications",
                 "/publications/types/": f"/w/{workspace_id}/publications/types",
             }
-            page = shell_context(
-                request,
-                app_registry,
-                current_app_id="publishing",
-                page_title="Publications",
-                path_for=lambda path: canonical_routes.get(path, path),
-                workspace_id=workspace_id,
+            page = (
+                authorized_workspace_shell_context(
+                    request,
+                    app_registry,
+                    current_app_id="publishing",
+                    page_title="Publications",
+                    workspace_context=context,
+                    effective_apps=effective_apps,
+                    path_for=lambda path: canonical_routes.get(path, path),
+                )
+                if effective_apps is not None
+                else shell_context(
+                    request,
+                    app_registry,
+                    current_app_id="publishing",
+                    page_title="Publications",
+                    path_for=lambda path: canonical_routes.get(path, path),
+                    workspace_id=workspace_id,
+                )
             )
             page["current_app_name"] = "Publications"
             page["publications"] = cards
@@ -854,13 +872,25 @@ def create_workspace_publishing_router(
                 "/publications/": f"/w/{workspace_id}/publications",
                 "/publications/types/": f"/w/{workspace_id}/publications/types",
             }
-            page = shell_context(
-                request,
-                app_registry,
-                current_app_id="publishing",
-                page_title="Publication Types",
-                path_for=lambda path: canonical_routes.get(path, path),
-                workspace_id=workspace_id,
+            page = (
+                authorized_workspace_shell_context(
+                    request,
+                    app_registry,
+                    current_app_id="publishing",
+                    page_title="Publication Types",
+                    workspace_context=context,
+                    effective_apps=effective_apps,
+                    path_for=lambda path: canonical_routes.get(path, path),
+                )
+                if effective_apps is not None
+                else shell_context(
+                    request,
+                    app_registry,
+                    current_app_id="publishing",
+                    page_title="Publication Types",
+                    path_for=lambda path: canonical_routes.get(path, path),
+                    workspace_id=workspace_id,
+                )
             )
             page["current_app_name"] = "Publication Types"
             page["publication_type_api_endpoint"] = (

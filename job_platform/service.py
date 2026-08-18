@@ -5,8 +5,9 @@ import inspect
 from collections.abc import Callable
 from datetime import UTC, datetime
 
-from .handlers import JobOutcome, JobTypeRegistry
+from .database import connect
 from .errors import LeaseLost
+from .handlers import JobOutcome, JobTestOutcome, JobTypeRegistry
 from .repository import JobRepository, parse_timestamp
 from .schemas import JobExecutionContext, RunStatus, TriggerKind
 
@@ -61,6 +62,7 @@ class JobWorker:
     async def _execute(self, run: dict, *, now: datetime | None) -> JobOutcome:
         job = self.repository.get_job(run["workspace_id"], run["job_id"])
         token = run["lease_token"]
+        is_test = run["dedupe_key"].startswith("test:")
         try:
             allowed = self.authorize_execution(
                 job["workspace_id"], job["created_by"], job["job_type"]
@@ -73,6 +75,7 @@ class JobWorker:
                     run["id"], token, outcome,
                     error_code="AUTHORIZATION_REVOKED",
                     error_message="Execution authorization is no longer available",
+                    affect_job_health=not is_test,
                     now=now,
                 )
                 return outcome
@@ -85,7 +88,11 @@ class JobWorker:
                 scheduled_for=parse_timestamp(run["scheduled_for"]),
             )
             adapter = self.registry.get(job["job_type"])
-            if context.trigger_kind is TriggerKind.RETRY:
+            if is_test:
+                with connect(self.repository.database_path) as connection:
+                    config = adapter.load_type_config(connection, job)
+                operation = adapter.test(context, config)
+            elif context.trigger_kind is TriggerKind.RETRY:
                 operation = adapter.retry(context, run["source_run_id"])
             else:
                 operation = adapter.execute(context)
@@ -97,13 +104,33 @@ class JobWorker:
                 while True:
                     done, _ = await asyncio.wait({task}, timeout=heartbeat_interval)
                     if task in done:
-                        outcome = task.result()
+                        result = task.result()
                         break
                     self.repository.heartbeat(run["id"], token)
             except BaseException:
                 task.cancel()
                 await asyncio.gather(task, return_exceptions=True)
                 raise
+            if is_test:
+                if not isinstance(result, JobTestOutcome):
+                    raise RuntimeError("Job Type returned an invalid test outcome")
+                if result.success:
+                    tested = self.repository.mark_tested(
+                        job["workspace_id"],
+                        job["id"],
+                        run["definition_revision"],
+                        now=now,
+                    )
+                    outcome = JobOutcome(
+                        RunStatus.SUCCEEDED if tested else RunStatus.FAILED,
+                        result.code if tested else "STALE_DEFINITION",
+                    )
+                else:
+                    outcome = JobOutcome(RunStatus.FAILED, result.code)
+            else:
+                if not isinstance(result, JobOutcome):
+                    raise RuntimeError("Job Type returned an invalid execution outcome")
+                outcome = result
             failed = outcome.status in {RunStatus.FAILED, RunStatus.PARTIAL}
             self.repository.complete(
                 run["id"],
@@ -111,6 +138,7 @@ class JobWorker:
                 outcome,
                 error_code=outcome.outcome_code if failed else None,
                 error_message="Job handler reported a failure" if failed else None,
+                affect_job_health=not is_test,
                 now=now,
             )
             return outcome
@@ -122,6 +150,7 @@ class JobWorker:
                 run["id"], token, outcome,
                 error_code="HANDLER_FAILED",
                 error_message="Job handler failed",
+                affect_job_health=not is_test,
                 now=now,
             )
             return outcome

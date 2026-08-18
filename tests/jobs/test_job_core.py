@@ -22,6 +22,7 @@ from job_platform import (
 )
 from job_platform.database import connect
 from job_platform.errors import JobConflict, JobValidationError, LeaseLost
+from job_platform.handlers import JobTestOutcome
 from job_platform.service import JobWorker
 from job_platform.runtime import create_job_runtime
 from shared.config import load_config
@@ -41,8 +42,15 @@ class FakeAdapter:
         editor_key="fake",
     )
 
-    def __init__(self, delay: float = 0) -> None:
+    def __init__(
+        self,
+        delay: float = 0,
+        test_outcome: JobTestOutcome | None = None,
+    ) -> None:
         self.delay = delay
+        self.test_outcome = test_outcome or JobTestOutcome(
+            True, "SELECTOR_VERIFIED", {}
+        )
 
     def validate_config(self, payload):
         if not isinstance(payload, dict) or not str(payload.get("value", "")).strip():
@@ -69,6 +77,11 @@ class FakeAdapter:
 
     def project_run_detail(self, connection, run):
         return {}
+
+    async def test(self, context, config):
+        if self.delay:
+            await asyncio.sleep(self.delay)
+        return self.test_outcome
 
     async def execute(self, context):
         if self.delay:
@@ -229,6 +242,166 @@ def test_manual_execution_returns_conflict_when_run_is_already_active(repository
         repository.enqueue_manual("workspace-a", job["id"], now=now)
 
 
+def test_worker_runs_draft_test_in_background_and_marks_revision(repository):
+    now = datetime(2026, 8, 13, tzinfo=UTC)
+    job = repository.create_job(
+        workspace_id="workspace-a",
+        actor_id="user-a",
+        name="Draft",
+        job_type="FAKE",
+        schedule=JobSchedule(ScheduleKind.MANUAL),
+        type_config={"value": "v1"},
+        now=now,
+    )
+    queued = repository.enqueue_test("workspace-a", job["id"], now=now)
+
+    result = asyncio.run(
+        JobWorker(
+            repository,
+            repository.registry,
+            worker_id="worker-test",
+            authorize_execution=lambda *_args: True,
+        ).run_due(now=now)
+    )
+
+    assert result["completed"] == 1
+    run = repository.list_runs("workspace-a", job["id"])[0]
+    assert run["id"] == queued["id"]
+    assert run["dedupe_key"].startswith("test:")
+    assert run["status"] == "SUCCEEDED"
+    assert run["outcome_code"] == "SELECTOR_VERIFIED"
+    updated = repository.get_job("workspace-a", job["id"])
+    assert updated["status"] == "DRAFT"
+    assert updated["last_tested_revision"] == 1
+    assert updated["last_run_at"] is None
+    assert updated["consecutive_failures"] == 0
+
+
+def test_background_test_requires_latest_worker_protocol(repository):
+    now = datetime(2026, 8, 13, tzinfo=UTC)
+    job = repository.create_job(
+        workspace_id="workspace-a",
+        actor_id="user-a",
+        name="Draft",
+        job_type="FAKE",
+        schedule=JobSchedule(ScheduleKind.MANUAL),
+        type_config={"value": "v1"},
+        now=now,
+    )
+    with connect(repository.database_path) as connection:
+        connection.execute(
+            """INSERT INTO job_worker_invocations(
+                 id,worker_id,version,started_at,heartbeat_at,status
+               ) VALUES ('old','old-worker','2',?,?,'STOPPED')""",
+            (now.isoformat(), now.isoformat()),
+        )
+
+    with pytest.raises(JobConflict, match="다시 시작"):
+        repository.enqueue_test("workspace-a", job["id"], now=now)
+
+
+def test_failed_background_test_does_not_pause_job_or_allow_retry(tmp_path):
+    now = datetime(2026, 8, 13, tzinfo=UTC)
+    adapter = FakeAdapter(
+        test_outcome=JobTestOutcome(False, "BROWSER_NAVIGATION_FAILED", {})
+    )
+    repository = JobRepository(
+        initialize_database(tmp_path / "jobs.db"), JobTypeRegistry([adapter])
+    )
+    job = create_tested_job(repository, now=now, failures=1)
+    queued = repository.enqueue_test("workspace-a", job["id"], now=now)
+
+    result = asyncio.run(
+        JobWorker(
+            repository,
+            repository.registry,
+            worker_id="worker-test",
+            authorize_execution=lambda *_args: True,
+        ).run_due(now=now)
+    )
+
+    assert result["failed"] == 1
+    failed = repository.list_runs("workspace-a", job["id"])[0]
+    assert failed["id"] == queued["id"]
+    assert failed["error_code"] == "BROWSER_NAVIGATION_FAILED"
+    updated = repository.get_job("workspace-a", job["id"])
+    assert updated["status"] == "ACTIVE"
+    assert updated["consecutive_failures"] == 0
+    assert updated["last_run_at"] is None
+    with pytest.raises(JobConflict, match="test runs cannot be retried"):
+        repository.enqueue_retry("workspace-a", job["id"], failed["id"], now=now)
+
+
+def test_stale_background_test_does_not_create_collection_retry(repository):
+    now = datetime(2026, 8, 13, tzinfo=UTC)
+    job = create_tested_job(repository, now=now)
+    queued = repository.enqueue_test("workspace-a", job["id"], now=now)
+    repository.claim_next("worker-test", now=now)
+
+    repository.recover_stale(now=now + timedelta(seconds=61))
+
+    runs = repository.list_runs("workspace-a", job["id"])
+    assert len(runs) == 1
+    assert runs[0]["id"] == queued["id"]
+    assert runs[0]["outcome_code"] == "WORKER_LOST"
+    updated = repository.get_job("workspace-a", job["id"])
+    assert updated["status"] == "ACTIVE"
+    assert updated["consecutive_failures"] == 0
+
+
+def test_failed_run_can_be_retried_with_auditable_lineage(repository):
+    now = datetime(2026, 8, 13, tzinfo=UTC)
+    job = create_tested_job(repository, now=now)
+    original = repository.enqueue_manual("workspace-a", job["id"], now=now)
+    claim = repository.claim_next("worker-a", now=now)
+    repository.complete(
+        original["id"],
+        claim["lease_token"],
+        JobOutcome(RunStatus.FAILED, "FETCH_FAILED"),
+        error_code="FETCH_FAILED",
+        now=now,
+    )
+
+    retry = repository.enqueue_retry(
+        "workspace-a", job["id"], original["id"], now=now + timedelta(seconds=1)
+    )
+
+    assert retry["trigger_kind"] == "RETRY"
+    assert retry["source_run_id"] == original["id"]
+    assert retry["attempt"] == 2
+    result = asyncio.run(
+        JobWorker(
+            repository,
+            repository.registry,
+            worker_id="worker-b",
+            authorize_execution=lambda *_args: True,
+        ).run_due(now=now + timedelta(seconds=1))
+    )
+    assert result["completed"] == 1
+    retried = next(
+        item
+        for item in repository.list_runs("workspace-a", job["id"])
+        if item["id"] == retry["id"]
+    )
+    assert retried["status"] == "SUCCEEDED"
+    assert retried["outcome_code"] == "FAKE_RETRY_OK"
+
+
+def test_retry_rejects_success_and_concurrent_runs(repository):
+    now = datetime(2026, 8, 13, tzinfo=UTC)
+    job = create_tested_job(repository, now=now)
+    original = repository.enqueue_manual("workspace-a", job["id"], now=now)
+    claim = repository.claim_next("worker-a", now=now)
+    repository.complete(
+        original["id"],
+        claim["lease_token"],
+        JobOutcome(RunStatus.SUCCEEDED, "OK"),
+        now=now,
+    )
+    with pytest.raises(JobConflict, match="only failed runs"):
+        repository.enqueue_retry("workspace-a", job["id"], original["id"], now=now)
+
+
 def test_stale_recovery_fences_old_worker_and_creates_retry(repository):
     now = datetime(2026, 8, 13, tzinfo=UTC)
     job = create_tested_job(repository, now=now)
@@ -249,6 +422,58 @@ def test_registry_rejects_duplicate_type_and_editor_keys():
     second = FakeAdapter()
     with pytest.raises(ValueError, match="duplicate Job Type key"):
         JobTypeRegistry([first, second])
+
+
+def test_permanent_delete_requires_archive_and_cascades_runs(repository):
+    now = datetime(2026, 8, 13, tzinfo=UTC)
+    job = create_tested_job(repository, now=now)
+    run = repository.enqueue_manual("workspace-a", job["id"], now=now)
+
+    with pytest.raises(JobConflict, match="only archived jobs"):
+        repository.delete_archived("workspace-a", job["id"])
+
+    repository.archive("workspace-a", job["id"], "user-a", now=now)
+    repository.delete_archived("workspace-a", job["id"])
+    with connect(repository.database_path) as connection:
+        assert connection.execute(
+            "SELECT 1 FROM jobs WHERE id=?", (job["id"],)
+        ).fetchone() is None
+        assert connection.execute(
+            "SELECT 1 FROM job_runs WHERE id=?", (run["id"],)
+        ).fetchone() is None
+        assert connection.execute(
+            "SELECT 1 FROM fake_jobs WHERE job_id=?", (job["id"],)
+        ).fetchone() is None
+
+
+def test_run_history_delete_rejects_active_chain_and_removes_retries(repository):
+    now = datetime(2026, 8, 13, tzinfo=UTC)
+    job = create_tested_job(repository, now=now)
+    original = repository.enqueue_manual("workspace-a", job["id"], now=now)
+    with pytest.raises(JobConflict, match="active run history"):
+        repository.delete_run_history("workspace-a", job["id"], original["id"])
+
+    claim = repository.claim_next("worker-a", now=now)
+    repository.complete(
+        original["id"], claim["lease_token"],
+        JobOutcome(RunStatus.FAILED, "FAILED"), now=now,
+    )
+    retry = repository.enqueue_retry(
+        "workspace-a", job["id"], original["id"], now=now
+    )
+    with pytest.raises(JobConflict, match="active run history"):
+        repository.delete_run_history("workspace-a", job["id"], original["id"])
+
+    retry_claim = repository.claim_next("worker-b", now=now)
+    repository.complete(
+        retry["id"], retry_claim["lease_token"],
+        JobOutcome(RunStatus.FAILED, "FAILED_AGAIN"), now=now,
+    )
+    result = repository.delete_run_history(
+        "workspace-a", job["id"], original["id"]
+    )
+    assert result["deleted_count"] == 2
+    assert repository.list_runs("workspace-a", job["id"]) == []
 
 
 def test_web_and_worker_runtime_share_registry_and_database_contract(tmp_path):

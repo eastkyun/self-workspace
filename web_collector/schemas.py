@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -10,6 +11,14 @@ from job_platform.errors import JobValidationError
 class NotePolicy(StrEnum):
     CHANGED_ONLY = "CHANGED_ONLY"
     EVERY_RUN = "EVERY_RUN"
+
+
+class OutputFormat(StrEnum):
+    RAW_MARKDOWN = "RAW_MARKDOWN"
+    FINANCIAL_MARKET_BRIEFING = "FINANCIAL_MARKET_BRIEFING"
+
+
+FORMATTER_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +31,8 @@ class WebCollectionConfig:
     fallback_width: float | None = None
     fallback_height: float | None = None
     note_policy: NotePolicy = NotePolicy.CHANGED_ONLY
+    output_format: OutputFormat = OutputFormat.RAW_MARKDOWN
+    formatter_profile_id: str | None = None
     extract_links: bool = True
     extract_images: bool = False
 
@@ -31,7 +42,8 @@ class WebCollectionConfig:
             raise JobValidationError("Web Collection configuration must be an object")
         unknown = set(payload) - {
             "url", "selector", "selector_metadata", "fallback_x", "fallback_y",
-            "fallback_width", "fallback_height", "note_policy", "extract_links", "extract_images",
+            "fallback_width", "fallback_height", "note_policy", "output_format",
+            "formatter_profile_id", "extract_links", "extract_images",
         }
         if unknown:
             raise JobValidationError("Web Collection configuration contains unknown fields")
@@ -51,6 +63,23 @@ class WebCollectionConfig:
             note_policy = NotePolicy(str(payload.get("note_policy") or NotePolicy.CHANGED_ONLY))
         except ValueError as error:
             raise JobValidationError("unsupported Note policy") from error
+        try:
+            output_format = OutputFormat(
+                str(payload.get("output_format") or OutputFormat.RAW_MARKDOWN)
+            )
+        except ValueError as error:
+            raise JobValidationError("unsupported output format") from error
+        formatter_value = payload.get("formatter_profile_id")
+        formatter_profile_id = (
+            str(formatter_value).strip() if formatter_value is not None else None
+        )
+        if formatter_profile_id == "":
+            formatter_profile_id = None
+        if formatter_profile_id is not None:
+            if not FORMATTER_ID.fullmatch(formatter_profile_id):
+                raise JobValidationError("unsupported formatter profile")
+            if output_format is not OutputFormat.FINANCIAL_MARKET_BRIEFING:
+                raise JobValidationError("formatter profile requires AI output")
         extract_links = payload.get("extract_links", True)
         extract_images = payload.get("extract_images", False)
         if not isinstance(extract_links, bool) or extract_images is not False:
@@ -65,5 +94,6 @@ class WebCollectionConfig:
             url=url, selector=selector, selector_metadata_json=metadata_json,
             fallback_x=geometry[0], fallback_y=geometry[1], fallback_width=geometry[2],
             fallback_height=geometry[3], note_policy=note_policy,
+            output_format=output_format, formatter_profile_id=formatter_profile_id,
             extract_links=extract_links, extract_images=False,
         )

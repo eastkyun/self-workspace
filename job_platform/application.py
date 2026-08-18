@@ -7,6 +7,7 @@ from typing import Any
 from .database import connect
 from .errors import JobConflict
 from .handlers import JobTestOutcome, JobTypeRegistry
+from .health import health_snapshot
 from .repository import JobRepository
 from .schemas import JobSchedule
 
@@ -21,6 +22,21 @@ class JobApplicationService:
 
     def list_jobs(self, workspace_id: str) -> list[dict[str, Any]]:
         return self.repository.list_jobs(workspace_id)
+
+    def health(self) -> dict[str, object]:
+        return health_snapshot(self.repository.database_path)
+
+    async def preview_type(
+        self, job_type: str, context: object, payload: object
+    ) -> dict[str, Any]:
+        adapter = self.registry.get(job_type)
+        preview = getattr(adapter, "preview", None)
+        if preview is None:
+            raise ValueError("Job Type does not support preview")
+        result = await preview(context, payload)
+        if not isinstance(result, dict):
+            raise RuntimeError("Job Type returned an invalid preview")
+        return result
 
     def get_job(self, workspace_id: str, job_id: str) -> dict[str, Any]:
         return self.repository.get_job_detail(workspace_id, job_id)
@@ -80,3 +96,6 @@ class JobApplicationService:
         ):
             raise JobConflict("job definition changed while its test was running")
         return result
+
+    def enqueue_test(self, workspace_id: str, job_id: str) -> dict[str, Any]:
+        return self.repository.enqueue_test(workspace_id, job_id)

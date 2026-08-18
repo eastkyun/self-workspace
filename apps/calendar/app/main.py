@@ -21,7 +21,13 @@ from apps.calendar.app import repository
 from apps.calendar.app.service import CalendarService, TaskNotFoundError
 from shared.app_registry import AppRegistry, PORTAL_STATIC_DIR
 from shared.errors import APIError
-from shared.templating import SHARED_STATIC_DIR, create_templates, shell_context
+from shared.templating import (
+    SHARED_STATIC_DIR,
+    authorized_workspace_shell_context,
+    create_templates,
+    shell_context,
+)
+from workspace_platform.effective_apps import EffectiveWorkspaceApps
 
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
@@ -737,6 +743,7 @@ def create_calendar_router(
     require_workspace: ContextDependency,
     csrf: CsrfDependency | None = None,
     csrf_cookie_name: str | None = None,
+    effective_apps: EffectiveWorkspaceApps | None = None,
 ) -> APIRouter:
     """Canonical authenticated workspace Calendar UI/API router."""
     router = APIRouter()
@@ -755,7 +762,8 @@ def create_calendar_router(
         ):
             raise PermissionDenied("permission denied")
 
-    def render(request: Request, workspace_id: str):
+    def render(request: Request, context: WorkspaceContext):
+        workspace_id = context.workspace_id
         notes_app = app_registry.get_app("notes")
         if notes_app is None:
             raise RuntimeError("Notes app is missing from the shared Registry snapshot")
@@ -765,10 +773,18 @@ def create_calendar_router(
             "/apps/calendar/": f"/w/{workspace_id}/calendar",
             "/apps/publishing/": f"/w/{workspace_id}/publications",
         }
-        return templates.TemplateResponse(
-            request,
-            "calendar.html",
-            shell_context(
+        page = (
+            authorized_workspace_shell_context(
+                request,
+                app_registry,
+                current_app_id="calendar",
+                page_title="Calendar",
+                workspace_context=context,
+                effective_apps=effective_apps,
+                path_for=lambda path: canonical_routes.get(path, path),
+            )
+            if effective_apps is not None
+            else shell_context(
                 request,
                 app_registry,
                 current_app_id="calendar",
@@ -776,6 +792,11 @@ def create_calendar_router(
                 path_for=lambda path: canonical_routes.get(path, path),
                 workspace_id=workspace_id,
             )
+        )
+        return templates.TemplateResponse(
+            request,
+            "calendar.html",
+            page
             | {
                 "notes_route": notes_app.route,
                 "notes_api_base": f"/api/v1/workspaces/{workspace_id}/notes",
@@ -800,7 +821,7 @@ def create_calendar_router(
             )
         except Exception as error:
             raise _translate_workspace_error(error) from error
-        return render(request, workspace_id)
+        return render(request, context)
 
     @router.get(f"{api}/tasks", response_model=list[Task])
     def list_tasks(context: WorkspaceContext = Depends(require_workspace)):

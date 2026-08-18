@@ -11,6 +11,7 @@ from .errors import JobConflict, JobNotFound, JobValidationError, LeaseLost
 from .handlers import JobOutcome, JobTypeRegistry
 from .schedules import ScheduleCalculator, ensure_utc
 from .schemas import JobSchedule, JobStatus, RunStatus, ScheduleKind, TriggerKind
+from .version import WORKER_PROTOCOL_VERSION
 
 
 def utc_now() -> datetime:
@@ -239,6 +240,17 @@ class JobRepository:
             )
             return self._required_job(connection, workspace_id, job_id)
 
+    def delete_archived(self, workspace_id: str, job_id: str) -> dict[str, Any]:
+        with transaction(self.database_path, immediate=True) as connection:
+            job = self._required_job(connection, workspace_id, job_id)
+            if job["status"] != JobStatus.ARCHIVED:
+                raise JobConflict("only archived jobs can be permanently deleted")
+            connection.execute(
+                "DELETE FROM jobs WHERE workspace_id=? AND id=?",
+                (workspace_id, job_id),
+            )
+            return job
+
     def enqueue_manual(
         self, workspace_id: str, job_id: str, *, now: datetime | None = None
     ) -> dict[str, Any]:
@@ -253,6 +265,40 @@ class JobRepository:
                     job,
                     trigger=TriggerKind.MANUAL,
                     dedupe_key=f"manual:{uuid4()}",
+                    scheduled_for=instant,
+                )
+            except sqlite3.IntegrityError as error:
+                active = connection.execute(
+                    "SELECT 1 FROM job_runs WHERE job_id=? AND status IN ('QUEUED','RUNNING')",
+                    (job_id,),
+                ).fetchone()
+                if active:
+                    raise JobConflict("job already has an active run") from error
+                raise
+
+    def enqueue_test(
+        self, workspace_id: str, job_id: str, *, now: datetime | None = None
+    ) -> dict[str, Any]:
+        instant = now or utc_now()
+        with transaction(self.database_path, immediate=True) as connection:
+            job = self._required_job(connection, workspace_id, job_id)
+            if job["status"] == JobStatus.ARCHIVED.value:
+                raise JobConflict("archived jobs cannot be tested")
+            latest_worker = connection.execute(
+                """SELECT version FROM job_worker_invocations
+                   ORDER BY started_at DESC,id DESC LIMIT 1"""
+            ).fetchone()
+            if (
+                latest_worker is not None
+                and latest_worker["version"] != WORKER_PROTOCOL_VERSION
+            ):
+                raise JobConflict("Jobs Worker를 다시 시작한 뒤 테스트하세요.")
+            try:
+                return self._insert_run(
+                    connection,
+                    job,
+                    trigger=TriggerKind.MANUAL,
+                    dedupe_key=f"test:{uuid4()}",
                     scheduled_for=instant,
                 )
             except sqlite3.IntegrityError as error:
@@ -366,6 +412,7 @@ class JobRepository:
         *,
         error_code: str | None = None,
         error_message: str | None = None,
+        affect_job_health: bool = True,
         now: datetime | None = None,
     ) -> dict[str, Any]:
         if error_code and len(error_code) > 64:
@@ -393,16 +440,17 @@ class JobRepository:
                     lease_token,
                 ),
             )
-            job = self._required_job(connection, run["workspace_id"], run["job_id"])
-            failures = job["consecutive_failures"] + 1 if failed else 0
-            status = "PAUSED" if failed and failures >= job["max_consecutive_failures"] else job["status"]
-            connection.execute(
-                """UPDATE jobs SET status=?,consecutive_failures=?,last_run_at=?,
-                   last_success_at=CASE WHEN ? THEN last_success_at ELSE ? END,
-                   next_run_at=CASE WHEN ?='PAUSED' THEN NULL ELSE next_run_at END,
-                   updated_at=? WHERE workspace_id=? AND id=?""",
-                (status, failures, instant, int(failed), instant, status, instant, run["workspace_id"], run["job_id"]),
-            )
+            if affect_job_health:
+                job = self._required_job(connection, run["workspace_id"], run["job_id"])
+                failures = job["consecutive_failures"] + 1 if failed else 0
+                status = "PAUSED" if failed and failures >= job["max_consecutive_failures"] else job["status"]
+                connection.execute(
+                    """UPDATE jobs SET status=?,consecutive_failures=?,last_run_at=?,
+                       last_success_at=CASE WHEN ? THEN last_success_at ELSE ? END,
+                       next_run_at=CASE WHEN ?='PAUSED' THEN NULL ELSE next_run_at END,
+                       updated_at=? WHERE workspace_id=? AND id=?""",
+                    (status, failures, instant, int(failed), instant, status, instant, run["workspace_id"], run["job_id"]),
+                )
             return dict(connection.execute("SELECT * FROM job_runs WHERE id=?", (run_id,)).fetchone())
 
     def recover_stale(self, *, now: datetime | None = None) -> list[dict[str, Any]]:
@@ -416,12 +464,16 @@ class JobRepository:
             ).fetchall()
             for row in rows:
                 run = dict(row)
+                is_test = run["dedupe_key"].startswith("test:")
                 connection.execute(
                     """UPDATE job_runs SET status='FAILED',lease_token=NULL,lease_until=NULL,
                        finished_at=?,outcome_code='WORKER_LOST',error_code='WORKER_LOST',
                        error_message='Worker lease expired' WHERE id=? AND status='RUNNING'""",
                     (now_value, run["id"]),
                 )
+                recovered.append(run)
+                if is_test:
+                    continue
                 job = self._required_job(connection, run["workspace_id"], run["job_id"])
                 failures = job["consecutive_failures"] + 1
                 paused = failures >= job["max_consecutive_failures"]
@@ -431,7 +483,6 @@ class JobRepository:
                        WHERE workspace_id=? AND id=?""",
                     (failures, int(paused), int(paused), now_value, now_value, run["workspace_id"], run["job_id"]),
                 )
-                recovered.append(run)
                 if not paused and job["status"] == JobStatus.ACTIVE and run["definition_revision"] == job["definition_revision"]:
                     self._insert_run(
                         connection,
@@ -455,6 +506,56 @@ class JobRepository:
                 )
             ]
 
+    def enqueue_retry(
+        self,
+        workspace_id: str,
+        job_id: str,
+        run_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        instant = now or utc_now()
+        with transaction(self.database_path, immediate=True) as connection:
+            job = self._required_job(connection, workspace_id, job_id)
+            if job["status"] != JobStatus.ACTIVE.value:
+                raise JobConflict("only active jobs can retry")
+            source = connection.execute(
+                "SELECT * FROM job_runs WHERE workspace_id=? AND job_id=? AND id=?",
+                (workspace_id, job_id, run_id),
+            ).fetchone()
+            if source is None:
+                raise JobNotFound("job run not found")
+            source = dict(source)
+            if source["dedupe_key"].startswith("test:"):
+                raise JobConflict("test runs cannot be retried")
+            if source["status"] not in {
+                RunStatus.FAILED.value,
+                RunStatus.PARTIAL.value,
+            }:
+                raise JobConflict("only failed runs can retry")
+            if source["definition_revision"] != job["definition_revision"]:
+                raise JobConflict("job definition changed after this run")
+            if connection.execute(
+                "SELECT 1 FROM job_runs WHERE job_id=? AND status IN ('QUEUED','RUNNING')",
+                (job_id,),
+            ).fetchone():
+                raise JobConflict("job already has an active run")
+            original_id = source["source_run_id"] or source["id"]
+            attempt = connection.execute(
+                """SELECT COALESCE(MAX(attempt),1)+1 FROM job_runs
+                   WHERE id=? OR source_run_id=?""",
+                (original_id, original_id),
+            ).fetchone()[0]
+            return self._insert_run(
+                connection,
+                job,
+                trigger=TriggerKind.RETRY,
+                dedupe_key=f"retry:{original_id}:{attempt}:{uuid4()}",
+                scheduled_for=instant,
+                source_run_id=original_id,
+                attempt=attempt,
+            )
+
     def list_run_details(self, workspace_id: str, job_id: str) -> list[dict[str, Any]]:
         with connect(self.database_path) as connection:
             job = self._required_job(connection, workspace_id, job_id)
@@ -467,6 +568,41 @@ class JobRepository:
                 {**dict(run), "type_result": adapter.project_run_detail(connection, dict(run))}
                 for run in runs
             ]
+
+    def delete_run_history(
+        self, workspace_id: str, job_id: str, run_id: str
+    ) -> dict[str, Any]:
+        with transaction(self.database_path, immediate=True) as connection:
+            self._required_job(connection, workspace_id, job_id)
+            rows = connection.execute(
+                """WITH RECURSIVE retry_chain(id) AS (
+                       SELECT id FROM job_runs
+                       WHERE workspace_id=? AND job_id=? AND id=?
+                       UNION ALL
+                       SELECT child.id FROM job_runs child
+                       JOIN retry_chain parent ON child.source_run_id=parent.id
+                       WHERE child.workspace_id=? AND child.job_id=?
+                   )
+                   SELECT id,status FROM job_runs
+                   WHERE id IN (SELECT id FROM retry_chain)""",
+                (workspace_id, job_id, run_id, workspace_id, job_id),
+            ).fetchall()
+            if not rows:
+                raise JobNotFound("job run not found")
+            active = {RunStatus.QUEUED.value, RunStatus.RUNNING.value}
+            if any(row["status"] in active for row in rows):
+                raise JobConflict("active run history cannot be deleted")
+            run_ids = [str(row["id"]) for row in rows]
+            placeholders = ",".join("?" for _ in run_ids)
+            connection.execute(
+                f"DELETE FROM job_runs WHERE workspace_id=? AND job_id=? AND id IN ({placeholders})",
+                (workspace_id, job_id, *run_ids),
+            )
+            return {
+                "deleted": True,
+                "run_id": run_id,
+                "deleted_count": len(run_ids),
+            }
 
     def _insert_run(
         self,

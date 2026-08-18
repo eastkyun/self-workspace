@@ -3,3 +3,4 @@ argon2-cffi>=25.1,<26
 playwright>=1.49,<2.0
 croniter>=6,<7
 markdownify>=1.2,<2
+openai>=2,<3

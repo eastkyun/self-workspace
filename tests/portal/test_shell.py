@@ -1,11 +1,17 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from shared.app_registry import AppRegistry
-from shared.templating import create_templates, shell_context, workspace_path
+from shared.templating import (
+    create_templates,
+    shell_context,
+    workspace_path,
+    workspace_shell_context,
+)
 
 
 def test_shell_context_selects_current_app() -> None:
@@ -33,8 +39,8 @@ def test_shell_context_selects_current_app() -> None:
 
     assert payload["current_app_id"] == "calendar"
     assert payload["current_app_name"] == "Calendar"
-    assert payload["navigation_app_ids"] == ["calendar", "notes", "publishing"]
-    assert payload["launcher_app_ids"] == ["calendar", "notes", "publishing"]
+    assert payload["navigation_app_ids"] == ["notes", "calendar", "publishing"]
+    assert payload["launcher_app_ids"] == ["notes", "calendar", "publishing"]
 
 
 def test_workspace_path_uses_external_root_path() -> None:
@@ -46,6 +52,37 @@ def test_workspace_path_uses_external_root_path() -> None:
 
     with TestClient(app) as client:
         assert client.get("/").json() == {"path": "/workspace/apps/calendar/"}
+
+
+def test_workspace_shell_context_projects_one_effective_app_snapshot() -> None:
+    request = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
+    effective_apps = (
+        SimpleNamespace(
+            key="notes", display_name="Notes", icon="/static/icons/notes.svg",
+            route="/w/{workspace_id}/notes", sidebar_visible=True,
+            launcher_visible=True,
+        ),
+        SimpleNamespace(
+            key="jobs", display_name="Jobs", icon="/static/icons/jobs.svg",
+            route="/w/{workspace_id}/jobs", sidebar_visible=True,
+            launcher_visible=True,
+        ),
+    )
+
+    context = workspace_shell_context(
+        request,
+        AppRegistry.load_default(),
+        current_app_id="notes",
+        page_title="Notes",
+        workspace_id="workspace-a",
+        effective_apps=effective_apps,
+    )
+
+    assert context["apps"] == effective_apps
+    assert [item["id"] for item in context["navigation_apps"]] == ["notes", "jobs"]
+    assert [item["id"] for item in context["launcher_apps"]] == ["notes", "jobs"]
+    assert context["navigation_apps"][1]["route"] == "/w/workspace-a/jobs"
+    assert context["launcher_apps"][0]["default_pinned"] is True
 
 
 def test_shared_shell_renders_navigation_and_content(tmp_path: Path) -> None:

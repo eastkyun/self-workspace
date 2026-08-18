@@ -147,6 +147,7 @@ from job_platform.runtime import create_job_runtime
 from web_collector.adapter import STATIC_DIR as WEB_COLLECTOR_STATIC_DIR, WebCollectionAdapter
 from web_collector.browser import BrowserManager
 from web_collector.database import verify_web_collection_schema
+from web_collector.repository import FormatterProfileRepository
 
 PORTAL_DIR = Path(__file__).resolve().parent
 STATIC_DIR = PORTAL_DIR / "static"
@@ -415,10 +416,13 @@ def create_app(
                 WebCollectionAdapter(
                     execution_enabled=configuration.jobs.web_collection_enabled,
                     browser_manager=(
-                        BrowserManager()
+                        BrowserManager(
+                            concurrency=configuration.jobs.browser_concurrency
+                        )
                         if configuration.jobs.web_collection_enabled
                         else None
                     ),
+                    database_path=resolved_jobs_database_path,
                 )
             ]
         )
@@ -806,6 +810,7 @@ def create_app(
             csrf_cookie_name=f"{configuration.session.cookie_name}_csrf",
             document_export_service=resolved_document_export_service,
             export_asset_loader=load_workspace_export_asset,
+            effective_apps=effective_workspace_apps,
         )
     )
     if jobs_service is not None:
@@ -817,6 +822,10 @@ def create_app(
                 csrf=notes_csrf,
                 csrf_cookie_name=f"{configuration.session.cookie_name}_csrf",
                 app_registry=registry,
+                effective_apps=effective_workspace_apps,
+                formatter_profiles=FormatterProfileRepository(
+                    resolved_jobs_database_path
+                ),
             )
         )
 
@@ -878,6 +887,7 @@ def create_app(
             require_workspace=require_workspace,
             csrf=notes_csrf,
             csrf_cookie_name=f"{configuration.session.cookie_name}_csrf",
+            effective_apps=effective_workspace_apps,
         )
     )
     application.include_router(
@@ -899,6 +909,7 @@ def create_app(
             app_registry=registry,
             type_manifest_store=publication_type_manifest_store,
             identity_database_path=resolved_identity_database_path,
+            effective_apps=effective_workspace_apps,
         )
     )
     application.include_router(
