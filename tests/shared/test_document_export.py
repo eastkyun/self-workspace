@@ -19,6 +19,11 @@ from shared.document_export import (
 )
 from shared.document_export.markdown import MAX_ASSET_BYTES, normalize_markdown
 from shared.document_export.service import export_date, safe_filename
+from shared.document_export.chromium_pdf import (
+    HEADING_PAGE_BREAK_THRESHOLD,
+    PRINTABLE_A4_HEIGHT_MM,
+    apply_heading_page_breaks,
+)
 from shared.document_export.runner import PRINT_STYLES
 from shared.document_export.docx_style import style_docx
 
@@ -86,6 +91,37 @@ def test_print_styles_use_plain_white_pages_and_allow_content_fragmentation() ->
     assert "box-shadow: none;" in styles
     assert "break-inside: avoid" not in styles
     assert "break-after: avoid" not in styles
+
+
+def test_print_styles_support_heading_page_breaks() -> None:
+    styles = PRINT_STYLES.read_text(encoding="utf-8")
+    assert ".markdown-viewer__content .pdf-page-break-before" in styles
+    assert "break-before: page;" in styles
+
+
+def test_chromium_marks_body_headings_after_the_page_threshold() -> None:
+    class FakePage:
+        def __init__(self) -> None:
+            self.script = ""
+            self.argument = {}
+
+        def evaluate(self, script, argument):
+            self.script = script
+            self.argument = argument
+            return 2
+
+    page = FakePage()
+
+    assert apply_heading_page_breaks(page) == 2
+    assert page.argument == {
+        "printableHeightMm": PRINTABLE_A4_HEIGHT_MM,
+        "threshold": HEADING_PAGE_BREAK_THRESHOLD,
+    }
+    assert page.argument["threshold"] == 0.6
+    assert ".markdown-viewer__content h1" in page.script
+    assert ".markdown-viewer__content h2" in page.script
+    assert ".markdown-viewer__content h3" not in page.script
+    assert 'heading.classList.add("pdf-page-break-before")' in page.script
 
 
 def test_docx_style_matches_white_a4_print_system_and_symbol_fallback(tmp_path: Path) -> None:

@@ -4,6 +4,53 @@ import sys
 from pathlib import Path
 
 
+HEADING_PAGE_BREAK_THRESHOLD = 0.6
+PRINTABLE_A4_HEIGHT_MM = 297 - (12 * 2)
+
+
+def apply_heading_page_breaks(page) -> int:
+    """Move body headings out of the bottom 40% of an A4 content area."""
+    return page.evaluate(
+        """
+        ({ printableHeightMm, threshold }) => {
+          const millimetre = document.createElement("div");
+          millimetre.style.cssText = [
+            "position:absolute",
+            "visibility:hidden",
+            "pointer-events:none",
+            "height:100mm",
+          ].join(";");
+          document.body.append(millimetre);
+          const printableHeight = millimetre.getBoundingClientRect().height
+            * printableHeightMm / 100;
+          millimetre.remove();
+
+          let insertedSpace = 0;
+          let breakCount = 0;
+          const headings = document.querySelectorAll(
+            ".markdown-viewer__content h1, .markdown-viewer__content h2"
+          );
+
+          for (const heading of headings) {
+            const adjustedTop = heading.getBoundingClientRect().top
+              + window.scrollY + insertedSpace;
+            const positionOnPage = adjustedTop % printableHeight;
+            if (positionOnPage >= printableHeight * threshold) {
+              heading.classList.add("pdf-page-break-before");
+              insertedSpace += printableHeight - positionOnPage;
+              breakCount += 1;
+            }
+          }
+          return breakCount;
+        }
+        """,
+        {
+            "printableHeightMm": PRINTABLE_A4_HEIGHT_MM,
+            "threshold": HEADING_PAGE_BREAK_THRESHOLD,
+        },
+    )
+
+
 def render_pdf(
     chromium_path: str,
     html_path: Path,
@@ -37,6 +84,7 @@ def render_pdf(
             page.set_default_timeout(timeout_ms)
             page.goto(html_path.resolve().as_uri(), wait_until="load")
             page.emulate_media(media="print")
+            apply_heading_page_breaks(page)
             page.pdf(
                 path=str(output_path),
                 format="A4",

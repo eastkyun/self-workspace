@@ -90,6 +90,11 @@ body {
   color: #1c4f43;
 }
 
+.markdown-viewer__content .pdf-page-break-before {
+  break-before: page;
+  page-break-before: always;
+}
+
 .markdown-viewer blockquote {
   padding: 2mm 3mm;
   border-left: 4px solid var(--accent);
