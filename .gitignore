@@ -22,7 +22,9 @@ htmlcov/
 
 instance/**/*.db
 instance/**/*.db-*
+instance/**/*.db.*
 instance/**/*.bak
+instance/**/outbox.jsonl
 instance/backups/
 instance/assets/blobs/
 instance/publishing/types.json
